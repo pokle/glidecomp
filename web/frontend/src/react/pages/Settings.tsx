@@ -5,15 +5,17 @@
  * settings.ts); each concern is its own separated card.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Form } from "react-aria-components";
 import { useLocation } from "react-router-dom";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Card, CardGrid, CardHeader } from "@/react/rac/card";
 import { FieldGroup, TextField } from "@/react/rac/field";
 import {
-  Form as KitForm,
+  ActionErrorBanner,
+  Form,
   FormErrorBanner,
   SubmitButton,
+  useAction,
+  useFormState,
   type SubmitResponse,
 } from "@/react/rac/form";
 import { Loading } from "@/react/rac/progress";
@@ -22,7 +24,6 @@ import { Cell, Column, Row, Table, TableBody, TableHeader } from "@/react/rac/ta
 import { api } from "../../comp/api";
 import { deleteAccount } from "../../auth/client";
 import { storage } from "../../analysis/storage";
-import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useUnsavedChangesGuard } from "../lib/use-unsaved-changes-guard";
 import { useGoToSignIn, useUser } from "../lib/user";
@@ -70,6 +71,7 @@ function SavedFlash({ nonce }: { nonce: number }) {
     </span>
   );
 }
+
 
 export function Settings() {
   const { user, loading, isSuperAdmin, previewRole } = useUser();
@@ -337,8 +339,10 @@ function ProfileSection() {
   // navigation guards only arm) while the form differs from these.
   const [savedValues, setSavedValues] = useState<ProfileValues>(EMPTY_VALUES);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  // "Profile saved", from a save until the next edit. A failed save is the
+  // kit form's to report (rac/form.tsx) — under the field the server refused,
+  // or beside Save — never here, and never a toast.
+  const [savedMessage, setSavedMessage] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -372,55 +376,36 @@ function ProfileSection() {
       "Your profile has unsaved changes. Leaving this page will discard them.",
   });
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setStatus(null);
-
-    // Sparse PATCH payload: cleared inputs are persisted as nulls, not "".
+  /** The PATCH: every field, a cleared one as null rather than "". */
+  function save() {
     const payload: Record<string, string | null> = {};
     for (const field of PROFILE_FIELDS) {
       const value = values[field.key].trim();
       payload[field.key] = value === "" ? null : value;
     }
-    if (payload.name === null) {
-      setStatus({ kind: "error", message: "Display name is required" });
-      return;
-    }
+    return api.api.comp.pilot.$patch({ json: payload as never });
+  }
 
-    setSaving(true);
-    try {
-      const res = await api.api.comp.pilot.$patch({ json: payload as never });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        setStatus({ kind: "error", message: err.error || "Failed to save profile" });
-        return;
-      }
-      const saved = (await res.json()) as Record<string, string | null>;
-      // What the server stored (trimmed) becomes the new baseline, so the
-      // form is clean again and the Save button disables.
-      const normalized = Object.fromEntries(
-        PROFILE_FIELDS.map((f) => [f.key, values[f.key].trim()])
-      ) as ProfileValues;
-      setValues(normalized);
-      setSavedValues(normalized);
-      // The name the SERVER stored, not the one typed: it is the account's
-      // now as well, and the account menu is showing the old one until told.
-      if (typeof saved.name === "string") patchUser({ name: saved.name });
-      setStatus({
-        kind: "success",
-        message:
-          "Profile saved. Any matching competition registrations have been linked to this account.",
-      });
-    } catch {
-      setStatus({ kind: "error", message: "Network error. Please try again." });
-    } finally {
-      setSaving(false);
-    }
+  async function saved(res: SubmitResponse | undefined) {
+    const stored = (await res!.json()) as Record<string, string | null>;
+    // What the server stored (trimmed) becomes the new baseline, so the
+    // form is clean again and the Save button disables.
+    const normalized = Object.fromEntries(
+      PROFILE_FIELDS.map((f) => [f.key, values[f.key].trim()])
+    ) as ProfileValues;
+    setValues(normalized);
+    setSavedValues(normalized);
+    // The name the SERVER stored, not the one typed: it is the account's
+    // now as well, and the account menu is showing the old one until told.
+    if (typeof stored.name === "string") patchUser({ name: stored.name });
+    setSavedMessage(true);
   }
 
   const renderField = (field: (typeof PROFILE_FIELDS)[number]) => (
     <TextField
       key={field.key}
+      // Also the server's name for it, so a refusal lands under the field.
+      name={field.key}
       label={field.label}
       // The display name reads better full-width above the paired contact rows.
       // `1 / -1` rather than `col-span-2`: an auto-fit grid may resolve to a
@@ -431,7 +416,7 @@ function ProfileSection() {
       onChange={(value) => {
         setValues((v) => ({ ...v, [field.key]: value }));
         // A stale "Profile saved" next to re-edited fields reads as a lie.
-        setStatus(null);
+        setSavedMessage(false);
       }}
       isRequired={field.key === "name"}
     />
@@ -448,7 +433,14 @@ function ProfileSection() {
       ) : state === "error" ? (
         <p role="alert">Failed to load profile</p>
       ) : (
-        <Form onSubmit={handleSubmit} className="flex flex-col gap-6">
+        <Form
+          onSubmit={save}
+          onSuccess={saved}
+          validate={() => ({
+            name: values.name.trim() === "" && "Display name is required",
+          })}
+          className="flex flex-col gap-6"
+        >
           <FieldGroup label="Name &amp; contact">
             <CardGrid min="15rem">{NAME_CONTACT_FIELDS.map(renderField)}</CardGrid>
           </FieldGroup>
@@ -459,39 +451,39 @@ function ProfileSection() {
             <CardGrid min="10rem">{ID_FIELDS.map(renderField)}</CardGrid>
           </FieldGroup>
 
-          {status ? (
-            <p
-              role={status.kind === "error" ? "alert" : "status"}
-              className={
-                status.kind === "error"
-                  ? "text-sm text-destructive"
-                  : "text-sm text-muted-foreground"
-              }
-            >
-              {status.message}
+          {savedMessage ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              Profile saved. Any matching competition registrations have been linked to this
+              account.
             </p>
           ) : null}
 
-          <div className="flex items-center gap-3">
-            {/* isDisabled for "nothing to save" (a standing state), isPending
-                for the save in flight — two different things, so both. */}
-            <Button
-              type="submit"
-              isDisabled={!dirty}
-              isPending={saving}
-              pendingLabel="Saving your profile"
-            >
-              Save profile
-            </Button>
-            {/* The dirty hint doubles as the explanation for why Save is
-                enabled; role=status so the state change is announced. */}
-            <span role="status" className="text-sm text-muted-foreground">
-              {dirty && !saving ? "Unsaved changes" : ""}
-            </span>
-          </div>
+          <ProfileSaveRow dirty={dirty} />
         </Form>
       )}
     </Card>
+  );
+}
+
+/** Save profile, with the error that belongs to no field directly above it. */
+function ProfileSaveRow({ dirty }: { dirty: boolean }) {
+  const { pending } = useFormState();
+  return (
+    <div className="flex flex-col gap-3">
+      <FormErrorBanner />
+      <div className="flex items-center gap-3">
+        {/* isDisabled for "nothing to save" (a standing state); the kit's
+            pending state for the save in flight — two different things. */}
+        <SubmitButton isDisabled={!dirty} pendingLabel="Saving your profile">
+          Save profile
+        </SubmitButton>
+        {/* The dirty hint doubles as the explanation for why Save is
+            enabled; role=status so the state change is announced. */}
+        <span role="status" className="text-sm text-muted-foreground">
+          {dirty && !pending ? "Unsaved changes" : ""}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -553,6 +545,8 @@ function ApiKeysSection() {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  // Revoke's refusal, beside the list it was pressed in (rac/form.tsx).
+  const revoke = useAction();
   const createdHeadingRef = useRef<HTMLHeadingElement>(null);
   // Done hands focus back to Label: the button it was on is about to go.
   const formRef = useRef<HTMLDivElement>(null);
@@ -592,19 +586,19 @@ function ApiKeysSection() {
     if (!confirmed) return;
     setRevokingId(keyId);
     try {
-      const res = await fetch("/api/auth/api-key/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ keyId }),
-      });
-      if (!res.ok) {
-        toast.error("Failed to revoke key. Please try again.");
-        return;
-      }
-      await loadKeys();
-    } catch {
-      toast.error("Network error. Please try again.");
+      // Better Auth's api-key plugin refuses in `{ code, message }`, words for
+      // a developer, so the refusal is in this page's own words.
+      const res = await revoke.run(
+        () =>
+          fetch("/api/auth/api-key/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ keyId }),
+          }),
+        { fallback: "Failed to revoke key. Please try again." }
+      );
+      if (res) await loadKeys();
     } finally {
       setRevokingId(null);
     }
@@ -636,7 +630,7 @@ function ApiKeysSection() {
           the overlay CLAUDE.md rules out, for the iPhone keyboard's sake. A
           kit form, so a refusal lands under Label and never in a toast. */}
       <div ref={formRef}>
-        <KitForm
+        <Form
           className="flex flex-col gap-4"
           onSubmit={async () =>
             asKitRefusal(
@@ -668,7 +662,7 @@ function ApiKeysSection() {
             <SubmitButton pendingLabel="Creating the key">Create API key</SubmitButton>
           </div>
           <FormErrorBanner />
-        </KitForm>
+        </Form>
       </div>
 
       {createdKey ? (
@@ -716,6 +710,7 @@ function ApiKeysSection() {
         </section>
       ) : null}
 
+      <ActionErrorBanner action={revoke} />
       <div>
         {loadError ? (
           <p role="alert">{loadError}</p>
@@ -810,6 +805,8 @@ function ConnectedAssistantsSection() {
   const [assistants, setAssistants] = useState<ConnectedAssistant[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  // Disconnect's refusal, beside the list it was pressed in (rac/form.tsx).
+  const disconnect = useAction();
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -833,17 +830,18 @@ function ConnectedAssistantsSection() {
   async function handleDisconnect(clientId: string) {
     setDisconnectingId(clientId);
     try {
-      const res = await fetch(`/api/auth/connected-assistants/${encodeURIComponent(clientId)}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok && res.status !== 404) {
-        toast.error("Failed to disconnect. Please try again.");
-        return;
-      }
-      await load();
-    } catch {
-      toast.error("Network error. Please try again.");
+      const res = await disconnect.run(
+        async () => {
+          const res = await fetch(
+            `/api/auth/connected-assistants/${encodeURIComponent(clientId)}`,
+            { method: "DELETE", credentials: "include" }
+          );
+          // "Not connected": already gone, which is what was asked for.
+          return res.status === 404 ? new Response(null, { status: 204 }) : res;
+        },
+        { fallback: "Failed to disconnect. Please try again." }
+      );
+      if (res) await load();
     } finally {
       setDisconnectingId(null);
     }
@@ -857,6 +855,7 @@ function ConnectedAssistantsSection() {
         title="Connected AI Assistants"
         description="Assistants you've let act as you. Disconnecting one stops it straight away."
       />
+      <ActionErrorBanner action={disconnect} />
       <div>
         {loadError ? (
           <p role="alert">{loadError}</p>
@@ -945,7 +944,12 @@ function SuperadminSection() {
 
 function DangerZoneSection() {
   const confirm = useConfirm();
-  const [deleting, setDeleting] = useState(false);
+  // The refusal beside Delete account: the server's own words where it has
+  // some, this page's where it has none (rac/form.tsx).
+  const action = useAction();
+  // Set once the account is gone, so the button stays busy until the page
+  // leaves rather than flicker back for a moment.
+  const [leaving, setLeaving] = useState(false);
 
   async function handleDeleteAccount() {
     const confirmed = await confirm({
@@ -956,17 +960,15 @@ function DangerZoneSection() {
       destructive: true,
     });
     if (!confirmed) return;
-    setDeleting(true);
-    const result = await deleteAccount();
-    if (result.success) {
-      localStorage.clear();
-      storage.close();
-      indexedDB.deleteDatabase("glidecomp");
-      window.location.href = "/";
-    } else {
-      setDeleting(false);
-      toast.error(result.error || "Failed to delete account. Please try again.");
-    }
+    const res = await action.run(deleteAccount, {
+      fallback: "Failed to delete account. Please try again.",
+    });
+    if (!res) return;
+    setLeaving(true);
+    localStorage.clear();
+    storage.close();
+    indexedDB.deleteDatabase("glidecomp");
+    window.location.href = "/";
   }
 
   return (
@@ -977,7 +979,7 @@ function DangerZoneSection() {
         action={
           <Button
             variant="destructive"
-            isPending={deleting}
+            isPending={action.pending || leaving}
             pendingLabel="Deleting your account"
             onPress={() => void handleDeleteAccount()}
           >
@@ -985,6 +987,7 @@ function DangerZoneSection() {
           </Button>
         }
       />
+      <ActionErrorBanner action={action} />
     </Card>
   );
 }

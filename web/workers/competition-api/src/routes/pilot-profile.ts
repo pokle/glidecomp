@@ -331,7 +331,7 @@ export const pilotProfileRoutes = new Hono<AuthedEnv>()
         // account's, putting it back through the onboarding gate — the one
         // constraint issue #539 names for any fix.
         if (newName === "") {
-          return c.json({ error: "Display name is required" }, 400);
+          return c.json({ error: "Display name is required", field: "name" }, 400);
         }
         // The account's copy goes FIRST, and only when the two actually
         // differ. First, because it is the hop that can fail on its own:
@@ -358,10 +358,10 @@ export const pilotProfileRoutes = new Hono<AuthedEnv>()
             // 1-128 characters this route does, so in practice this is the
             // session having gone away between requireAuth and now (401), or
             // an API key, which may not rename the account (403, SEC-57).
-            return c.json(
-              { error: synced.error },
-              synced.status === 401 || synced.status === 403 ? synced.status : 400
-            );
+            // Anything else is a refusal of the name itself, so it says so.
+            return synced.status === 401 || synced.status === 403
+              ? c.json({ error: synced.error }, synced.status)
+              : c.json({ error: synced.error, field: "name" }, 400);
           }
           for (const cookie of synced.setCookies) {
             c.header("Set-Cookie", cookie, { append: true });
