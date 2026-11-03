@@ -179,6 +179,25 @@ describe("PUT manual-flight", () => {
       { last_reached_tp_index: 9, landing_lat: 0, landing_lon: 0.15 }
     );
     expect(res.status).toBe(400);
+    // It names the input it refuses, so the form can say so under the
+    // turnpoint list rather than in no particular place (#808).
+    const body = (await res.json()) as { error: string; field?: string };
+    expect(body.field).toBe("last_reached_tp_index");
+  });
+
+  test("an out-of-range landing point names its field", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId, { xctsk: TASK_XCTSK });
+    const cp = await registerPilot(compId);
+    const res = await authRequest(
+      "PUT",
+      `/api/comp/${compId}/task/${taskId}/manual-flight/${cp}`,
+      { last_reached_tp_index: 1, landing_lat: 95, landing_lon: 0.15 }
+    );
+    expect(res.status).toBe(400);
+    // The form maps landing_lat and landing_lon onto its one Landing point field.
+    const body = (await res.json()) as { error: string; field?: string };
+    expect(body.field).toBe("landing_lat");
   });
 
   test("400 when the task has no route", async () => {

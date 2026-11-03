@@ -79,6 +79,10 @@ export const MOBILE_SPEC_FILES = [
   // on the screen — which is exactly what a phone's height, its keyboard and
   // a sheet's fixed header change.
   "forms.spec.ts",
+  // Where a refusal lands on the task's management tools — the manage grid's
+  // row actions and the manual-flight page (#808). A task is run from a hill,
+  // and a phone is where a refusal can land off-screen.
+  "task-scores-admin.spec.ts",
   // Starting a new competition: a page rather than a dialog with a text
   // field, which is the shape the phone could not use (#818).
   "comp-new.spec.ts",
