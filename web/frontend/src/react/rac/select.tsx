@@ -65,6 +65,7 @@ export function Select<T extends object>({
   description,
   errorMessage,
   className,
+  triggerClassName,
   children,
   items,
   ...props
@@ -73,6 +74,8 @@ export function Select<T extends object>({
   description?: React.ReactNode;
   errorMessage?: string;
   className?: string;
+  /** For the button itself — a thumb-sized one in a row of thumb-sized buttons. */
+  triggerClassName?: string;
   items?: Iterable<T>;
   children: React.ReactNode | ((item: T) => React.ReactNode);
 }) {
@@ -82,7 +85,8 @@ export function Select<T extends object>({
       <AriaButton
         className={cn(
           "flex h-8 w-full min-w-40 items-center justify-between gap-1.5 rounded-lg border border-input bg-card py-2 pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none",
-          "data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50 data-disabled:cursor-not-allowed data-disabled:opacity-50 data-invalid:border-destructive dark:bg-input/30 dark:data-hovered:bg-input/50"
+          "data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50 data-disabled:cursor-not-allowed data-disabled:opacity-50 data-invalid:border-destructive dark:bg-input/30 dark:data-hovered:bg-input/50",
+          triggerClassName
         )}
       >
         <SelectValue className="flex flex-1 truncate text-left data-placeholder:text-muted-foreground" />
@@ -146,6 +150,7 @@ export function SimpleSelect({
   label,
   ariaLabel,
   className,
+  triggerClassName,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -155,6 +160,8 @@ export function SimpleSelect({
   label?: React.ReactNode;
   ariaLabel?: string;
   className?: string;
+  /** See {@link Select}. */
+  triggerClassName?: string;
 }) {
   const toKey = (v: string): Key => (v === "" ? EMPTY_KEY : v);
   const fromKey = (k: Key): string => (k === EMPTY_KEY ? "" : String(k));
@@ -171,6 +178,7 @@ export function SimpleSelect({
       }}
       isDisabled={disabled}
       className={cn("w-fit", className)}
+      triggerClassName={triggerClassName}
     >
       {options.map((o) => (
         <SelectItem key={o.value} id={toKey(o.value)}>

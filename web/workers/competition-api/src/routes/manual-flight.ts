@@ -269,7 +269,11 @@ export const manualFlightRoutes = new Hono<AuthedEnv>()
       const { xcTask } = scoringContext(taskRow.xctsk, taskRow.gap_params);
       if (!isOpenDistance && body.last_reached_tp_index >= xcTask.turnpoints.length) {
         return c.json(
-          { error: "last_reached_tp_index is beyond the task's turnpoints" },
+          // Named, so the form shows it under the turnpoint list (#808).
+          {
+            error: "last_reached_tp_index is beyond the task's turnpoints",
+            field: "last_reached_tp_index",
+          },
           400
         );
       }
