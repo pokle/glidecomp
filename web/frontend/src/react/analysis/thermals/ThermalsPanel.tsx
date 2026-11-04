@@ -25,6 +25,7 @@
  * a model run beside the track-measured wind — a reader must never mistake
  * the prediction for the measurement (docs/weather.md).
  */
+import { openedHere } from "../../lib/leave";
 import {
   lazy,
   Suspense,
@@ -210,9 +211,6 @@ export function shownThermal<T extends { id: number; pilotCount: number }>(
     shapes.reduce((best, s) => (s.pilotCount > best.pilotCount ? s : best), shapes[0])
   );
 }
-
-/** History state the maximise link sets on the thermal map page's entry. */
-export const FROM_THERMALS = "fromThermals";
 
 /** The URL parameter the satellite backdrop's toggle round-trips through. */
 const MAP_PARAM = "map";
@@ -744,7 +742,7 @@ function RoseFigure({
             href={maximiseHref}
             // Marks the entry it pushes: the map page's restore control is
             // then a real Back, which returns this section with its scroll.
-            routerOptions={{ state: { [FROM_THERMALS]: true } }}
+            routerOptions={openedHere()}
           >
             <ExpandIcon />
           </LinkButton>

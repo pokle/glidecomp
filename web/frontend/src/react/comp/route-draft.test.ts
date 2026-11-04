@@ -182,6 +182,20 @@ describe("resolveDraft", () => {
     expect(r).toMatchObject({ fromStorage: true, serverChanged: true });
     expect(r.draft).toBe(stored);
   });
+
+  it("rebases edits the server now holds, with nothing to warn about", () => {
+    // Another tab saved the same edit, or this one's save answered nothing.
+    const stored = editTurnpoint(freshDraft(saved, ctx), 2, { radius: 2000 }).draft;
+    const nowSaved: XCTask = {
+      ...saved,
+      turnpoints: saved.turnpoints.map((t, i) => (i === 1 ? { ...t, radius: 2000 } : t)),
+    };
+    const r = resolveDraft(stored, nowSaved, ctx);
+    expect(r).toMatchObject({ fromStorage: true, serverChanged: false });
+    expect(r.draft.base).toBe(savedKey(nowSaved, ctx));
+    expect(isDirty(r.draft, savedKey(nowSaved, ctx))).toBe(false);
+    expect(r.draft.rows.map((x) => x.id)).toEqual(stored.rows.map((x) => x.id));
+  });
 });
 
 describe("isRouteDraft", () => {

@@ -18,11 +18,18 @@
  * Not routed in a production build (`import.meta.env.DEV`, or the `e2e` mode
  * the e2e suite builds with, in routes.tsx), so neither this page nor its
  * route ships. The copy here is the bench's, never a reader's.
+ *
+ * Two more requests, for the rules past the submit itself: `onSuccess` reads
+ * `/__kit/form-after` before it says Saved (as Create API key reloads the
+ * list), and Remove at the foot — asked first, like the pilot page's — sends
+ * `/__kit/form-action` through `useFormAction`.
  */
 import { useState } from "react";
 import { TextField } from "@/react/rac/field";
-import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
+import { Button } from "@/react/rac/button";
+import { Form, FormErrorBanner, SubmitButton, useFormAction } from "@/react/rac/form";
 import { SectionHeader } from "../components/SectionHeader";
+import { useConfirm } from "../lib/confirm";
 import { toast } from "../lib/toast";
 
 const NOTES = Array.from({ length: 10 }, (_, i) => `note_${i + 1}`);
@@ -39,7 +46,8 @@ export function KitFormFixture() {
         onSubmit={() =>
           fetch("/__kit/form-submit", { method: "POST", body: JSON.stringify(values) })
         }
-        onSuccess={() => {
+        onSuccess={async () => {
+          await fetch("/__kit/form-after");
           toast.success("Saved the test form");
         }}
       >
@@ -58,7 +66,35 @@ export function KitFormFixture() {
           ))}
           <TextField label="Email" name="email" value={values.email} onChange={set("email")} />
         </div>
+        <FootAction />
       </Form>
+    </div>
+  );
+}
+
+/** An action inside the form that is not its submit, at the foot of it. */
+function FootAction() {
+  const confirm = useConfirm();
+  const removal = useFormAction();
+  return (
+    <div className="mt-8">
+      <Button
+        variant="destructive"
+        isPending={removal.pending}
+        pendingLabel="Removing"
+        onPress={async () => {
+          const ok = await confirm({
+            title: "Remove the test?",
+            confirmLabel: "Remove",
+            destructive: true,
+          });
+          if (!ok) return;
+          const res = await removal.run(() => fetch("/__kit/form-action", { method: "POST" }));
+          if (res) toast.success("Removed the test");
+        }}
+      >
+        Remove
+      </Button>
     </div>
   );
 }

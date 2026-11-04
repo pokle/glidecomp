@@ -25,6 +25,7 @@
  * a killed run is swept) and the suite deletes them afterwards.
  */
 import { test, expect, type APIRequestContext, type Locator, type Page } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { e2eCompName } from "./fixtures/stack";
 
 const TEST_USER = {
@@ -188,14 +189,6 @@ async function openPage(page: Page, compId: string): Promise<void> {
 async function names(page: Page): Promise<string[]> {
   const texts = await rows(page).locator("p.font-medium").allInnerTexts();
   return texts.map((t) => t.trim());
-}
-
-/** See comp-waypoints.spec.ts: asserted, because it is what the grid failed. */
-async function expectNoSidewaysScroll(page: Page): Promise<void> {
-  const scrolls = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
-  );
-  expect(scrolls, "the page must not scroll sideways").toBe(false);
 }
 
 /** A target a thumb can hit, measured on the rendered box (44px). */
@@ -512,6 +505,36 @@ test("a refusal lands under the field it is about, focused and in view", async (
   await sheet.getByRole("button", { name: "Done" }).click();
   await backOnList(page);
   expect((await rosterOf(compId)).some((p) => p.name === "Moosh")).toBe(true);
+});
+
+test("Add test pilots: a refusal shows under the heading, never in a toast", async ({ page }) => {
+  // A menu item has no field for a refusal to go under, so it goes in the
+  // kit's one fixed place beside what was pressed (#808): the ⋯ menu hangs
+  // off the heading, so under the heading.
+  const compId = await makeComp(ROSTER.slice(0, 3));
+  await openPage(page, compId);
+  await page.route("**/pilot/bulk", (route) => route.abort("internetdisconnected"));
+  await page.getByRole("button", { name: "Roster actions" }).click();
+  await page.getByRole("menuitem", { name: "Add test pilots" }).click();
+
+  const refusal = page.getByRole("main").getByRole("alert");
+  await expect(refusal).toHaveText(
+    "Could not reach GlideComp. Check your connection, then try again."
+  );
+  await expect(refusal).toBeFocused();
+  await expect(refusal).toBeInViewport();
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+  expect(await rosterOf(compId)).toHaveLength(3);
+
+  // The next press clears it, and this time the pilots are added.
+  await page.unroute("**/pilot/bulk");
+  await page.getByRole("button", { name: "Roster actions" }).click();
+  await page.getByRole("menuitem", { name: "Add test pilots" }).click();
+  await expect(rows(page).filter({ hasText: "Test Dummy 1" })).toHaveCount(1, {
+    timeout: 20_000,
+  });
+  await expect(refusal).toHaveCount(0);
+  expect(await rosterOf(compId)).toHaveLength(6);
 });
 
 test("Remove asks before it removes", async ({ page }) => {

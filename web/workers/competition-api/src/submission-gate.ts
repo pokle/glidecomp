@@ -13,10 +13,20 @@
  * in three files — the self upload, the on-behalf upload, the anonymous
  * submit, and the manual flight. A rule copied four times is a rule that is
  * three-quarters enforced by the second time somebody edits it.
+ *
+ * The same goes for what the rule SAYS. The three upload routes answer every
+ * refusal they share through `submissionComp`, `submissionTask` and
+ * `uploadRejection` below, so a signed-in pilot is told what an anonymous one
+ * is — the same sentence, the same `code`, and the same organisers to write
+ * to. They used to phrase each refusal twice, and the signed-in copy lost the
+ * code and the organisers on the way.
  */
 
 import type { AuthUser } from "./env";
 import { isCompAdmin, isSuperAdmin } from "./super-admin";
+import { hiddenFromCaller } from "./comp-visibility";
+import { encodeId } from "./sqids";
+import type { TrackSubmissionRejection } from "./track-upload";
 
 /**
  * Has the competition closed for submissions?
@@ -47,6 +57,27 @@ export function maskEmail(email: string | null): string | null {
   if (!domain) return "***";
   return `${local.slice(0, 1)}***@${domain}`;
 }
+
+/**
+ * The submit form's field names, sent as `field` on a refusal that one step of
+ * the form can fix, so the kit form (`rac/form.tsx`) shows the message under
+ * that step's field and focuses it.
+ *
+ * Shared by the three upload routes (self, on-behalf, anonymous). A refusal no
+ * field can fix — a sign-in, a closed comp, a duplicated roster row, a spent
+ * budget — carries no `field`, and is shown beside Submit instead.
+ * `docs/track-submission.md`, "Errors are repairable".
+ */
+export const SUBMIT_FIELD = {
+  /** Which task did you fly? Also a comp that cannot be found. */
+  task: "task",
+  /** The identifier an anonymous pilot typed. */
+  identifier: "identifier",
+  /** The registration a signed-in pilot claimed. */
+  registration: "registration",
+  /** The IGC file. */
+  file: "file",
+} as const;
 
 export interface Organiser {
   name: string;
@@ -150,4 +181,230 @@ export async function submissionsClosedBody(
     task: { name: taskName },
     organisers: await organisersOf(db, compId),
   };
+}
+
+// ── The refusals the three upload routes share ──────────────────────────────
+
+/** A value of {@link SUBMIT_FIELD}. */
+export type SubmitField = (typeof SUBMIT_FIELD)[keyof typeof SUBMIT_FIELD];
+
+/**
+ * What an upload refusal answers with. `error` is the sentence a person reads,
+ * `code` what the submit form branches on, `field` the step that can fix it;
+ * the rest is what the form needs to offer the fix (who to write to, which
+ * comp, when it closed). docs/track-submission.md, "Errors are repairable".
+ */
+export type SubmitRefusalBody = {
+  error: string;
+  code: string;
+  field?: SubmitField;
+  comp?: { comp_id?: string; name: string };
+  task?: { name: string };
+  close_date?: string | null;
+  organisers?: Organiser[];
+  reason?: string;
+};
+
+/** A refusal, with the status every route answers it with. */
+export type GateRefusal = {
+  status: 400 | 403 | 404;
+  body: SubmitRefusalBody;
+};
+
+/** The comp's id and name, as a refusal names them. */
+function compRef(alphabet: string, comp: SubmissionComp): { comp_id: string; name: string } {
+  return { comp_id: encodeId(alphabet, comp.comp_id), name: comp.name };
+}
+
+/**
+ * A comp that does not exist — or a hidden `test` comp the caller may not
+ * see, which answers EXACTLY the same, so no upload route is how somebody
+ * discovers that one exists. Names the task field: picking another task is
+ * the repair.
+ */
+export function compNotFoundRefusal(): GateRefusal {
+  return {
+    status: 404,
+    body: {
+      error: "We could not find that competition.",
+      code: "comp_not_found",
+      field: SUBMIT_FIELD.task,
+    },
+  };
+}
+
+/**
+ * A comp past its close date (`isCompClosed`). No field: nothing on the form
+ * fixes it, so it is shown beside Submit, with the organisers.
+ */
+export async function compClosedRefusal(
+  db: D1Database,
+  alphabet: string,
+  comp: SubmissionComp
+): Promise<GateRefusal> {
+  return {
+    status: 400,
+    body: {
+      error: `${comp.name} has closed for track submissions.`,
+      code: "comp_closed",
+      comp: compRef(alphabet, comp),
+      close_date: comp.close_date,
+      organisers: await organisersOf(db, comp.comp_id),
+    },
+  };
+}
+
+/** A task that is not this comp's. Picking another task is the repair. */
+export function taskNotFoundRefusal(alphabet: string, comp: SubmissionComp): GateRefusal {
+  return {
+    status: 404,
+    body: {
+      error: `That task is not part of ${comp.name}.`,
+      code: "task_not_found",
+      field: SUBMIT_FIELD.task,
+      comp: compRef(alphabet, comp),
+    },
+  };
+}
+
+/**
+ * A task the organiser has closed for the day. Names the task field: the
+ * pilot may well have meant yesterday's task, which is probably still open.
+ */
+export async function taskClosedRefusal(
+  db: D1Database,
+  compId: number,
+  taskId: number
+): Promise<GateRefusal> {
+  return {
+    status: 403,
+    body: { ...(await submissionsClosedBody(db, compId, taskId)), field: SUBMIT_FIELD.task },
+  };
+}
+
+/**
+ * The pipeline refused the file (`ingestTrackSubmission`). A bad file names
+ * the file field; a full task is the organiser's to fix, so it names no field
+ * and says who they are. The organisers are looked up only on that path.
+ */
+export async function uploadRejection(
+  db: D1Database,
+  compId: number,
+  rejection: TrackSubmissionRejection
+): Promise<GateRefusal> {
+  return {
+    status: 400,
+    body:
+      rejection.kind === "invalid_file"
+        ? {
+            error: rejection.message,
+            code: "invalid_file",
+            field: SUBMIT_FIELD.file,
+            reason: rejection.reason,
+          }
+        : {
+            error: rejection.message,
+            code: "task_pilot_limit",
+            organisers: await organisersOf(db, compId),
+          },
+  };
+}
+
+// ── Resolving what a submission is for ──────────────────────────────────────
+
+/**
+ * The comp row every upload route reads: enough for the gate itself, for the
+ * pipeline (`name`), and for each route's own rule — the self route's
+ * registration (`default_pilot_class`, `open_registration`), and the
+ * on-behalf and anonymous routes' `open_igc_upload`.
+ */
+export interface SubmissionComp {
+  comp_id: number;
+  name: string;
+  close_date: string | null;
+  test: number;
+  default_pilot_class: string;
+  open_registration: number;
+  open_igc_upload: number;
+}
+
+export interface SubmissionTask {
+  task_id: number;
+  name: string;
+  submissions_closed: number;
+}
+
+/**
+ * The comp a submission is for, or why it cannot take one. In this order,
+ * cheapest rejection first, and all of it before the body is read:
+ *
+ *   1. it exists;
+ *   2. it is not a hidden `test` comp this caller may not see
+ *      (`hiddenFromCaller` — null for the anonymous route, which no admin
+ *      bypass can reach). Missing and hidden answer the same;
+ *   3. the route's own rule about the comp, if it has one (`admit`): the
+ *      anonymous route's "this comp wants a sign-in". It runs before the
+ *      close date, so a closed comp that also wants a sign-in still asks for
+ *      the sign-in;
+ *   4. it has not closed (`isCompClosed`).
+ *
+ * The task is `submissionTask`'s, and anything a route checks between the two
+ * — the on-behalf route's authorisation — sits between the two calls.
+ */
+export async function submissionComp(
+  db: D1Database,
+  alphabet: string,
+  compId: number,
+  caller: Pick<AuthUser, "id" | "email"> | null,
+  admit?: (comp: SubmissionComp) => Promise<GateRefusal | null>
+): Promise<{ comp: SubmissionComp } | { refusal: GateRefusal }> {
+  const comp = await db
+    .prepare(
+      `SELECT comp_id, name, close_date, test, default_pilot_class,
+              open_registration, open_igc_upload
+       FROM comp WHERE comp_id = ?`
+    )
+    .bind(compId)
+    .first<SubmissionComp>();
+  if (!comp) return { refusal: compNotFoundRefusal() };
+  // Being signed in is not a claim to somebody's rehearsal.
+  if (await hiddenFromCaller(db, compId, comp.test, caller)) {
+    return { refusal: compNotFoundRefusal() };
+  }
+  const refused = admit ? await admit(comp) : null;
+  if (refused) return { refusal: refused };
+  if (isCompClosed(comp.close_date)) {
+    return { refusal: await compClosedRefusal(db, alphabet, comp) };
+  }
+  return { comp };
+}
+
+/**
+ * The task a submission is for, or why it cannot take one: it must belong to
+ * the comp, and it must not be closed for the day.
+ *
+ * `isOrganiser` is asked only when the task IS closed, because organisers
+ * pass a closed task (see `submissionsBlockedFor` for why). The self route
+ * looks it up then; the on-behalf route has already resolved it; the
+ * anonymous route answers false — a hard stop, since an anonymous caller is
+ * exactly who the organiser meant to stop.
+ */
+export async function submissionTask(
+  db: D1Database,
+  alphabet: string,
+  comp: SubmissionComp,
+  taskId: number,
+  isOrganiser: () => Promise<boolean>
+): Promise<{ task: SubmissionTask } | { refusal: GateRefusal }> {
+  const task = await db
+    .prepare(
+      "SELECT task_id, name, submissions_closed FROM task WHERE task_id = ? AND comp_id = ?"
+    )
+    .bind(taskId, comp.comp_id)
+    .first<SubmissionTask>();
+  if (!task) return { refusal: taskNotFoundRefusal(alphabet, comp) };
+  if (task.submissions_closed && !(await isOrganiser())) {
+    return { refusal: await taskClosedRefusal(db, comp.comp_id, taskId) };
+  }
+  return { task };
 }

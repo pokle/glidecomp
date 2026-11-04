@@ -52,9 +52,12 @@ import {
   peekBudget,
 } from "../rate-limit";
 import {
-  isCompClosed,
   organisersOf,
-  submissionsClosedBody,
+  submissionComp,
+  submissionTask,
+  SUBMIT_FIELD,
+  uploadRejection,
+  type GateRefusal,
 } from "../submission-gate";
 
 /**
@@ -165,6 +168,20 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
       return response;
     };
 
+    /** The organiser has not opened this comp to anonymous submission. */
+    const anonymousNotPermitted = async (found: {
+      comp_id: number;
+      name: string;
+    }): Promise<GateRefusal> => ({
+      status: 403,
+      body: {
+        error: `${found.name} asks pilots to sign in before submitting a track.`,
+        code: "anonymous_not_permitted" satisfies AnonSubmitCode,
+        comp: { comp_id: encodeId(alphabet, found.comp_id), name: found.name },
+        organisers: await organisersOf(db, found.comp_id),
+      },
+    });
+
     // ── Cheapest rejections first. Nothing that costs R2 or CPU runs before
     // something cheaper can turn the request away.
     //
@@ -188,6 +205,7 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
           {
             error: identifier.problem,
             code: "bad_identifier" satisfies AnonSubmitCode,
+            field: SUBMIT_FIELD.identifier,
             accepted_kinds: Object.keys(PILOT_IDENTIFIER_LABELS),
           },
           400
@@ -195,86 +213,27 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
       );
     }
 
-    const comp = await db
-      .prepare(
-        "SELECT comp_id, name, close_date, open_igc_upload, test FROM comp WHERE comp_id = ?"
-      )
-      .bind(compId)
-      .first<{
-        comp_id: number;
-        name: string;
-        close_date: string | null;
-        open_igc_upload: number;
-        test: number;
-      }>();
-
-    // A hidden test comp answers exactly as a missing one does, so this route
-    // never becomes a way to discover that one exists.
-    if (!comp || comp.test) {
-      return futile(
-        c.json(
-          {
-            error: "We could not find that competition.",
-            code: "comp_not_found" satisfies AnonSubmitCode,
-          },
-          404
-        )
-      );
+    // The same gate the signed-in routes pass, answered in the same words.
+    // There is no caller, so a hidden test comp answers exactly as a missing
+    // one does and this route never becomes a way to discover that one
+    // exists. The one rule of this route's own — the organiser has to have
+    // opened the comp to anonymous submission — is asked before the close
+    // date, as it always was.
+    const gate = await submissionComp(db, alphabet, compId, null, async (found) =>
+      found.open_igc_upload ? null : await anonymousNotPermitted(found)
+    );
+    if ("refusal" in gate) {
+      return futile(c.json(gate.refusal.body, gate.refusal.status));
     }
+    const { comp } = gate;
 
-    if (!comp.open_igc_upload) {
-      return futile(
-        c.json(
-          {
-            error: `${comp.name} asks pilots to sign in before submitting a track.`,
-            code: "anonymous_not_permitted" satisfies AnonSubmitCode,
-            comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
-            organisers: await organisersOf(db, compId),
-          },
-          403
-        )
-      );
+    // A hard stop on a closed task: this route has no admin concept to bypass
+    // with, and an anonymous caller is exactly who the organiser meant to stop.
+    const opened = await submissionTask(db, alphabet, comp, taskId, async () => false);
+    if ("refusal" in opened) {
+      return futile(c.json(opened.refusal.body, opened.refusal.status));
     }
-
-    if (isCompClosed(comp.close_date)) {
-      return futile(
-        c.json(
-          {
-            error: `${comp.name} has closed for track submissions.`,
-            code: "comp_closed" satisfies AnonSubmitCode,
-            comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
-            close_date: comp.close_date,
-            organisers: await organisersOf(db, compId),
-          },
-          400
-        )
-      );
-    }
-
-    const task = await db
-      .prepare(
-        "SELECT task_id, name, submissions_closed FROM task WHERE task_id = ? AND comp_id = ?"
-      )
-      .bind(taskId, compId)
-      .first<{ task_id: number; name: string; submissions_closed: number }>();
-    if (!task) {
-      return futile(
-        c.json(
-          {
-            error: `That task is not part of ${comp.name}.`,
-            code: "task_not_found" satisfies AnonSubmitCode,
-            comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
-          },
-          404
-        )
-      );
-    }
-
-    // A hard stop here: this route has no admin concept to bypass with, and an
-    // anonymous caller is exactly who the organiser meant to stop.
-    if (task.submissions_closed) {
-      return futile(c.json(await submissionsClosedBody(db, compId, taskId), 403));
-    }
+    const { task } = opened;
 
     // Now that the competition is known to be real, open and running, its
     // shared allowance is worth consulting. Peeked, never charged here: a
@@ -304,6 +263,7 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
           {
             error: `No pilot with that ${label} is registered for ${comp.name}.`,
             code: "no_pilot_match" satisfies AnonSubmitCode,
+            field: SUBMIT_FIELD.identifier,
             comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
             identifier_kind: identifier.kind,
             identifier_label: label,
@@ -372,26 +332,8 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
     });
 
     if (!ingested.ok) {
-      const { rejection } = ingested;
-      return futile(
-        rejection.kind === "invalid_file"
-          ? c.json(
-              {
-                error: rejection.message,
-                code: "invalid_file" satisfies AnonSubmitCode,
-                reason: rejection.reason,
-              },
-              400
-            )
-          : c.json(
-              {
-                error: rejection.message,
-                code: "task_pilot_limit" satisfies AnonSubmitCode,
-                organisers: await organisersOf(db, compId),
-              },
-              400
-            )
-      );
+      const refusal = await uploadRejection(db, compId, ingested.rejection);
+      return futile(c.json(refusal.body, refusal.status));
     }
 
     // ── The track is in. THIS is the damage the two budgets peeked at above

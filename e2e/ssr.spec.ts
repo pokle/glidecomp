@@ -4,7 +4,13 @@ import {
   compScoresPath,
   compAnalysisPath,
   metricSegment,
+  taskAnalysisMetricPath,
 } from "../web/frontend/src/react/lib/slug";
+import {
+  COMP_SHELL_ROUTES,
+  compRouteVariants,
+  fillCompRoute,
+} from "../web/frontend/src/react/comp-routes";
 import { SCORES_CSV_COLUMNS } from "../web/frontend/src/scores-csv";
 import { readRecord, readZip } from "../web/frontend/src/results-record/read-pdf";
 import {
@@ -347,62 +353,28 @@ test.describe("SSR — isolation and fallback", () => {
   }
 
   /**
-   * A hard reload of an admin-only / redirect-only deep URL must still get a
+   * A hard reload of an admin-only / client-only deep URL must still get a
    * usable SPA shell — the Functions fallback path, which `vite dev` never
    * exercises — and must not be indexable, since there is nothing in it for a
    * crawler. (Task analysis is no longer here — it is SSR'd; see below.)
+   *
+   * One URL per spelt-out form of every entry in COMP_SHELL_ROUTES
+   * (web/frontend/src/react/comp-routes.ts), so a shell route added there is
+   * covered here without anyone remembering to. The ids are made up on
+   * purpose: none of these pages asks the API for anything on the server, so
+   * even an id that resolves to nothing must get the shell — never a loader,
+   * which would 404 it. That includes `/comp/new` and `/comp/:id/task/new`,
+   * which share a public page's shape and must be caught before it.
    */
-  for (const path of [
-    // Starting a new competition: signed-in only, and beside /comp/:compId,
-    // so "new" must reach the shell rather than a 404 for an unknown id.
-    "/comp/new",
-    // Admin-only roster editor page.
-    "/comp/anything/pilots",
-    // The roster's CSV import and CIVL fill (#810): admin-only pages under it.
-    "/comp/anything/pilots/import",
-    "/comp/anything/pilots/civl-fill",
-    // Copying another competition's pilots in: admin-only, under the roster.
-    "/comp/anything/pilots/copy",
-    // The waypoints editor's pages (#811): admin-only, and under the SSR'd
-    // waypoints list, which they must not be mistaken for.
-    "/comp/anything/waypoints/1",
-    "/comp/anything/waypoints/new",
-    "/comp/anything/waypoints/map",
-    "/comp/anything/waypoints/altitudes",
-    "/comp/anything/waypoints/altitudes/1",
-    // Admin-only settings pages (index + a group sub-page).
-    "/comp/anything/settings",
-    "/comp/anything/settings/scoring",
-    // Copying the competition into a new one: admin-only, beside the SSR'd
-    // comp page, which must not try to render "copy" as a section.
-    "/comp/anything/copy",
-    // Choosing a route to copy: admin-only, under the route editor's shell.
-    "/comp/anything/task/anything/route/copy",
-    // Creating a task (#819): the same shape as the public task page, so it
-    // must be caught before the task route would try to render (and 404) it.
-    "/comp/anything/task/new",
-    // The route editor and its other pages (#812): admin-only, under the
-    // SSR'd task route, which they must not be mistaken for.
-    "/comp/anything/task/anything/route",
-    "/comp/anything/task/anything/route/1",
-    "/comp/anything/task/anything/route/quick",
-    "/comp/anything/task/anything/route/xcontest",
-    "/comp/anything/task/anything/route/add-waypoint",
-    // Create a test IGC (#822): admin-only, under the SSR'd task route, which
-    // it must not be mistaken for.
-    "/comp/anything/task/anything/test-igc",
-    // The task's QR code (#813): public, but a picture for a camera with
-    // nothing to server-render, under the SSR'd task route.
-    "/comp/anything/task/anything/qr",
-    // The pilot-similarity prototype: a real SPA route that derives everything
-    // client-side from the report it fetches, so it has nothing to
-    // server-render and must reach the shell rather than the 404 fallback.
-    "/comp/anything/task/anything/analysis/similar",
-    // The thermal map (#816): a leaf of the SSR'd thermals section, there to
-    // show a browser-only map. It must reach the shell, not the section's
-    // route (which would 404 "thermals/map") or the 404 fallback.
-    "/comp/anything/task/anything/analysis/thermals/map",
-  ]) {
+  const SHELL_EXAMPLE_PARAMS: Record<string, string> = { rowId: "1", group: "scoring" };
+  const shellUrls = [
+    ...new Set(
+      COMP_SHELL_ROUTES.flatMap((r) => compRouteVariants(r.path)).map((variant) =>
+        fillCompRoute(variant, (param) => SHELL_EXAMPLE_PARAMS[param] ?? "anything")
+      )
+    ),
+  ];
+  for (const path of shellUrls) {
     test(`a hard reload of ${path} serves a noindex app shell`, async ({ request }) => {
       const res = await request.get(path, { failOnStatusCode: false });
       expect(res.status()).toBe(200);
@@ -596,6 +568,31 @@ async function warmTaskAnalysis(
   }
 }
 
+/**
+ * A metric the strategies ranking links to — a behaviour with a correlation —
+ * once the task's report is warm. `null` when it never warmed (skip, rather
+ * than fail on a slow machine); `undefined` when it is warm and has none.
+ */
+async function rankedMetric(
+  request: APIRequestContext,
+  compId: string,
+  taskId: string
+): Promise<{ id: string; label: string } | null | undefined> {
+  await warmTaskAnalysis(request, compId, taskId);
+  const report = (await (
+    await request.get(`/api/comp/${compId}/task/${taskId}/analysis`)
+  ).json()) as {
+    pending: boolean;
+    classes: Array<{
+      report: {
+        metrics: Array<{ id: string; label: string; correlation?: unknown; outcome?: boolean }>;
+      };
+    }>;
+  };
+  if (report.pending || report.classes.length === 0) return null;
+  return report.classes[0].report.metrics.find((m) => m.correlation && !m.outcome);
+}
+
 test.describe("SSR — comp & task analysis (public)", () => {
   test("task analysis server-renders (warm content or a pending notice)", async ({
     request,
@@ -673,20 +670,10 @@ test.describe("SSR — comp & task analysis (public)", () => {
     page,
   }) => {
     const { compId, taskId } = await discover(request);
-    await warmTaskAnalysis(request, compId, taskId);
-    const report = (await (
-      await request.get(`/api/comp/${compId}/task/${taskId}/analysis`)
-    ).json()) as {
-      pending: boolean;
-      classes: Array<{
-        report: {
-          metrics: Array<{ id: string; label: string; correlation?: unknown; outcome?: boolean }>;
-        };
-      }>;
-    };
-    test.skip(report.pending || report.classes.length === 0, "the report never warmed");
-    // One the ranking links to: a behaviour with a correlation.
-    const metric = report.classes[0].report.metrics.find((m) => m.correlation && !m.outcome)!;
+    const ranked = await rankedMetric(request, compId, taskId);
+    test.skip(ranked === null, "the report never warmed");
+    expect(ranked, "a warm report with no ranked metric").toBeDefined();
+    const metric = ranked!;
     const url = `/comp/${compId}/task/${taskId}/analysis/metrics/${metricSegment(metric.id)}`;
 
     const res = await request.get(url);
@@ -856,6 +843,9 @@ test.describe("SSR — hydration is clean (real browser)", () => {
     ":compAnalysis",
     ":taskAnalysis",
     ":taskStrategies",
+    // A leaf under a section (#815): SSR'd through the section's loader, with
+    // its own chart in the server's HTML.
+    ":taskMetricChart",
     // WITH a query string. Not the guard for the pathname-only SSR bug — both
     // of these passed while it was live (the "?class= deep link" test above is
     // what catches that). They are here because no URL in this list carried a
@@ -872,6 +862,14 @@ test.describe("SSR — hydration is clean (real browser)", () => {
       // A class the comp actually has, so the query is not silently discarded
       // as unknown by both sides (which would agree, and prove nothing).
       const cls = d.pilotClasses[d.pilotClasses.length - 1];
+      // The metric chart needs a real metric, so a warm report to name one.
+      let metricChart = "";
+      if (path === ":taskMetricChart") {
+        const metric = await rankedMetric(request, d.compId, d.taskId);
+        test.skip(metric === null, "the report never warmed");
+        expect(metric, "a warm report with no ranked metric").toBeDefined();
+        metricChart = taskAnalysisMetricPath(d.compId, null, d.taskId, null, metric!.id);
+      }
       const urls: Record<typeof path, string> = {
         "/comp": "/comp",
         ":compHub": `/comp/${d.compId}`,
@@ -883,6 +881,7 @@ test.describe("SSR — hydration is clean (real browser)", () => {
         ":compAnalysis": `/comp/${d.compId}/analysis`,
         ":taskAnalysis": `/comp/${d.compId}/task/${d.taskId}/analysis`,
         ":taskStrategies": `/comp/${d.compId}/task/${d.taskId}/analysis/strategies`,
+        ":taskMetricChart": metricChart,
         ":scoresByTask": `/comp/${d.compId}/scores?task=${d.taskId}`,
         ":compAnalysisByClass": `/comp/${d.compId}/analysis${
           cls ? `?class=${encodeURIComponent(cls)}` : ""

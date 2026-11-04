@@ -125,8 +125,13 @@ sensible when it is. A read is empty when:
 - the draft is older than `maxAgeMs` (one day by default), for example a tab
   that the browser restored a week later. The store deletes it.
 - the stored value fails `isValid`, or is not JSON. The store deletes it.
-- storage is blocked or full. Then `save` returns `false`, and the page
-  keeps the draft in memory only for as long as it is open.
+- storage is blocked or full. Then `save` returns `false`, and the store
+  keeps the draft in this tab's memory instead (`heldInMemory`): the editor's
+  other pages still find it, because going between them keeps the app loaded,
+  but a reload does not. The editors say so (`DraftNotices`), so the organiser
+  knows to save before reloading. Until 2026-11 the draft lived only in the
+  page that made it, and an organiser with storage blocked pressed Add
+  turnpoint and landed on "Turnpoint not found".
 
 **The roster import shows its first step.** It asks for the file again, with
 no error message: nothing is wrong, the file is simply not chosen yet. An
@@ -167,8 +172,36 @@ read from a CSV. So:
 - **Increase `version` whenever the stored type changes.** A draft that the
   old code wrote is then deleted, not read as the new type.
 - **The unsaved-changes guard** (`lib/use-unsaved-changes-guard.ts`) asks
-  before a page with an unsaved FORM is left. A stored draft survives a
-  reload, so a page that holds one does not need the guard for reloads.
+  before a page with an unsaved FORM is left, and the draft editors keep its
+  reload prompt too (owner decision, 2026-11-03). A reload would find the
+  draft, but the browser asks the same question for a reload and for closing
+  the tab, and closing the tab takes sessionStorage with it.
+
+## One editor of several pages: `lib/draft-editor.ts`
+
+The waypoints editor and the route editor are the same shape — several pages
+over one stored draft — and since 2026-11 they share the part that is the
+same, `useDraftEditor()`, rather than a copy each. It owns:
+
+- **which draft to edit**, `resolveStoredDraft()`, against the saved state
+  the editor fetched. A stored draft started from the saved state as it is
+  now is used as it is. One with no edits of its own is an old copy, dropped.
+  One that says exactly what the server says now is **rebased** onto it, ids
+  and all, with nothing to warn about: that is a save whose answer was lost
+  (the kit form keeps the draft when it hears nothing), a second tab that saved
+  the same edits, or another organiser making the same change. Kept as "the
+  server changed under it", the waypoints page warned, disabled Save as having
+  nothing to save, and offered no Discard. Anything else is the organiser's
+  work, kept, with `serverChanged`. Each editor gives a `DraftModel`: what its
+  draft started from (`base`), what it holds now (`content`), and how to rebase.
+- **writing every change through** to the store, and `notKept` when it refused;
+- **dirty**, and the guard, which stands down while a save is in flight (the
+  kit form's `onPendingChange` → `setSaving`): a "Discard" then would not stop
+  the save from landing.
+
+Each editor keeps what it loads, the operations on its draft, and what Save
+does: the waypoints list stays where it is, the route editor goes back to the
+task. Leaving a page another page opened is `lib/leave.ts` for both.
 
 ## How the waypoints editor uses it
 
@@ -202,7 +235,12 @@ size (`/waypoints/map`) and the altitude review (`/waypoints/altitudes`, and
   set it started from. A stored draft with no edits of its own is only a copy
   of an older save, so when the server's set has moved it is dropped for the
   new one; a draft WITH edits is kept, and the list says the saved set changed
-  under it (`resolveDraft`).
+  under it — unless the edits are what the server now holds, when it is
+  rebased (`resolveStoredDraft`, above).
+- **Waypoints that do not load are not "no waypoints".** The comp loads and
+  its waypoints do not, after retries: the page says so and offers no Save,
+  rather than an empty editor whose Save would replace the real set (the
+  CLAUDE.md rule that a failure to ask is not an answer).
 - **Review state is part of the draft.** The altitude review's readings and
   its list's membership and order are a snapshot taken when the check runs,
   stored with the file, so going into one waypoint of the review and back, or
@@ -216,7 +254,8 @@ size (`/waypoints/map`) and the altitude review (`/waypoints/altitudes`, and
   Back does not ask — nothing in the app asks on Back since #817 — and here
   it means "not now": the draft waits. A reload keeps the draft too, so the
   list has a "Discard changes" button beside Save for throwing it away on
-  purpose. Save clears it.
+  purpose — which, as the route editor's Cancel does, then leaves for the
+  competition (owner decision, 2026-11-03). Save clears it.
 
 ## How the route editor uses it
 
@@ -250,7 +289,11 @@ above. What is particular to a route:
   the old one at its first edit, not at the press.
 - **Waypoints made on Add waypoint wait in the draft** (`pendingWaypoints`).
   They are in the route at once, and Save writes them to the competition just
-  before the route, so discarding the route discards them too.
+  before the route, so discarding the route discards them too. The waypoint
+  set is one document, so Save reads the freshest set and appends to it — and
+  writes nothing when that read fails. It used to fall back to the list the
+  page had loaded, which, when that load had failed too, was empty: the PUT
+  then replaced the competition's waypoints with the new ones alone.
 - **Quick entry's line is not kept.** It is a view of the route, made again
   from the draft each time the page opens; "Use this route" writes the result
   into the draft, and Cancel or Back leaves the draft as it was.

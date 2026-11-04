@@ -19,6 +19,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
+import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
@@ -151,17 +152,7 @@ export function ManualFlightPage() {
     pilot?.name
   );
 
-  if (!isAdmin) {
-    return (
-      <div>
-        <Breadcrumbs items={crumbs} current="Record manual flight" />
-        <h1 className="mt-2 text-2xl font-bold">Record manual flight</h1>
-        <p className="mt-2 text-muted-foreground">
-          Recording a flight for a pilot is for the competition’s organisers.
-        </p>
-      </div>
-    );
-  }
+  if (!isAdmin) return <OrganisersOnly to={taskPath(compUrlId(comp, compId), comp.name, taskId, task.name)} />;
 
   // A manual flight is scored from the route, so without one there is nothing
   // to record against — the same condition that hid the grid's button.

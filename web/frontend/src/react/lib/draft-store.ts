@@ -30,6 +30,16 @@
  * So a load can always come back empty, and every page that reads a draft
  * says what it does then: the import page starts again at choosing the file.
  *
+ * **Storage that refuses is not the end of the draft.** A browser with site
+ * data blocked, or full, refuses the write; the draft is then kept in this
+ * tab's memory instead, so the editor's other pages still find it (going
+ * between them keeps the app loaded) — only a reload loses it, and
+ * `heldInMemory` lets the editor say so. Before this, an organiser with
+ * storage blocked pressed Add turnpoint and landed on "Turnpoint not found".
+ *
+ * **A clock that steps back** a few minutes (a phone correcting its time)
+ * does not throw a draft away; only one from the future past that is.
+ *
  * Pure apart from the storage it is given — no React here (the hook is
  * `use-draft.ts`), and no `window` at module scope (SSR-safe).
  */
@@ -39,6 +49,15 @@ export const DRAFT_PREFIX = "glidecomp:draft:";
 
 /** A day: long enough for an afternoon's editing, short of a restored tab. */
 export const DEFAULT_DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** How far a draft's time may be ahead of the clock (a clock set back) and still be read. */
+export const CLOCK_SKEW_MS = 10 * 60 * 1000;
+
+/**
+ * This tab's fallback when storage refuses a draft (see the note above) —
+ * none on the server, which keeps no drafts at all.
+ */
+const tabMemory: Map<string, string> | null = typeof window === "undefined" ? null : new Map();
 
 /** What a draft edits, most general first: `[compId]`, `[compId, taskId]`. */
 export type DraftKey = readonly string[];
@@ -70,6 +89,11 @@ export interface DraftStore<T> {
   save(key: DraftKey, owner: string, value: T): boolean;
   /** Forget the draft under `key`: it was saved, discarded or replaced. */
   clear(key: DraftKey): void;
+  /**
+   * The draft under `key` is held only in this tab's memory — storage refused
+   * it — so a reload will not find it.
+   */
+  heldInMemory(key: DraftKey): boolean;
 }
 
 export interface DraftOptions<T> {
@@ -88,6 +112,8 @@ export interface DraftOptions<T> {
   now?: () => number;
   /** For tests. Defaults to this tab's sessionStorage, or none. */
   storage?: () => Storage | null;
+  /** For tests. Defaults to this tab's memory (none on the server). */
+  memory?: Map<string, string> | null;
 }
 
 /**
@@ -127,28 +153,34 @@ export function defineDraft<T>(options: DraftOptions<T>): DraftStore<T> {
     maxAgeMs = DEFAULT_DRAFT_MAX_AGE_MS,
     now = Date.now,
     storage = sessionDraftStorage,
+    memory = tabMemory,
   } = options;
 
-  function remove(store: Storage, storageKey: string) {
+  function remove(store: Storage | null, storageKey: string) {
+    memory?.delete(storageKey);
     try {
-      store.removeItem(storageKey);
+      store?.removeItem(storageKey);
     } catch {
       // Nothing to do: a store that refuses a removal refused the write too.
     }
+  }
+
+  function read(store: Storage | null, storageKey: string): string | null {
+    try {
+      const raw = store?.getItem(storageKey) ?? null;
+      if (raw !== null) return raw;
+    } catch {
+      // Blocked: the draft, if any, is in memory.
+    }
+    return memory?.get(storageKey) ?? null;
   }
 
   return {
     kind,
     load(key, owner) {
       const store = storage();
-      if (!store) return null;
       const storageKey = draftStorageKey(kind, key);
-      let raw: string | null;
-      try {
-        raw = store.getItem(storageKey);
-      } catch {
-        return null;
-      }
+      const raw = read(store, storageKey);
       if (raw === null) return null;
       let stored: unknown;
       try {
@@ -161,7 +193,7 @@ export function defineDraft<T>(options: DraftOptions<T>): DraftStore<T> {
         isStoredDraft(stored) &&
         stored.v === version &&
         stored.owner === owner &&
-        age >= 0 &&
+        age >= -CLOCK_SKEW_MS &&
         age <= maxAgeMs &&
         (!isValid || isValid(stored.value));
       if (!usable) {
@@ -174,18 +206,25 @@ export function defineDraft<T>(options: DraftOptions<T>): DraftStore<T> {
     },
     save(key, owner, value) {
       const store = storage();
-      if (!store) return false;
-      const stored: StoredDraft = { v: version, owner, at: now(), value };
+      const storageKey = draftStorageKey(kind, key);
+      const json = JSON.stringify({ v: version, owner, at: now(), value } satisfies StoredDraft);
       try {
-        store.setItem(draftStorageKey(kind, key), JSON.stringify(stored));
-        return true;
+        if (store) {
+          store.setItem(storageKey, json);
+          memory?.delete(storageKey);
+          return true;
+        }
       } catch {
-        return false;
+        // Refused (full, or blocked): kept in memory below.
       }
+      memory?.set(storageKey, json);
+      return false;
     },
     clear(key) {
-      const store = storage();
-      if (store) remove(store, draftStorageKey(kind, key));
+      remove(storage(), draftStorageKey(kind, key));
+    },
+    heldInMemory(key) {
+      return memory?.has(draftStorageKey(kind, key)) ?? false;
     },
   };
 }
@@ -194,7 +233,13 @@ export function defineDraft<T>(options: DraftOptions<T>): DraftStore<T> {
  * Forget every draft of every kind in this tab — at sign-out, so nothing one
  * account was editing is left for the next.
  */
-export function clearAllDrafts(storage: Storage | null = sessionDraftStorage()): void {
+export function clearAllDrafts(
+  storage: Storage | null = sessionDraftStorage(),
+  memory: Map<string, string> | null = tabMemory
+): void {
+  for (const k of [...(memory?.keys() ?? [])]) {
+    if (k.startsWith(DRAFT_PREFIX)) memory?.delete(k);
+  }
   if (!storage) return;
   try {
     const keys: string[] = [];

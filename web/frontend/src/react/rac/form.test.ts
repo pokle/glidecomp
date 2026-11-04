@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readRefusal } from "./form";
+import { readRefusal, refusal } from "./form";
 
 const response = (status: number, body: string) => ({ status, text: async () => body });
 
@@ -45,5 +45,48 @@ describe("readRefusal", () => {
       message: "Save failed (502).",
     });
     expect(await readRefusal(response(500, ""))).toEqual({ message: "Save failed (500)." });
+  });
+
+  it("never shows a JSON body in another shape, and uses the caller's words when given", async () => {
+    // Better Auth's plugin routes: words for a developer, not the reader.
+    const betterAuth = JSON.stringify({ code: "KEY_NOT_FOUND", message: "API Key not found" });
+    expect(await readRefusal(response(404, betterAuth))).toEqual({ message: "Save failed (404)." });
+    expect(await readRefusal(response(404, betterAuth), "Failed to revoke key.")).toEqual({
+      message: "Failed to revoke key.",
+    });
+    expect(await readRefusal(response(500, ""), "Failed to revoke key.")).toEqual({
+      message: "Failed to revoke key.",
+    });
+    // The server's own words still come first.
+    expect(
+      await readRefusal(response(401, JSON.stringify({ error: "Not authenticated" })), "Fallback.")
+    ).toEqual({ message: "Not authenticated", field: undefined });
+  });
+});
+
+describe("refusal", () => {
+  it("is a refusal in the server's shape, read by the same rule", async () => {
+    const own = refusal("Choose your IGC file.", { field: "file", code: "invalid_file" });
+    expect(own.ok).toBe(false);
+    expect(await readRefusal(own)).toEqual({ message: "Choose your IGC file.", field: "file" });
+    expect(await own.json()).toEqual({
+      error: "Choose your IGC file.",
+      field: "file",
+      code: "invalid_file",
+    });
+  });
+
+  it("names no field unless asked to, so it lands in the banner", async () => {
+    expect(await readRefusal(refusal("Every waypoint needs valid coordinates."))).toEqual({
+      message: "Every waypoint needs valid coordinates.",
+      field: undefined,
+    });
+  });
+
+  it("keeps its own message over an `error` in the extra body", async () => {
+    expect(await readRefusal(refusal("Mine.", { error: "Not mine." }))).toEqual({
+      message: "Mine.",
+      field: undefined,
+    });
   });
 });

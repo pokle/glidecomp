@@ -35,12 +35,9 @@ import {
 import { NotFound } from "@/react/components/NotFound";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
-import { api } from "../../comp/api";
-import type { CompDetailData, TaskDetailData } from "../comp/types";
 import { underTask } from "../lib/crumbs";
-import { compUrlId, idFromSegment, taskQrPath } from "../lib/slug";
-import { useCanonicalPath } from "../lib/use-canonical-path";
-import { useSeededResource } from "../lib/use-seeded-resource";
+import { idFromSegment, taskQrPath } from "../lib/slug";
+import { useTaskPage } from "../lib/use-task-page";
 
 const TITLE = "QR code";
 
@@ -52,32 +49,12 @@ export function TaskQrPage() {
   const compId = idFromSegment(compParam ?? "");
   const taskId = idFromSegment(taskParam ?? "");
 
-  const { data: comp, notFound: compNotFound, current: compCurrent } =
-    useSeededResource<CompDetailData>({
-      ids: [compId],
-      seed: null,
-      load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
-    });
-  const { data: task, notFound: taskNotFound, current: taskCurrent } =
-    useSeededResource<TaskDetailData>({
-      ids: [compId, taskId],
-      seed: null,
-      load: ([comp_id, task_id]) =>
-        api.api.comp[":comp_id"].task[":task_id"].$get({
-          param: { comp_id, task_id },
-        }),
-      title: (t) => `GlideComp - ${t.name} QR code`,
-    });
-
-  // The id every link carries: a hidden comp's share key rides along.
-  const urlId = compUrlId(comp, compId);
-
-  // Only from what was loaded for THIS URL — see useCanonicalPath.
-  useCanonicalPath(
-    comp && task && compCurrent && taskCurrent
-      ? taskQrPath(urlId, comp.name, taskId, task.name)
-      : null
-  );
+  const { comp, task, urlId, notFound } = useTaskPage({
+    compId,
+    taskId,
+    title: (t) => `GlideComp - ${t.name} QR code`,
+    path: taskQrPath,
+  });
 
   // The same payload the results record prints (results-record/build.ts
   // `routeQr`): the turnpoints and radii as an XCTrack `XCTSK:` task.
@@ -91,7 +68,7 @@ export function TaskQrPage() {
     [xctsk]
   );
 
-  if (compNotFound || taskNotFound) return <NotFound title="Task not found" />;
+  if (notFound) return <NotFound title="Task not found" />;
   if (!comp || !task) return <Loading>Loading…</Loading>;
 
   const crumbs = underTask(urlId, comp.name, taskId, task.name);

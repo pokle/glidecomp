@@ -19,6 +19,7 @@ import {
   needsSignIn,
   pickDefaultTask,
   readLastSubmission,
+  refusalField,
   repairStepFor,
   submissionRequest,
   submitErrorFrom,
@@ -588,6 +589,37 @@ describe("submissionRequest — which endpoint, decided once for every client", 
       "x-pilot-ident-kind": "email",
       "x-pilot-ident": "jo%2Bhg%40example.com",
     });
+  });
+});
+
+describe("refusalField", () => {
+  test("the server's field wins", () => {
+    expect(refusalField({ error: "x", code: "no_pilot_match", field: "identifier" }, false)).toBe(
+      "identifier"
+    );
+    expect(refusalField({ error: "x", field: "file" }, true)).toBe("file");
+  });
+
+  test("otherwise the field of the step that can fix it", () => {
+    expect(refusalField({ error: "x", code: "task_not_found" }, false)).toBe("task");
+    expect(refusalField({ error: "x", code: "invalid_file" }, true)).toBe("file");
+    // Who the track is for is typed when signed out, and picked when signed in.
+    expect(refusalField({ error: "x", code: "bad_identifier" }, false)).toBe("identifier");
+    expect(refusalField({ error: "x", code: "identity_ambiguous" }, true)).toBe("registration");
+  });
+
+  test("no field for a refusal no field can fix", () => {
+    for (const code of [
+      "anonymous_not_permitted",
+      "rate_limited",
+      "ambiguous_pilot_match",
+      "comp_closed",
+      "registration_closed",
+      "task_pilot_limit",
+    ] as const) {
+      expect(refusalField({ error: "x", code }, false)).toBeNull();
+    }
+    expect(refusalField({ error: "x" }, false)).toBeNull();
   });
 });
 

@@ -18,6 +18,7 @@ import { bumpAndRevalidateScores } from "../score-store";
 import { summarizeXctskChange, describeTaskSummary } from "../xctsk-summary";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 import { deleteTrackFiles, trackFileKeys } from "../track-files";
+import { taskClassRefusal } from "../pilot-classes";
 
 const MAX_TASKS_PER_COMP = 50;
 
@@ -195,22 +196,14 @@ export const taskRoutes = new Hono<AuthedEnv>()
         return c.json({ error: "Competition not found" }, 404);
       }
 
-      // Validate pilot_classes are valid for this comp
-      const compClasses = JSON.parse(comp.pilot_classes) as string[];
-      const invalidClasses = body.pilot_classes.filter(
-        (cls) => !compClasses.includes(cls)
+      // The task's pilot classes must all be this comp's. Each refusal about
+      // one input names it (`field`), so the new-task page's kit form shows it
+      // under that field rather than above the form.
+      const classProblem = taskClassRefusal(
+        JSON.parse(comp.pilot_classes) as string[],
+        body.pilot_classes
       );
-      // Each refusal about one input names it (`field`), so the new-task
-      // page's kit form shows it under that field rather than above the form.
-      if (invalidClasses.length > 0) {
-        return c.json(
-          {
-            error: `Invalid pilot classes: ${invalidClasses.join(", ")}. Must be one of: ${compClasses.join(", ")}`,
-            field: "pilot_classes",
-          },
-          400
-        );
-      }
+      if (classProblem) return c.json(classProblem, 400);
 
       // Validate task geometry against the comp's scoring format
       const geometryError = validateTaskGeometryForFormat(
@@ -437,19 +430,11 @@ export const taskRoutes = new Hono<AuthedEnv>()
 
         if (!comp) return c.json({ error: "Competition not found" }, 404);
 
-        const compClasses = JSON.parse(comp.pilot_classes) as string[];
-        const invalidClasses = body.pilot_classes.filter(
-          (cls) => !compClasses.includes(cls)
+        const classProblem = taskClassRefusal(
+          JSON.parse(comp.pilot_classes) as string[],
+          body.pilot_classes
         );
-        if (invalidClasses.length > 0) {
-          return c.json(
-            {
-              error: `Invalid pilot classes: ${invalidClasses.join(", ")}. Must be one of: ${compClasses.join(", ")}`,
-              field: "pilot_classes",
-            },
-            400
-          );
-        }
+        if (classProblem) return c.json(classProblem, 400);
       }
 
       // Stopped tasks: normalise the announcement to an ISO UTC instant

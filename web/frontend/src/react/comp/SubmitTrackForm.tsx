@@ -19,24 +19,40 @@
  * them open registration and the on-behalf picker), and everyone else goes to
  * the anonymous route, which matches the typed identifier against the comp's
  * roster.
+ *
+ * It is the kit form (`rac/form.tsx`, #820). A refusal that one step can fix
+ * — a wrong identifier, a bad file, a task closed for the day — is shown
+ * under that step's field, which is focused, and the step's border turns red.
+ * A refusal no field can fix — a sign-in, a wait, a duplicated roster row, a
+ * closed comp — is pinned beside Submit with its help: the sign-in, when to
+ * try again, the organisers to write to. The form's own checks are read the
+ * same way as the server's refusals, so they land by the same rule.
+ * docs/track-submission.md, "Errors are repairable".
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileTrigger } from "react-aria-components";
-import { Button } from "@/react/rac/button";
-import { Label } from "@/react/rac/field";
-import { Input } from "@/react/rac/field";
+import { flushSync } from "react-dom";
+import { Label, TextField } from "@/react/rac/field";
 import { SearchableChoiceList } from "@/react/rac/choice-list";
+import {
+  Form,
+  FormErrorBanner,
+  SubmitButton,
+  refusal,
+  type Refusal,
+  type SubmitResponse,
+} from "@/react/rac/form";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { compressIgc, fetchWithRetry, type PilotListEntry } from "./types";
 import {
   IDENTIFIER_KINDS,
   NOT_AN_IGC_MESSAGE,
+  UNREADABLE_FILE_MESSAGE,
   igcPilotNameFromText,
   inferIdentifierKind,
   pickDefaultTask,
   readLastSubmission,
-  repairStepFor,
+  refusalField,
   submissionRequest,
   submitErrorFrom,
   taskLine,
@@ -50,17 +66,26 @@ import {
   type RegistrationState,
   type TrackQualityWire,
   type SubmitError,
-  type SubmitStep,
+  SUBMIT_FIELD,
 } from "./submit-track";
 import {
+  IgcFileField,
+  RefusalHelp,
   RegistrationPicker,
   StepBox,
-  SubmitFailure,
   TaskPicker,
   TrackAccepted,
 } from "./SubmitTrackSteps";
 
 const SELF = "self";
+
+/**
+ * A refusal the form makes itself, with the code the server would have sent
+ * (kit `refusal()`), so it lands by the same rule: under the field that can
+ * fix it, or else beside Submit.
+ */
+const ownRefusal = (error: string, code: SubmitError["code"]): SubmitResponse =>
+  refusal(error, { code });
 
 /** What the caller already knows. Anything absent becomes a step to ask. */
 export interface SubmitTrackPrefill {
@@ -130,9 +155,9 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
   const [igcPilotName, setIgcPilotName] = useState<string | null>(null);
 
   // ── Outcome
-  const [uploading, setUploading] = useState(false);
-  const [failure, setFailure] = useState<SubmitError | null>(null);
   const [result, setResult] = useState<SubmitTrackResult | null>(null);
+  // What the last ok upload answered, read by the form's onSuccess.
+  const accepted = useRef<SubmitTrackResult | null>(null);
 
   const identityTouched = useRef(false);
 
@@ -356,7 +381,6 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
   );
 
   async function onFilePicked(files: FileList | null) {
-    setFailure(null);
     const picked = files?.[0] ?? null;
     setFile(picked);
     if (!picked) {
@@ -371,18 +395,18 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
     }
   }
 
-  function fail(message: string, code?: SubmitError["code"]) {
-    setFailure({ error: message, code });
-  }
-
-  async function upload() {
-    if (!compId || !taskId) return fail("Choose the task you flew.", "task_not_found");
-    if (!file) return fail("Choose your IGC file.", "invalid_file");
+  /**
+   * Send it. The form's own checks first, each answered as a refusal (see
+   * ownRefusal); then the upload, whose response the kit form reads.
+   */
+  async function upload(): Promise<SubmitResponse> {
+    if (!compId || !taskId) return ownRefusal("Choose the task you flew.", "task_not_found");
+    if (!file) return ownRefusal("Choose your IGC file.", "invalid_file");
     if (!file.name.toLowerCase().endsWith(".igc")) {
-      return fail(NOT_AN_IGC_MESSAGE, "invalid_file");
+      return ownRefusal(NOT_AN_IGC_MESSAGE, "invalid_file");
     }
     if (!user && identifierValue.trim() === "") {
-      return fail("Tell us who the track is for.", "bad_identifier");
+      return ownRefusal("Tell us who the track is for.", "bad_identifier");
     }
     // Asked and unanswered. A nicety only — the server refuses to guess either
     // way (409 identity_ambiguous) — but being stopped before the upload beats
@@ -393,80 +417,94 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
       registration?.state === "choose" &&
       !chosenRegistration
     ) {
-      return fail(
+      return ownRefusal(
         "Tell us which registration is yours, so your track is not filed under a second entry.",
         "identity_ambiguous"
       );
     }
 
-    setUploading(true);
-    setFailure(null);
+    // A file the browser cannot read is the file's problem, not the
+    // connection's: it goes under the file, in its own words.
+    let compressed: ArrayBuffer;
     try {
-      const compressed = await compressIgc(file);
-      const tooLarge = tooLargeReason(file.size, compressed.byteLength);
-      if (tooLarge) return fail(tooLarge, "invalid_file");
-
-      // Which endpoint is decided by the shared rules, so the website and
-      // the app can never disagree about it. Signed in: the existing routes,
-      // and with them open registration and whatever on-behalf rights this
-      // pilot already has. The registration answer is only ever sent when the
-      // pilot gave one — the server's own resolution otherwise applies, and
-      // it refuses to guess rather than duplicating.
-      const { path: url, headers } = submissionRequest(
-        compId,
-        taskId,
-        user
-          ? onBehalfOf !== SELF
-            ? { kind: "on-behalf", compPilotId: onBehalfOf }
-            : { kind: "self", registration: chosenRegistration }
-          : { kind: "anonymous", identifierKind, identifierValue }
-      );
-
-      const res = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers,
-        body: compressed,
-      });
-
-      if (!res.ok) {
-        setFailure(submitErrorFrom(await res.json().catch(() => null)));
-        return;
-      }
-
-      const data = (await res.json()) as SubmitAcceptedWire;
-      const uploaded: SubmitTrackResult = {
-        compId,
-        taskId,
-        compPilotId: data.comp_pilot_id,
-        compName: selectedComp?.name ?? prefill?.compName ?? null,
-        taskName: selectedTask?.name ?? prefill?.taskName ?? null,
-        pilotName: data.pilot_name ?? user?.name ?? null,
-        replaced: !!data.replaced,
-        flightSummary: data.flight_summary ?? null,
-        trackQuality: data.track_quality ?? { hard_failed: false, findings: [] },
-        notified: data.notified,
-        timezone: selectedComp?.timezone ?? null,
-      };
-
-      if (!user) {
-        writeLastSubmission(
-          typeof window === "undefined" ? undefined : window.localStorage,
-          {
-            compId,
-            taskId,
-            identifierKind,
-            identifierValue: identifierValue.trim(),
-          }
-        );
-      }
-
-      setResult(uploaded);
+      compressed = await compressIgc(file);
     } catch {
-      fail("We could not reach GlideComp. Check your connection and try again.");
-    } finally {
-      setUploading(false);
+      return ownRefusal(UNREADABLE_FILE_MESSAGE, "invalid_file");
     }
+    // A throw from here on is a request that never got an answer, which the
+    // kit form reports in its own words, keeping everything chosen.
+    const tooLarge = tooLargeReason(file.size, compressed.byteLength);
+    if (tooLarge) return ownRefusal(tooLarge, "invalid_file");
+
+    // Which endpoint is decided by the shared rules, so the website and
+    // the app can never disagree about it. Signed in: the existing routes,
+    // and with them open registration and whatever on-behalf rights this
+    // pilot already has. The registration answer is only ever sent when the
+    // pilot gave one — the server's own resolution otherwise applies, and
+    // it refuses to guess rather than duplicating.
+    const { path: url, headers } = submissionRequest(
+      compId,
+      taskId,
+      user
+        ? onBehalfOf !== SELF
+          ? { kind: "on-behalf", compPilotId: onBehalfOf }
+          : { kind: "self", registration: chosenRegistration }
+        : { kind: "anonymous", identifierKind, identifierValue }
+    );
+
+    const res = await fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers,
+      body: compressed,
+    });
+    if (!res.ok) return res;
+
+    const data = (await res.json()) as SubmitAcceptedWire;
+    accepted.current = {
+      compId,
+      taskId,
+      compPilotId: data.comp_pilot_id,
+      compName: selectedComp?.name ?? prefill?.compName ?? null,
+      taskName: selectedTask?.name ?? prefill?.taskName ?? null,
+      pilotName: data.pilot_name ?? user?.name ?? null,
+      replaced: !!data.replaced,
+      flightSummary: data.flight_summary ?? null,
+      trackQuality: data.track_quality ?? { hard_failed: false, findings: [] },
+      notified: data.notified,
+      timezone: selectedComp?.timezone ?? null,
+    };
+
+    if (!user) {
+      writeLastSubmission(
+        typeof window === "undefined" ? undefined : window.localStorage,
+        {
+          compId,
+          taskId,
+          identifierKind,
+          identifierValue: identifierValue.trim(),
+        }
+      );
+    }
+    return res;
+  }
+
+  /**
+   * Where a refusal is shown: under the field of the step that can fix it, or
+   * else beside Submit with its help. The sentence is the server's, word for
+   * word; a body with none still says something.
+   */
+  function shapeRefusal(_refusal: Refusal, body: unknown): Refusal {
+    const failure = submitErrorFrom(body);
+    const field = refusalField(failure, !!user);
+    // A collapsed task step has no field to show it under. Open it first, so
+    // the list is there when the form looks for the field.
+    if (field === SUBMIT_FIELD.task) flushSync(() => setEditingTask(true));
+    return {
+      message: failure.error,
+      field: field ?? undefined,
+      help: <RefusalHelp failure={failure} />,
+    };
   }
 
   // ── The result replaces the form, and stays until the pilot leaves. Its
@@ -484,10 +522,13 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
     );
   }
 
-  const repairStep = repairStepFor(failure?.code);
-
   return (
-    <div className="flex flex-col gap-6">
+    <Form
+      className="flex flex-col gap-6"
+      onSubmit={upload}
+      shapeRefusal={shapeRefusal}
+      onSuccess={() => setResult(accepted.current)}
+    >
       <StepBox
         n={1}
         title="Which task did you fly?"
@@ -497,7 +538,7 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
             : null
         }
         onChange={prefilledComp && !openComps ? undefined : () => setEditingTask(true)}
-        highlight={repairStep === "task"}
+        fields={[SUBMIT_FIELD.task]}
       >
         <TaskPicker
           comps={openComps}
@@ -517,7 +558,7 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
       <StepBox
         n={2}
         title="Who is the track for?"
-        highlight={repairStep === "identity"}
+        fields={[SUBMIT_FIELD.identifier, SUBMIT_FIELD.registration]}
       >
         {user ? (
           <div className="flex flex-col gap-4">
@@ -568,7 +609,9 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
             <p className="text-sm text-muted-foreground">
               No account needed — we&rsquo;ll find you on the roster.
             </p>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            {/* Tops aligned, not bottoms: an error under the identifier
+                would otherwise lift it above the kind beside it. */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <div className="flex flex-col gap-2 sm:w-56">
                 <SearchableChoiceList
                   label="Identify yourself by"
@@ -581,23 +624,19 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
                   searchLabel="Identify yourself by"
                 />
               </div>
-              <div className="flex flex-1 flex-col gap-2">
-                <Label htmlFor="ident-value">
-                  {IDENTIFIER_KINDS.find((k) => k.value === identifierKind)?.label}
-                </Label>
-                <Input
-                  id="ident-value"
-                  value={identifierValue}
-                  autoComplete={identifierKind === "email" ? "email" : "off"}
-                  inputMode={identifierKind === "email" ? "email" : "text"}
-                  onChange={(e) => {
-                    identityTouched.current = true;
-                    const next = e.target.value;
-                    setIdentifierValue(next);
-                    setIdentifierKind((k) => inferIdentifierKind(next, k));
-                  }}
-                />
-              </div>
+              <TextField
+                className="flex-1"
+                label={IDENTIFIER_KINDS.find((k) => k.value === identifierKind)?.label}
+                name={SUBMIT_FIELD.identifier}
+                value={identifierValue}
+                autoComplete={identifierKind === "email" ? "email" : "off"}
+                inputMode={identifierKind === "email" ? "email" : "text"}
+                onChange={(next) => {
+                  identityTouched.current = true;
+                  setIdentifierValue(next);
+                  setIdentifierKind((k) => inferIdentifierKind(next, k));
+                }}
+              />
             </div>
           </div>
         )}
@@ -610,24 +649,8 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
         </p>
       </StepBox>
 
-      <StepBox
-        n={3}
-        title="Your IGC file"
-        highlight={repairStep === "file"}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          <FileTrigger
-            acceptedFileTypes={[".igc"]}
-            onSelect={(files) => void onFilePicked(files)}
-          >
-            <Button variant="outline" size="sm">
-              {file ? "Change file…" : "Choose IGC file…"}
-            </Button>
-          </FileTrigger>
-          {file ? (
-            <span className="truncate text-sm text-muted-foreground">{file.name}</span>
-          ) : null}
-        </div>
+      <StepBox n={3} title="Your IGC file" fields={[SUBMIT_FIELD.file]}>
+        <IgcFileField file={file} onPick={(files) => void onFilePicked(files)} />
         {igcPilotName ? (
           <p className="mt-2 text-sm text-muted-foreground">
             Pilot named in the file: <strong>{igcPilotName}</strong>
@@ -635,17 +658,12 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
         ) : null}
       </StepBox>
 
-      {failure ? <SubmitFailure failure={failure} /> : null}
+      {/* Beside Submit, where it cannot scroll away from the button. */}
+      <FormErrorBanner title="We could not accept that track" />
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          isPending={uploading}
-          pendingLabel="Submitting"
-          onPress={() => void upload()}
-        >
-          Submit track
-        </Button>
+        <SubmitButton pendingLabel="Submitting">Submit track</SubmitButton>
       </div>
-    </div>
+    </Form>
   );
 }

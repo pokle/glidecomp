@@ -27,6 +27,7 @@ import {
 } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 import { deleteTrackFiles, trackFileKeys } from "../track-files";
+import { classRefusal } from "../pilot-classes";
 
 export const MAX_COMPS_PER_ACCOUNT = 50;
 
@@ -466,29 +467,15 @@ export const compRoutes = new Hono<AuthedEnv>()
       const pilotClasses = body.pilot_classes ?? ["open"];
       const defaultClass = body.default_pilot_class ?? pilotClasses[0];
 
-      // Validate default_pilot_class is in pilot_classes. Each refusal names
-      // the input it is about (`field`), so a form shows it under that field.
-      if (!pilotClasses.includes(defaultClass)) {
-        return c.json(
-          {
-            error: "default_pilot_class must be one of pilot_classes",
-            field: "default_pilot_class",
-          },
-          400
-        );
-      }
-      const unknownClass2 = storedHgClass2Classes(body.gap_params ?? null).filter(
-        (cls) => !pilotClasses.includes(cls)
+      // The default class must be one of the classes, and the FAI Class 2
+      // list may name only classes the comp has. The refusal names the input
+      // it is about (`field`), so a form shows it under that field.
+      const classProblem = classRefusal(
+        pilotClasses,
+        defaultClass,
+        storedHgClass2Classes(body.gap_params ?? null)
       );
-      if (unknownClass2.length > 0) {
-        return c.json(
-          {
-            error: `hgClass2Classes must name pilot classes of this competition (unknown: ${unknownClass2.join(", ")})`,
-            field: "gap_params.hgClass2Classes",
-          },
-          400
-        );
-      }
+      if (classProblem) return c.json(classProblem, 400);
 
       // Enforce per-account comp limit
       const countRow = await c.env.DB.prepare(
@@ -899,25 +886,6 @@ export const compRoutes = new Hono<AuthedEnv>()
         }
       }
 
-      // If updating pilot_classes or default_pilot_class, validate consistency
-      if (body.pilot_classes || body.default_pilot_class) {
-        const newClasses =
-          body.pilot_classes ??
-          (JSON.parse(current.pilot_classes as string) as string[]);
-        const newDefault =
-          body.default_pilot_class ?? (current.default_pilot_class as string);
-
-        if (!newClasses.includes(newDefault)) {
-          return c.json(
-            {
-              error: "default_pilot_class must be one of pilot_classes",
-              field: "default_pilot_class",
-            },
-            400
-          );
-        }
-      }
-
       // Keep the formula's copy of the Wing in step with the Wing itself.
       //
       // Two cases, and the second is the one that bites: a body carrying
@@ -946,23 +914,41 @@ export const compRoutes = new Hono<AuthedEnv>()
         );
       }
 
-      // The Class 2 list names pilot classes, so it must name THIS comp's —
-      // against the classes as they will be after this same save.
-      const class2 = patch.gap_params ? storedHgClass2Classes(patch.gap_params) : [];
-      if (class2.length > 0) {
-        const classesAfter =
-          body.pilot_classes ??
-          (JSON.parse(current.pilot_classes as string) as string[]);
-        const unknown = class2.filter((cls) => !classesAfter.includes(cls));
-        if (unknown.length > 0) {
-          return c.json(
-            {
-              error: `hgClass2Classes must name pilot classes of this competition (unknown: ${unknown.join(", ")})`,
-              field: "gap_params.hgClass2Classes",
-            },
-            400
-          );
-        }
+      // The class settings as they will be after this same save: the default
+      // must be one of the classes (checked only when the save touches either
+      // — the stored pair is the stored pair), and the Class 2 list may name
+      // only THIS comp's classes. Nothing has been written yet.
+      const classesAfter =
+        body.pilot_classes ??
+        (JSON.parse(current.pilot_classes as string) as string[]);
+      const classProblem = classRefusal(
+        classesAfter,
+        body.pilot_classes || body.default_pilot_class
+          ? (body.default_pilot_class ?? (current.default_pilot_class as string))
+          : null,
+        patch.gap_params ? storedHgClass2Classes(patch.gap_params) : []
+      );
+      if (classProblem) return c.json(classProblem, 400);
+
+      // The admin list, resolved to accounts BEFORE anything is written. A
+      // list naming nobody with an account would leave the comp with no admin
+      // at all, and finding that out after the UPDATE below meant a 500 with
+      // the rest of the form already saved — half a save, and no word on
+      // which field was wrong.
+      const adminIds = body.admin_emails
+        ? await resolveAdminIds(c.env.DB, body.admin_emails)
+        : null;
+      if (adminIds && adminIds.length === 0) {
+        return c.json(
+          {
+            error:
+              body.admin_emails?.length === 1
+                ? "No GlideComp account uses that address. At least one admin must have a GlideComp account."
+                : "No GlideComp account uses any of these addresses. At least one admin must have a GlideComp account.",
+            field: "admin_emails",
+          },
+          400
+        );
       }
 
       const plan = planPatch(
@@ -999,14 +985,14 @@ export const compRoutes = new Hono<AuthedEnv>()
         }))
       );
 
-      // Handle admin management via email resolution
-      if (body.admin_emails) {
-        await updateAdmins(c.env.DB, compId, body.admin_emails);
+      // The admin list, already resolved and checked above.
+      if (adminIds) {
+        await replaceAdmins(c.env.DB, compId, adminIds);
         await audit(c.env.DB, c.var.user, compId, {
           subject_type: "comp",
           subject_id: compId,
           subject_name: compName,
-          description: `Updated admin list (${body.admin_emails.length} admin${body.admin_emails.length === 1 ? "" : "s"})`,
+          description: `Updated admin list (${adminIds.length} admin${adminIds.length === 1 ? "" : "s"})`,
         });
       }
 
@@ -1110,40 +1096,43 @@ export const compRoutes = new Hono<AuthedEnv>()
     }
   );
 
-// ── Admin management helper ──
+// ── Admin management helpers ──
 
-async function updateAdmins(
+/**
+ * The accounts an admin list names, by email. An address no account uses is
+ * left out; the caller refuses a list that resolves to nobody, before it
+ * writes anything.
+ */
+async function resolveAdminIds(
   db: D1Database,
-  compId: number,
   emails: string[]
-): Promise<void> {
-  // Resolve emails to user IDs
+): Promise<string[]> {
   const placeholders = emails.map(() => "?").join(",");
   const users = await db
-    .prepare(
-      `SELECT id, email FROM "user" WHERE email IN (${placeholders})`
-    )
+    .prepare(`SELECT id FROM "user" WHERE email IN (${placeholders})`)
     .bind(...emails)
-    .all<{ id: string; email: string }>();
+    .all<{ id: string }>();
+  return users.results.map((u) => u.id);
+}
 
-  const resolvedIds = users.results.map((u) => u.id);
-
-  if (resolvedIds.length === 0) {
-    throw new Error("At least one admin must be a registered user");
-  }
-
-  // Replace all admins in a batch
-  await db
-    .prepare("DELETE FROM comp_admin WHERE comp_id = ?")
-    .bind(compId)
-    .run();
-
-  const batch = resolvedIds.map((userId) =>
-    db
-      .prepare("INSERT INTO comp_admin (comp_id, user_id) VALUES (?, ?)")
-      .bind(compId, userId)
-  );
-  await db.batch(batch);
+/**
+ * Replace a comp's admins with these accounts, in ONE batch. D1 runs a batch
+ * as a transaction, so the comp is never left between the DELETE and the
+ * INSERTs — with no admins at all — if one of them fails.
+ */
+async function replaceAdmins(
+  db: D1Database,
+  compId: number,
+  userIds: string[]
+): Promise<void> {
+  await db.batch([
+    db.prepare("DELETE FROM comp_admin WHERE comp_id = ?").bind(compId),
+    ...userIds.map((userId) =>
+      db
+        .prepare("INSERT INTO comp_admin (comp_id, user_id) VALUES (?, ?)")
+        .bind(compId, userId)
+    ),
+  ]);
 }
 
 // ── Class coverage warnings ──

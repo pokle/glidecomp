@@ -1,17 +1,19 @@
 /**
  * The pieces the submit-track flow is assembled from: one step of the form,
- * the registration and task pickers, and the two outcomes — a failure with a
- * way back, and the receipt for an accepted track.
+ * the registration and task pickers, the file field, the help a refusal
+ * carries, and the receipt for an accepted track.
  *
  * Split out of SubmitTrackForm, which carried all of them below the component
  * that uses them and ran to 1,180 lines. The flow's decisions still live in
  * submit-track.ts, DOM-free and directly tested; this is only the rendering.
  */
-import { useState } from "react";
+import { useId, useState } from "react";
+import { FileTrigger } from "react-aria-components";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { Input, Label } from "@/react/rac/field";
+import { useFormState, useOptionalFormState } from "@/react/rac/form";
 import { Loading } from "@/react/rac/progress";
 import { Radio, RadioGroup } from "@/react/rac/radio-group";
 import { ChoiceList, SearchableChoiceList } from "@/react/rac/choice-list";
@@ -28,6 +30,7 @@ import {
   formatTrackDistance,
   needsSignIn,
   unnamedClasses,
+  SUBMIT_FIELD,
   type IdentifierKind,
   type OpenComp,
   type RegistrationState,
@@ -42,6 +45,9 @@ import type { SubmitTrackResult } from "./SubmitTrackForm";
  * A step whose answer is already known shows the answer and a Change button
  * rather than vanishing — the pilot has to be able to see what they are about
  * to file the track against.
+ *
+ * `fields` are the kit-form fields that answer it: while one of them carries
+ * an error, the step's border says so too.
  */
 export function StepBox({
   n,
@@ -49,15 +55,17 @@ export function StepBox({
   children,
   answered,
   onChange,
-  highlight,
+  fields = [],
 }: {
   n: number;
   title: string;
   children: React.ReactNode;
   answered?: string | null;
   onChange?: () => void;
-  highlight?: boolean;
+  fields?: readonly string[];
 }) {
+  const fieldErrors = useOptionalFormState()?.fieldErrors;
+  const highlight = fields.some((f) => fieldErrors?.[f]);
   // A step is a real card: these were bordered boxes with no background, so on
   // the tinted ground they read as three holes rather than three steps.
   //
@@ -134,6 +142,7 @@ export function RegistrationPicker({
   const [showIdent, setShowIdent] = useState(false);
   const [kind, setKind] = useState<IdentifierKind>("civl_id");
   const [value, setValue] = useState("");
+  const find = () => onIdentifier(value.trim() ? { kind, value: value.trim() } : null);
 
   // Null means "we do not know yet", which is NOT "you are new". Saying
   // nothing is the honest render.
@@ -177,6 +186,7 @@ export function RegistrationPicker({
           RAC composes the accessible name from both. */}
       <ChoiceList
         ariaLabel="Which registration are you?"
+        name={SUBMIT_FIELD.registration}
         value={chosen ?? ""}
         onChange={onChoose}
         options={[
@@ -217,14 +227,16 @@ export function RegistrationPicker({
               id="reg-ident-value"
               value={value}
               onChange={(e) => setValue(e.target.value)}
+              // Enter here finds the pilot, as Find me does. Left to the form,
+              // it would submit the track.
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                find();
+              }}
             />
           </div>
-          <Button
-            variant="outline"
-            onPress={() =>
-              onIdentifier(value.trim() ? { kind, value: value.trim() } : null)
-            }
-          >
+          <Button variant="outline" onPress={find}>
             Find me
           </Button>
         </div>
@@ -299,11 +311,16 @@ export function TaskPicker({
             value={query}
             placeholder="Competition name"
             onChange={(e) => setQuery(e.target.value)}
+            // A search box, not an answer: Enter must not submit the track.
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.preventDefault();
+            }}
           />
         </div>
       ) : null}
       <RadioGroup
         aria-label="Which task did you fly?"
+        name={SUBMIT_FIELD.task}
         value={compId && taskId ? `${compId}:${taskId}` : null}
         onChange={(v) => {
           const [nextComp, nextTask] = v.split(":");
@@ -349,54 +366,103 @@ export function TaskPicker({
 }
 
 /**
- * A failure the pilot can act on.
+ * The IGC file: a button that opens the file picker, and the file chosen.
  *
- * Every message names what went wrong AND who or what can fix it. Where the
- * pilot cannot fix it themselves — a duplicated roster row, a comp that has
- * closed — it names the organiser and links a real mailto, exactly as the
- * public comp page does.
+ * A kit-form field by hand, because a file picker is not one of React Aria's
+ * fields: the button carries the field's `name`, so a refusal naming the file
+ * lands here, and it is marked invalid, so the kit focuses it; the message
+ * sits under it, wired by `aria-describedby`. Choosing a file clears it.
  */
-export function SubmitFailure({ failure }: { failure: SubmitError }) {
+export function IgcFileField({
+  file,
+  onPick,
+}: {
+  file: File | null;
+  onPick: (files: FileList | null) => void;
+}) {
+  const { fieldErrors, clearFieldError } = useFormState();
+  const error = fieldErrors[SUBMIT_FIELD.file];
+  const errorId = useId();
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <FileTrigger
+          acceptedFileTypes={[".igc"]}
+          onSelect={(files) => {
+            clearFieldError(SUBMIT_FIELD.file);
+            onPick(files);
+          }}
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            name={SUBMIT_FIELD.file}
+            data-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
+            className={error ? "border-destructive" : undefined}
+          >
+            {file ? "Change file…" : "Choose IGC file…"}
+          </Button>
+        </FileTrigger>
+        {file ? (
+          <span className="truncate text-sm text-muted-foreground">{file.name}</span>
+        ) : null}
+      </div>
+      {error ? (
+        <p id={errorId} className="text-xs font-medium text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * What a pilot can do about a refusal no field of the form can fix: sign in,
+ * wait, or write to the organiser. Shown under the refusal's message beside
+ * Submit (the kit form's `help`).
+ *
+ * Where the pilot cannot fix it themselves — a duplicated roster row, a comp
+ * that has closed — it names the organiser and links a real mailto, exactly as
+ * the public comp page does.
+ */
+export function RefusalHelp({ failure }: { failure: SubmitError }) {
   const organisers = failure.organisers ?? [];
   return (
-    <Alert variant="destructive">
-      <AlertTitle>We could not accept that track</AlertTitle>
-      <AlertDescription>
-        <p>{failure.error}</p>
-        {needsSignIn(failure.code) ? (
-          <p className="mt-2">
-            <LinkButton
-              size="sm"
-              href={`/signin?next=${encodeURIComponent(
-                typeof window === "undefined" ? "/submit" : window.location.pathname
-              )}`}
-            >
-              Sign in to submit
-            </LinkButton>
-          </p>
-        ) : null}
-        {failure.retry_after_seconds ? (
-          <p className="mt-2">
-            Try again {formatRetryAfter(failure.retry_after_seconds)}.
-          </p>
-        ) : null}
-        {organisers.length > 0 ? (
-          <p className="mt-2">
-            {organisers.length === 1 ? "Organiser: " : "Organisers: "}
-            {organisers.map((o, i) => (
-              <span key={o.email}>
-                {i > 0 ? ", " : ""}
-                {o.name} (
-                <a className="underline underline-offset-4" href={`mailto:${o.email}`}>
-                  {o.email}
-                </a>
-                )
-              </span>
-            ))}
-          </p>
-        ) : null}
-      </AlertDescription>
-    </Alert>
+    <>
+      {needsSignIn(failure.code) ? (
+        <p className="mt-2">
+          <LinkButton
+            size="sm"
+            href={`/signin?next=${encodeURIComponent(
+              typeof window === "undefined" ? "/submit" : window.location.pathname
+            )}`}
+          >
+            Sign in to submit
+          </LinkButton>
+        </p>
+      ) : null}
+      {failure.retry_after_seconds ? (
+        <p className="mt-2">
+          Try again {formatRetryAfter(failure.retry_after_seconds)}.
+        </p>
+      ) : null}
+      {organisers.length > 0 ? (
+        <p className="mt-2">
+          {organisers.length === 1 ? "Organiser: " : "Organisers: "}
+          {organisers.map((o, i) => (
+            <span key={o.email}>
+              {i > 0 ? ", " : ""}
+              {o.name} (
+              <a className="underline underline-offset-4" href={`mailto:${o.email}`}>
+                {o.email}
+              </a>
+              )
+            </span>
+          ))}
+        </p>
+      ) : null}
+    </>
   );
 }
 

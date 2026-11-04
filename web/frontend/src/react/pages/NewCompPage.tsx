@@ -24,34 +24,16 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
-import {
-  Form,
-  FormErrorBanner,
-  SubmitButton,
-  useFormState,
-} from "@/react/rac/form";
+import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { SectionHeader } from "../components/SectionHeader";
 import { CategoryField, NameField, PilotClassesField } from "../comp/fields";
 import { compCrumbs } from "../lib/crumbs";
-import { compPath, compUrlId } from "../lib/slug";
+import { compPath, compUrlId, newCompPath } from "../lib/slug";
 import { useGoToSignIn, useUser } from "../lib/user";
 
 const TITLE = "Start a new competition";
-
-/** The most classes a competition can have (competition-api's validators.ts). */
-const MAX_CLASSES = 20;
-
-/**
- * The server's names for the fields → the fields' `name`s here. A refusal of
- * one pilot class names its place in the list (`pilot_classes.2`), and the
- * classes are typed into one field, so every place maps onto it.
- */
-const SERVER_FIELDS: Record<string, string> = Object.fromEntries([
-  ["default_pilot_class", "pilot_classes"],
-  ...Array.from({ length: MAX_CLASSES }, (_, i) => [`pilot_classes.${i}`, "pilot_classes"]),
-]);
 
 /** What was typed into Pilot classes, as the list the server takes. */
 function parseClasses(text: string): string[] {
@@ -82,7 +64,6 @@ export function NewCompPage() {
       {user ? (
         <Form
           validate={() => ({ name: name.trim() ? null : "Enter a name." })}
-          fieldNames={SERVER_FIELDS}
           onSubmit={() =>
             api.api.comp.$post({
               json: {
@@ -132,7 +113,7 @@ export function NewCompPage() {
             type="button"
             variant="outline"
             className="mt-4"
-            onPress={() => goToSignIn("/comp/new")}
+            onPress={() => goToSignIn(newCompPath())}
           >
             Sign in to start a competition
           </Button>
@@ -158,7 +139,6 @@ function NewCompFields({
   pilotClasses: string;
   setPilotClasses: (v: string) => void;
 }) {
-  const { clearFieldError } = useFormState();
   return (
     <div className="mt-4 flex flex-col gap-6">
       <NameField
@@ -191,12 +171,7 @@ function NewCompFields({
       <PilotClassesField
         name="pilot_classes"
         value={pilotClasses}
-        // An example chip sets the value without an input event of its own,
-        // so it clears the field's error itself.
-        onChange={(v) => {
-          setPilotClasses(v);
-          clearFieldError("pilot_classes");
-        }}
+        onChange={setPilotClasses}
         wing={category}
       />
     </div>

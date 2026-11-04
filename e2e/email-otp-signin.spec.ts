@@ -173,6 +173,43 @@ test("a wrong code shows an error and allows retry", async ({ page }) => {
   await page.waitForURL("**/onboarding");
 });
 
+/**
+ * A dropped connection is not the address's fault, nor the code's. Better
+ * Auth's client lets it THROW out of fetch, which used to escape the page's
+ * handlers: the button stayed busy and nothing was said at all.
+ */
+test("a dropped connection says so, and the next try works", async ({ page }) => {
+  const email = `otp-offline-${String(Date.now()).slice(-8)}@test.local`;
+  const UNREACHABLE = "Could not reach GlideComp. Check your connection, then try again.";
+
+  await page.goto("/signin");
+  await page.getByLabel("Email").fill(email);
+  const send = page.getByRole("button", { name: "Email me a sign-in code" });
+
+  // Sending the code.
+  await page.route("**/api/auth/email-otp/send-verification-otp", (r) => r.abort("failed"), {
+    times: 1,
+  });
+  await send.click();
+  await expect(page.getByRole("alert")).toHaveText(UNREACHABLE);
+  await expect(page.getByRole("alert")).not.toContainText(/address/);
+  await expect(send).toBeEnabled();
+
+  // The next press goes through.
+  await send.click();
+  const otpInput = page.getByRole("textbox", { name: "6-digit sign-in code" });
+  await expect(otpInput).toBeVisible();
+  const otp = await fetchDevOtp(page.request, email);
+
+  // Checking the code.
+  await page.route("**/api/auth/sign-in/email-otp", (r) => r.abort("failed"), { times: 1 });
+  await otpInput.fill(otp);
+  await expect(page.getByRole("alert")).toHaveText(UNREACHABLE);
+  // The code is still good: typing it again signs in.
+  await otpInput.fill(otp);
+  await page.waitForURL("**/onboarding");
+});
+
 test("send endpoint rate-limits with Retry-After", async ({ request }) => {
   // Its own bucket: rapid sends from one "IP" must 429 within the cap.
   const ip = testIp();

@@ -40,7 +40,8 @@ import { SimpleSelect } from "@/react/rac/select";
 import { SectionHeader } from "../components/SectionHeader";
 import { api } from "../../comp/api";
 import { downloadFile } from "../lib/format";
-import { toast } from "../lib/toast";
+import { openedHere } from "../lib/leave";
+import { ActionErrorBanner, useAction } from "@/react/rac/form";
 import { fetchWithRetry } from "./types";
 import { exportCsvContent, pilotToRow, slugify, type CompPilot } from "./csv";
 import {
@@ -104,6 +105,9 @@ export function PilotsSection({
 }) {
   const [pilots, setPilots] = useState<CompPilot[] | null>(null);
   const [loadError, setLoadError] = useState(false);
+  // The ⋯ menu's "Add test pilots": its refusal shows under the heading the
+  // menu hangs off, never as a toast (rac/form.tsx, `useAction`).
+  const addTestAction = useAction();
   // In the URL, so Back from a pilot's page returns the list as it was left.
   // Replaced, never pushed: a keystroke is not a place to go Back to.
   const [params, setParams] = useSearchParams();
@@ -184,7 +188,7 @@ export function PilotsSection({
     navigate(
       compPilotPath(compId, compName, "new") +
         (nobodyMatches ? `?${new URLSearchParams({ name: typedName })}` : ""),
-      { state: { fromList: true } }
+      openedHere()
     );
 
   async function addTestPilots() {
@@ -207,16 +211,14 @@ export function PilotsSection({
         pilot_class: compClasses[(n - 1) % compClasses.length] ?? "",
       };
     });
-    try {
-      const res = await api.api.comp[":comp_id"].pilot.bulk.$post({
+    const res = await addTestAction.run(() =>
+      api.api.comp[":comp_id"].pilot.bulk.$post({
         param: { comp_id: compId },
         json: { pilots: rows, remove: [] },
-      });
-      if (!res.ok) throw new Error(String(res.status));
-      replaceRoster(((await res.json()) as unknown as { pilots: CompPilot[] }).pilots);
-    } catch {
-      toast.error("Could not add test pilots.");
-    }
+      })
+    );
+    if (!res) return;
+    replaceRoster(((await res.json()) as unknown as { pilots: CompPilot[] }).pilots);
   }
 
   function exportCsv() {
@@ -240,20 +242,21 @@ export function PilotsSection({
                 // "Import CSV…" always starts at choosing a file: a file
                 // chosen earlier and left unapplied is not what was asked for.
                 rosterImportDraft.clear([bareCompId(compId)]);
-                navigate(compPilotsImportPath(compId, compName), { state: { fromList: true } });
+                navigate(compPilotsImportPath(compId, compName), openedHere());
               }}
               onExport={exportCsv}
               onFillCivl={() =>
-                navigate(compPilotsCivlFillPath(compId, compName), { state: { fromList: true } })
+                navigate(compPilotsCivlFillPath(compId, compName), openedHere())
               }
               onCopyFromComp={() =>
-                navigate(compPilotsCopyPath(compId, compName), { state: { fromList: true } })
+                navigate(compPilotsCopyPath(compId, compName), openedHere())
               }
               onAddTestPilots={() => void addTestPilots()}
             />
           ) : null
         }
       />
+      <ActionErrorBanner action={addTestAction} className="mt-2" />
 
       {/* Whether this list can grow on its own. It used to be true of every
           competition with nothing anywhere to say so — an organiser reading
@@ -337,9 +340,10 @@ export function PilotsSection({
             onOpen={(id) => {
               const pilot = pilots.find((p) => p.comp_pilot_id === id);
               if (pilot) {
-                navigate(compPilotPath(compId, compName, pilot.comp_pilot_id, pilot.name), {
-                  state: { fromList: true },
-                });
+                navigate(
+                  compPilotPath(compId, compName, pilot.comp_pilot_id, pilot.name),
+                  openedHere()
+                );
               }
             }}
           />

@@ -1,9 +1,12 @@
 /**
- * Admin task management grid — "Manage pilots & tracks" (issues #306, then
+ * Admin task management list — "Manage pilots & tracks" (issues #306, then
  * split from the public scores surface). One row per pilot with their
  * outcome on the task: ranked scorers first, then a per-class "did not
- * score" tail (present-not-flown / DNF / absent). Columns: rank · pilot ·
- * outcome (badge + evidence) · distance · points · Manage.
+ * score" tail (present-not-flown / DNF / absent). Each row: rank · pilot ·
+ * points, then outcome (badge + evidence) · distance, then the actions.
+ *
+ * A LIST at every width, built for a phone (#848): it was a six-column table
+ * that scrolled sideways there, and the actions were the columns off-screen.
  *
  * This is the management tool, admin-only by design: opening a pilot's score
  * card, statuses, uploads on behalf, manual flights and restores. The PUBLIC
@@ -12,24 +15,25 @@
  * server-rendered and mounts only after the admin check resolves.
  *
  * Built on the RAC kit (src/react/rac/) — see
- * docs/2026-07-18-rac-adoption-guide.md. The rows are an ARIA grid
- * (keyboard-navigable, onAction opens the pilot detail page), and the per-row
- * admin controls use RAC Select / FileTrigger / Tooltip.
+ * docs/2026-07-18-rac-adoption-guide.md. The rows are a kit GridList (arrow
+ * keys between rows, Tab through a row's actions), and the per-row admin
+ * controls use RAC Select / FileTrigger / Tooltip.
  *
  * Staleness: a status/track/manual change is a whole-task rescore (launch
- * validity ripples to everyone). Score columns grey out while stale; the fresh
+ * validity ripples to everyone). Score figures grey out while stale; the fresh
  * outcome overrides the stale blob for ranked-vs-tail placement (a just-DNF'd
  * pilot leaves the ranked section immediately); ScoreFreshness surfaces a
  * Reload when the rescore lands — no silent resettle.
  */
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { FileTrigger, Link as AriaLink } from "react-aria-components";
 import type { XCTask } from "@glidecomp/engine";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
+import { ActionErrorBanner, useAction } from "@/react/rac/form";
 import { SimpleSelect } from "@/react/rac/select";
-import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { GridList, GridListItem } from "@/react/rac/grid-list";
+import { cn } from "@/react/lib/utils";
 import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { api } from "../../comp/api";
 import { formatDistance, useUnits } from "../lib/units";
@@ -41,6 +45,7 @@ import { ScoreFreshness } from "./ScoreFreshness";
 import { compressIgc } from "./types";
 import {
   NOT_AN_IGC_MESSAGE,
+  UNREADABLE_FILE_MESSAGE,
   describeUploadOutcome,
   tooLargeReason,
   type TrackQualityWire,
@@ -313,12 +318,6 @@ export function TaskScoresAdmin({
           onMutated={afterMutation}
         />
       ))}
-
-      {score.class_scores.some((c) => c.pilots.length > 0) ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          Tap a row for the full breakdown.
-        </p>
-      ) : null}
     </Card>
   );
 }
@@ -364,7 +363,6 @@ function ClassScoresRows({
   manualEntryFor: (id: string) => ManualFlightEntry | null;
   onMutated: () => void;
 }) {
-  const navigate = useNavigate();
   const compName = useCompName();
 
   const scoredIds = new Set(cls.pilots.map((p) => p.comp_pilot_id));
@@ -429,7 +427,12 @@ function ClassScoresRows({
   return (
     <div className="mt-4">
       {showClassName ? <h3 className="mt-4 font-semibold">{cls.pilot_class}</h3> : null}
-      <Table
+      {/* A list of pilots, one card each, at every width — not a table. The
+          six-column table it replaced scrolled sideways on a phone, with the
+          status select, Upload track and Add manual flight off to the right
+          where an organiser on a hill could not find them. On a wide screen
+          the facts and the actions sit side by side; it is the same row. */}
+      <GridList
         // NOT `Scores — ${class}`: ScoresSection's public grid already owns
         // that name, and on the task page an admin has BOTH mounted at once —
         // two grids with one accessible name is unusable with a screen reader
@@ -437,44 +440,25 @@ function ClassScoresRows({
         // surface, and the card heading above it says so.
         aria-label={`Manage pilots & tracks — ${cls.pilot_class}`}
         className="mt-2"
-        // Whole-row activation for ranked pilots: keyboard (Enter) and click
-        // both open the score breakdown. RAC keeps presses on the inner
-        // controls (Select, buttons) from bubbling into the row action.
-        onRowAction={(key) => {
-          const row = rows.find((r) => r.compPilotId === key);
-          if (row && row.outcome === "landed" && row.score) {
-            void navigate(detailHref(row));
-          }
-        }}
       >
-        <TableHeader>
-          <Column className="text-right">#</Column>
-          <Column isRowHeader>Pilot</Column>
-          <Column>Outcome</Column>
-          <Column className="text-right">Distance</Column>
-          {!isOpenDistance ? <Column className="text-right">Points</Column> : null}
-          {showManage ? <Column className="text-right">Manage</Column> : null}
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <ScoresRow
-              key={row.compPilotId}
-              row={row}
-              compId={compId}
-              taskId={taskId}
-              isOpenDistance={isOpenDistance}
-              greyed={greyed}
-              showManage={showManage}
-              isClosed={isClosed}
-                  taskXctsk={taskXctsk}
-              statuses={statuses}
-              detailHref={row.outcome === "landed" && row.score ? detailHref(row) : null}
-              manualHref={manualHref(row)}
-              onMutated={onMutated}
-            />
-          ))}
-        </TableBody>
-      </Table>
+        {rows.map((row) => (
+          <ScoresRow
+            key={row.compPilotId}
+            row={row}
+            compId={compId}
+            taskId={taskId}
+            isOpenDistance={isOpenDistance}
+            greyed={greyed}
+            showManage={showManage}
+            isClosed={isClosed}
+            taskXctsk={taskXctsk}
+            statuses={statuses}
+            detailHref={row.outcome === "landed" && row.score ? detailHref(row) : null}
+            manualHref={manualHref(row)}
+            onMutated={onMutated}
+          />
+        ))}
+      </GridList>
 
       {rows.length === 0 ? (
         <p className="mt-2 text-muted-foreground">No pilots yet</p>
@@ -491,10 +475,10 @@ function OutcomeBadge({ outcome, evidence }: { outcome: Outcome; evidence: RowPi
     absent: "bg-destructive/10 text-destructive",
   };
   return (
-    <span className="inline-flex flex-col gap-0.5">
-      <span
-        className={`inline-block w-fit rounded px-1.5 py-0.5 text-xs font-medium ${tone[outcome]}`}
-      >
+    <span className="inline-flex items-center gap-2">
+      {/* The column header it used to sit under, for a screen reader. */}
+      <span className="sr-only">Outcome</span>
+      <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${tone[outcome]}`}>
         {OUTCOME_LABEL[outcome]}
       </span>
       {outcome === "landed" && evidence ? (
@@ -506,6 +490,17 @@ function OutcomeBadge({ outcome, evidence }: { outcome: Outcome; evidence: RowPi
   );
 }
 
+/**
+ * One pilot: rank, name and points on the first line; outcome and distance
+ * on the second; then the row's actions, wrapping, every one a full-size tap
+ * target. A pilot with no score yet has no rank, distance or points to show,
+ * so the row says nothing about them rather than printing dashes.
+ *
+ * The row itself does nothing when pressed. As a table row it opened the
+ * score card, which on a card full of buttons would make every near-miss of
+ * one of them a trip off the page; the name and View score card both go
+ * there already.
+ */
 function ScoresRow({
   row,
   compId,
@@ -535,61 +530,67 @@ function ScoresRow({
   onMutated: () => void;
 }) {
   const units = useUnits();
-  // Every column that goes through scoreCell (rank, distance, points) is a
-  // quantity, so they all get the same right-aligned tabular treatment — the
-  // "—" placeholder included, so blanks sit under the digits they stand in for.
-  const scoreCell = (content: React.ReactNode) => (
-    <Cell
-      className={`text-right tabular-nums${greyed ? " opacity-40" : ""}`}
-      aria-busy={greyed || undefined}
-    >
-      {content}
-    </Cell>
-  );
+  // The score's figures grey out while it is being recomputed.
+  const figure = cn("tabular-nums", greyed && "opacity-40");
 
   return (
-    <Row id={row.compPilotId} className={detailHref ? "cursor-pointer" : undefined}>
-      {scoreCell(row.score ? row.score.rank : "—")}
-      <Cell>
-        {detailHref ? (
-          // A real anchor (crawlable, middle-clickable) inside the row; the
-          // row-level onAction covers plain clicks anywhere else in the row.
-          <AriaLink
-            href={detailHref}
-            className="underline decoration-muted-foreground/40 underline-offset-4 outline-none data-hovered:decoration-current data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
-          >
-            {row.name}
-          </AriaLink>
-        ) : (
-          row.name
-        )}
-      </Cell>
-      <Cell>
-        <OutcomeBadge outcome={row.outcome} evidence={row.evidence} />
-      </Cell>
-      {scoreCell(
-        row.score
-          ? formatDistance(row.score.flown_distance, { decimals: 1, prefs: units }).withUnit
-          : "—"
-      )}
-      {!isOpenDistance ? scoreCell(row.score ? formatRankedScore(row.score.total_score) : "—") : null}
+    <GridListItem
+      id={row.compPilotId}
+      textValue={row.name}
+      className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:gap-4"
+    >
+      <div className="flex min-w-0 flex-col gap-1 md:flex-1">
+        <div className="flex items-baseline gap-3">
+          {row.score ? (
+            <span className={cn(figure, "shrink-0 text-muted-foreground")} aria-busy={greyed || undefined}>
+              #{row.score.rank}
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {detailHref ? (
+              // A real anchor (crawlable, middle-clickable) to the score card.
+              <AriaLink
+                href={detailHref}
+                className="underline decoration-muted-foreground/40 underline-offset-4 outline-none data-hovered:decoration-current data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
+              >
+                {row.name}
+              </AriaLink>
+            ) : (
+              row.name
+            )}
+          </span>
+          {!isOpenDistance && row.score ? (
+            <span className={cn(figure, "shrink-0 font-medium")} aria-busy={greyed || undefined}>
+              <span className="sr-only">Points </span>
+              {formatRankedScore(row.score.total_score)}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <OutcomeBadge outcome={row.outcome} evidence={row.evidence} />
+          {row.score ? (
+            <span className={cn(figure, "text-muted-foreground")} aria-busy={greyed || undefined}>
+              <span className="sr-only">Distance </span>
+              {formatDistance(row.score.flown_distance, { decimals: 1, prefs: units }).withUnit}
+            </span>
+          ) : null}
+        </div>
+      </div>
       {showManage ? (
-        <Cell className="text-right">
-          <RowManage
-            row={row}
-            compId={compId}
-            taskId={taskId}
-            isClosed={isClosed}
-            isOpenDistance={isOpenDistance}
-              taskXctsk={taskXctsk}
-            statuses={statuses}
-            detailHref={detailHref}
-            manualHref={manualHref}
-            onMutated={onMutated}
-          />
-        </Cell>
+        <RowManage
+          row={row}
+          compId={compId}
+          taskId={taskId}
+          isClosed={isClosed}
+          isOpenDistance={isOpenDistance}
+          taskXctsk={taskXctsk}
+          statuses={statuses}
+          detailHref={detailHref}
+          manualHref={manualHref}
+          onMutated={onMutated}
+        />
       ) : null}
-    </Row>
+    </GridListItem>
   );
 }
 
@@ -620,7 +621,11 @@ function RowManage({
   manualHref: string;
   onMutated: () => void;
 }) {
-  const [busy, setBusy] = useState(false);
+  // Every action on the row shares one: one press at a time, and a refusal
+  // shown under the row's buttons — where the organiser just pressed — not in
+  // a toast that is gone before it is read (rac/form.tsx, `useAction`).
+  const action = useAction();
+  const busy = action.pending;
 
   // The pilot is already known from the row, so the Track button skips the
   // pilot-picker dialog and uploads straight to this pilot's IGC endpoint.
@@ -629,112 +634,90 @@ function RowManage({
     const file = files?.[0];
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".igc")) {
-      toast.error(NOT_AN_IGC_MESSAGE);
+      action.refuse(NOT_AN_IGC_MESSAGE);
       return;
     }
-    setBusy(true);
+    let compressed: ArrayBuffer;
     try {
-      const compressed = await compressIgc(file);
-      // The size rule is the server's, both halves of it. This used to be an
-      // invented 5 MB check on the raw file, which matched neither.
-      const tooLarge = tooLargeReason(file.size, compressed.byteLength);
-      if (tooLarge) {
-        toast.error(tooLarge);
-        return;
-      }
-      const res = await fetch(
+      compressed = await compressIgc(file);
+    } catch {
+      // Nothing was sent: the file could not be read, which is not a
+      // dropped connection.
+      action.refuse(UNREADABLE_FILE_MESSAGE);
+      return;
+    }
+    // The size rule is the server's, both halves of it. This used to be an
+    // invented 5 MB check on the raw file, which matched neither.
+    const tooLarge = tooLargeReason(file.size, compressed.byteLength);
+    if (tooLarge) {
+      action.refuse(tooLarge);
+      return;
+    }
+    const res = await action.run(() =>
+      fetch(
         `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(row.compPilotId)}`,
         { method: "POST", credentials: "include", body: compressed }
-      );
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        toast.error(err.error || "Upload failed");
-        return;
-      }
-      const data = (await res.json()) as {
-        replaced?: boolean;
-        track_quality?: TrackQualityWire | null;
-      };
-      // A withheld track must not be announced as a plain success — the pilot
-      // it belongs to is not here to notice, so the admin is the only one who
-      // can act on it.
-      const outcome = describeUploadOutcome(row.name, !!data.replaced, data.track_quality);
-      toast[outcome.tone](outcome.message);
-      onMutated();
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setBusy(false);
-    }
+      ),
+      { key: "upload" }
+    );
+    if (!res) return;
+    const data = (await res.json().catch(() => ({}))) as {
+      replaced?: boolean;
+      track_quality?: TrackQualityWire | null;
+    };
+    // A withheld track must not be announced as a plain success — the pilot
+    // it belongs to is not here to notice, so the admin is the only one who
+    // can act on it. The upload itself succeeded, so this stays a toast.
+    const outcome = describeUploadOutcome(row.name, !!data.replaced, data.track_quality);
+    toast[outcome.tone](outcome.message);
+    onMutated();
   }
 
   // The status the admin controls directly: Present (clear) / Absent / DNF.
-  // Landed is derived from evidence and never hand-set.
+  // Landed is derived from evidence and never hand-set. A refused change
+  // leaves the select showing the stored status, with the reason beneath.
   const statusKey = statuses.get(row.compPilotId)?.status_key ?? "";
   const statusValue = statusKey === "absent" || statusKey === "dnf" ? statusKey : "";
 
   async function setStatus(next: string) {
-    setBusy(true);
-    try {
-      if (next === "") {
-        const res = await api.api.comp[":comp_id"].task[":task_id"]["pilot-status"][
-          ":comp_pilot_id"
-        ].$delete({
-          param: { comp_id: compId, task_id: taskId, comp_pilot_id: row.compPilotId },
-        });
-        if (!res.ok) throw new Error();
-      } else {
-        const res = await api.api.comp[":comp_id"].task[":task_id"]["pilot-status"][
-          ":comp_pilot_id"
-        ].$put({
-          param: { comp_id: compId, task_id: taskId, comp_pilot_id: row.compPilotId },
-          json: { status_key: next as "absent" | "dnf", note: null },
-        });
-        if (!res.ok) throw new Error();
-      }
-      onMutated();
-    } catch {
-      toast.error("Failed to update status");
-    } finally {
-      setBusy(false);
-    }
+    const param = { comp_id: compId, task_id: taskId, comp_pilot_id: row.compPilotId };
+    const endpoint =
+      api.api.comp[":comp_id"].task[":task_id"]["pilot-status"][":comp_pilot_id"];
+    const res = await action.run(() =>
+      next === ""
+        ? endpoint.$delete({ param })
+        : endpoint.$put({
+            param,
+            json: { status_key: next as "absent" | "dnf", note: null },
+          })
+    );
+    if (res) onMutated();
   }
 
   async function restoreTrack() {
-    setBusy(true);
-    try {
-      const res = await fetch(
+    const res = await action.run(() =>
+      fetch(
         `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(row.compPilotId)}/restore`,
         { method: "POST", credentials: "include" }
-      );
-      if (!res.ok) throw new Error();
-      onMutated();
-    } catch {
-      toast.error("Failed to restore track");
-    } finally {
-      setBusy(false);
-    }
+      ),
+      { key: "restore" }
+    );
+    if (res) onMutated();
   }
 
   // A manual flight needs a route to measure against (GAP course or take-off
   // cylinder). Both formats define at least one turnpoint.
   const hasRoute = taskXctsk && taskXctsk.turnpoints.length > 0;
 
+  // Every action is a full-size tap target (44 px, `h-11`), wrapping onto as
+  // many lines as the screen needs: on a phone they are the row's third line,
+  // on a wide screen they sit to the right of the pilot's facts.
+  const tap = "h-11";
+
   return (
-    <div className="flex flex-wrap items-center justify-end gap-1.5">
-      {detailHref ? (
-        // The row is already clickable, but nothing says so — this names the
-        // destination. A real anchor, so middle-click and "open in new tab"
-        // work; RAC keeps the press off the row's own action.
-        <TooltipTrigger>
-          <LinkButton variant="outline" size="sm" href={detailHref}>
-            View score card
-          </LinkButton>
-          <Tooltip>
-            Open {row.name}&rsquo;s score card
-          </Tooltip>
-        </TooltipTrigger>
-      ) : null}
+    <div className="flex flex-wrap items-center gap-2 md:max-w-[60%] md:justify-end">
+      {/* What changes the pilot's outcome first; reading their score card,
+          which changes nothing, last. */}
       {/* A row action, not a form field: a list in flow would blow the row
           apart. Deliberately still a popover — see rac/select.tsx on #638,
           and e2e/popover-position.spec.ts, which pins its geometry. */}
@@ -748,6 +731,7 @@ function RowManage({
         ]}
         disabled={busy || isClosed}
         ariaLabel={`Status for ${row.name}`}
+        triggerClassName={cn(tap, "text-base")}
       />
       {!isClosed ? (
         <TooltipTrigger>
@@ -755,7 +739,15 @@ function RowManage({
             acceptedFileTypes={[".igc"]}
             onSelect={(files) => void uploadTrackFile(files)}
           >
-            <Button variant="outline" size="sm" isDisabled={busy}>
+            <Button
+              variant="outline"
+              // Busy while its own upload is in flight; another of the row's
+              // actions in flight leaves it unavailable meanwhile.
+              isPending={action.pendingKey === "upload"}
+              pendingLabel={`Uploading ${row.name}'s track`}
+              isDisabled={busy && action.pendingKey !== "upload"}
+              className={tap}
+            >
               {row.evidence === "track" ? "Replace track" : "Upload track"}
             </Button>
           </FileTrigger>
@@ -766,7 +758,7 @@ function RowManage({
         <TooltipTrigger>
           {/* A link, not a dialog trigger: recording a manual flight is a
               routed page since #637. */}
-          <LinkButton variant="outline" size="sm" href={manualHref}>
+          <LinkButton variant="outline" href={manualHref} className={tap}>
             {row.evidence === "manual" ? "Edit manual flight" : "Add manual flight"}
           </LinkButton>
           <Tooltip>
@@ -778,16 +770,37 @@ function RowManage({
         <TooltipTrigger>
           <Button
             variant="outline"
-            size="sm"
-            isDisabled={busy}
+            isPending={action.pendingKey === "restore"}
+            pendingLabel={`Restoring ${row.name}'s track`}
+            isDisabled={busy && action.pendingKey !== "restore"}
             onPress={() => void restoreTrack()}
+            className={tap}
           >
             Restore track
           </Button>
           <Tooltip>Restore this pilot's superseded track</Tooltip>
         </TooltipTrigger>
       ) : null}
-
+      {detailHref ? (
+        // The name links there too, but nothing says so — this names the
+        // destination. A real anchor, so middle-click and "open in new tab"
+        // work.
+        <TooltipTrigger>
+          <LinkButton variant="outline" href={detailHref} className={tap}>
+            View score card
+          </LinkButton>
+          <Tooltip>
+            Open {row.name}&rsquo;s score card
+          </Tooltip>
+        </TooltipTrigger>
+      ) : null}
+      {/* On a line of its own under the buttons. The wrapper keeps the list
+          out of it: a GridList answers focus arriving inside a row by taking
+          it for the row — away from the refusal, which is where the kit puts
+          it so that it is read out. */}
+      <div className="basis-full empty:hidden" onFocus={(e) => e.stopPropagation()}>
+        <ActionErrorBanner action={action} />
+      </div>
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { Link as AriaLink, Button as AriaButton } from "react-aria-components";
 import { ChevronRightIcon } from "lucide-react";
 import { cn } from "@/react/lib/utils";
 import { cardSurface, CardTitle } from "./card";
+import { Spinner } from "./progress";
 
 /**
  * The row treatment itself, exported so a list that ISN'T a NavList can still
@@ -138,7 +139,8 @@ export function NavActionRow({
   value,
   icon,
   destructive,
-  isDisabled,
+  isPending,
+  pendingLabel = "In progress",
   className,
 }: {
   onPress: () => void;
@@ -148,27 +150,32 @@ export function NavActionRow({
   value?: React.ReactNode;
   icon?: React.ReactNode;
   destructive?: boolean;
-  /** While the action is already under way (a list of choices, one taken). */
-  isDisabled?: boolean;
+  /**
+   * The action is in flight (`useAction().pending`): the row says so and
+   * takes no second press, and stays focusable — the kit Button's rule.
+   */
+  isPending?: boolean;
+  /** Accessible name for the pending spinner. */
+  pendingLabel?: string;
   className?: string;
 }) {
   return (
     <li>
       <AriaButton
         onPress={onPress}
-        isDisabled={isDisabled}
+        isPending={isPending}
         className={cn(
           rowClass,
-          "data-disabled:opacity-60",
           destructive && "font-medium text-destructive",
+          "data-pending:cursor-default data-pending:opacity-70",
           className
         )}
       >
         <RowBody
           label={label}
           description={description}
-          value={value}
           icon={icon}
+          value={isPending ? <Spinner label={pendingLabel} /> : value}
           chevron={false}
         />
       </AriaButton>

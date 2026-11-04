@@ -509,32 +509,52 @@ somebody generating failures pays. A budget on every submission instead would
 ### Errors are repairable
 
 Every failure answers `{ error, code, ...context }`. `error` is the sentence a
-person reads; `code` is what the form branches on, via `repairStepFor()`,
-to reopen the step that can fix it.
+person reads; `code` says what kind of refusal it is. A refusal that one step of
+the form can fix also names that step's field as `field` (`SUBMIT_FIELD` in
+`submission-gate.ts`): `task`, `identifier` (what an anonymous pilot typed),
+`registration` (which entry a signed-in pilot claimed), or `file`. All three
+upload routes send it.
 
-This form is **not yet on the kit form** (`rac/form.tsx`), which every other
-form now uses. Its refusals are richer than the kit's `{ error, field }`: one
-can carry the organisers to email, a sign-in, or a time to wait, and it is
-shown by highlighting the STEP that can fix it rather than under one field.
-Moving it onto the kit means deciding where that extra help goes, and adding
-`field` to the refusals of all three upload routes, so it is a change of its
-own rather than part of #820.
+The form is the kit form (`rac/form.tsx`), so the two kinds land in two places:
 
-| code | Status | Repairs by |
-|---|---|---|
-| `bad_identifier` | 400 | Re-entering the identifier |
-| `no_pilot_match` | 404 | Another identifier, or emailing the organiser |
-| `ambiguous_pilot_match` | 409 | Only the organiser — a duplicated roster row |
-| `anonymous_not_permitted` | 403 | Signing in |
-| `registration_closed` | 403 | Only the organiser — they add the pilot to the roster |
-| `comp_closed` | 400 | Nothing; it says so |
-| `comp_not_found` / `task_not_found` | 404 | Re-picking the task |
-| `invalid_file` | 400 | Another file |
-| `task_pilot_limit` | 400 | The organiser |
-| `rate_limited` | 429 | Waiting (`Retry-After`, exposed via CORS) |
-| `submissions_closed` | 403 | Re-picking the task — yesterday's is probably still open — or asking the organiser |
-| `identity_ambiguous` | 409 | Saying which registration is theirs |
-| `claim_rejected` | 409 | Picking another, or the organiser |
+- **A refusal one step can fix** is shown under that step's field, which is
+  focused and scrolled into view, and the step's border turns red. Editing the
+  field clears it. A collapsed task step opens first, so the list is there to
+  show it under. The field is the server's `field`, or else the field of the
+  step `repairStepFor()` names for the `code`.
+- **A refusal no field can fix** — a sign-in, a wait, a duplicated roster row, a
+  closed comp — is pinned beside Submit, under "We could not accept that
+  track", with its help: *Sign in to submit*, when to try again, and the
+  organisers to write to. That help is the refusal's `help`, which the kit form
+  shows with its pinned error and never under a field.
+
+The form's own checks (no task, no file, not an `.igc`, too large, no
+identifier, no registration chosen) are read the same way as the server's
+refusals, so they land by the same rule.
+
+| code | Status | `field` | Repairs by |
+|---|---|---|---|
+| `bad_identifier` | 400 | `identifier` | Re-entering the identifier |
+| `no_pilot_match` | 404 | `identifier` | Another identifier, or emailing the organiser |
+| `ambiguous_pilot_match` | 409 | — | Only the organiser — a duplicated roster row |
+| `anonymous_not_permitted` | 403 | — | Signing in |
+| `registration_closed` | 403 | — | Only the organiser — they add the pilot to the roster |
+| `comp_closed` | 400 | — | Nothing; it says so |
+| `comp_not_found` / `task_not_found` | 404 | `task` | Re-picking the task |
+| `invalid_file` | 400 | `file` | Another file |
+| `task_pilot_limit` | 400 | — | The organiser |
+| `rate_limited` | 429 | — | Waiting (`Retry-After`, exposed via CORS) |
+| `submissions_closed` | 403 | `task` | Re-picking the task — yesterday's is probably still open — or asking the organiser |
+| `identity_ambiguous` | 409 | `registration` | Saying which registration is theirs |
+| `claim_rejected` | 409 | `registration` | Picking another, or the organiser |
+
+The three upload routes — signed-in self, on-behalf, and anonymous — answer
+the comp and task checks and a refused file with the SAME body, code and
+`field` (one gate, `submission-gate.ts`, since 2026-11): before that the
+signed-in routes sent no `code`, and a signed-in pilot over a task's pilot
+limit was not told which organiser to write to. The codes only the anonymous
+route can meet (an identifier, an anonymous submission) stay its own. An
+unreadable `x-comp-pilot` header names `registration`.
 
 Where the pilot cannot fix it, the answer names the organiser and carries their
 address so the form can render a `mailto:` — the same thing the public comp

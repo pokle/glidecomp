@@ -25,14 +25,11 @@ import { useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
-import { api } from "../../comp/api";
 import { TaskDiagram } from "../comp/TaskDiagram";
-import type { CompDetailData, TaskDetailData } from "../comp/types";
 import { underTask } from "../lib/crumbs";
 import { useInitialData } from "../lib/initial-data";
-import { compUrlId, idFromSegment, taskDiagramPath } from "../lib/slug";
-import { useCanonicalPath } from "../lib/use-canonical-path";
-import { useSeededResource } from "../lib/use-seeded-resource";
+import { idFromSegment, taskDiagramPath } from "../lib/slug";
+import { useTaskPage } from "../lib/use-task-page";
 import type { TaskDiagramLoaderData } from "../loaders";
 
 /** The page's crumb — the name the task page already gives its diagram. */
@@ -47,41 +44,15 @@ export function TaskDiagramPage() {
   const taskId = idFromSegment(taskParam ?? "");
   const initial = useInitialData<TaskDiagramLoaderData>();
 
-  const {
-    data: task,
-    notFound: taskNotFound,
-    current: taskCurrent,
-  } = useSeededResource<TaskDetailData>({
-    ids: [compId, taskId],
-    seed: initial?.task ?? null,
-    load: ([comp_id, task_id]) =>
-      api.api.comp[":comp_id"].task[":task_id"].$get({
-        param: { comp_id, task_id },
-      }),
+  const { comp, task, urlId, notFound } = useTaskPage({
+    compId,
+    taskId,
+    seed: initial,
     title: (t) => `GlideComp - ${t.name} route`,
-  });
-  const {
-    data: comp,
-    notFound: compNotFound,
-    current: compCurrent,
-  } = useSeededResource<CompDetailData>({
-    ids: [compId],
-    seed: initial?.comp ?? null,
-    load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
+    path: taskDiagramPath,
   });
 
-  // The id every link carries: a hidden comp's share key rides along.
-  const urlId = compUrlId(comp, compId);
-
-  useCanonicalPath(
-    comp && task && compCurrent && taskCurrent
-      ? taskDiagramPath(urlId, comp.name, taskId, task.name)
-      : null
-  );
-
-  if (taskNotFound || compNotFound || !compId || !taskId) {
-    return <NotFound title="Task not found" />;
-  }
+  if (notFound) return <NotFound title="Task not found" />;
   if (!task || !comp) return <Loading>Loading task…</Loading>;
 
   return (

@@ -18,15 +18,23 @@
  *
  * Nothing here manages the waypoint set. The fields birth one record and the
  * caller decides where it goes (a row of the waypoints draft, or a new
- * turnpoint and a waypoint saved with the route).
+ * turnpoint and a waypoint saved with the route). The page around them is
+ * here too ({@link NewWaypointPage}): the two Add waypoint pages had already
+ * begun to differ — one said what it had done and one did not, and one showed
+ * a blank page while it waited.
  */
 import { useState } from "react";
 import { cleanWaypointCodes, type WaypointFileRecord } from "@glidecomp/engine";
 import type { MapPickDetails, PickedPeak } from "../../analysis/map-provider";
+import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
 import { TextField } from "@/react/rac/field";
+import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
+import { SectionHeader } from "../components/SectionHeader";
+import type { Crumb } from "../lib/crumbs";
+import { toast } from "../lib/toast";
 import { useUnits } from "../lib/units";
-import { AltitudeField } from "./fields";
+import { AltitudeField, CoordsField, coordsProblem } from "./fields";
 import {
   formatCoords,
   formatSnapDistance,
@@ -47,9 +55,6 @@ export interface NewWaypointSeed {
 
 /** The field names, as the kit form knows them. */
 export const NEW_WAYPOINT_FIELD = { code: "code", name: "name", coords: "coords" } as const;
-
-/** The message under a coordinates field that does not parse. */
-export const COORDS_HINT = 'Enter "lat, lon" decimal degrees';
 
 /** A map tap, as the query string of the Add waypoint page. */
 export function newWaypointSearch(lat: number, lon: number, details?: MapPickDetails): string {
@@ -165,7 +170,7 @@ export type NewWaypoint = ReturnType<typeof useNewWaypoint>;
 
 /** The form's own check: coordinates that parse. */
 export function newWaypointProblems(state: NewWaypointState): Record<string, string | null> {
-  return { [NEW_WAYPOINT_FIELD.coords]: parseCoords(state.coords) ? null : COORDS_HINT };
+  return { [NEW_WAYPOINT_FIELD.coords]: coordsProblem(state.coords, true) };
 }
 
 /**
@@ -270,14 +275,11 @@ export function AddWaypointFields({
         onChange={(name) => set({ name })}
       />
       <div className="flex flex-col gap-1.5">
-        <TextField
-          label="Coordinates (lat, lon)"
+        <CoordsField
           name={NEW_WAYPOINT_FIELD.coords}
           placeholder="-36.185, 147.891"
-          spellCheck="false"
           value={state.coords}
           onChange={(coords) => set({ coords })}
-          validate={(v) => (v.trim() === "" || parseCoords(v) !== null ? null : COORDS_HINT)}
         />
         {peak && (
           <p
@@ -320,5 +322,67 @@ export function AddWaypointFields({
         onChange={(altitude) => set({ altitude })}
       />
     </>
+  );
+}
+
+/**
+ * An Add waypoint page: the fields under a kit form, with Cancel and Add on
+ * the header row. Nothing is sent — Add hands the record to `onAdd`, which
+ * puts it in its editor's draft and says where it went, and then the page
+ * leaves (`onLeave`, as Cancel does).
+ */
+export function NewWaypointPage({
+  crumbs,
+  seed: seedNow,
+  codes,
+  onAdd,
+  onLeave,
+}: {
+  crumbs: Crumb[];
+  /** Where it starts: a map tap, read from the URL. */
+  seed: NewWaypointSeed;
+  /** The codes already taken, as they stand now: a new code must differ. */
+  codes: () => string[];
+  /** Put the record in the draft; returns what to tell the reader. */
+  onAdd: (record: WaypointFileRecord) => string;
+  onLeave: () => void;
+}) {
+  // Where it started, read once: the fields are the reader's from here on.
+  const [seed] = useState(seedNow);
+  const [taken] = useState(codes);
+  const waypoint = useNewWaypoint(seed, taken);
+
+  return (
+    <div className="max-w-2xl">
+      <Breadcrumbs items={crumbs} current="Add waypoint" />
+      <Form
+        validate={() => newWaypointProblems(waypoint.state)}
+        onSuccess={() => {
+          const built = buildNewWaypoint(waypoint.state, codes());
+          if (!built) return;
+          if (built.adjusted) toast.warning(built.adjusted);
+          toast.success(onAdd(built.record));
+          onLeave();
+        }}
+      >
+        <SectionHeader
+          as="h1"
+          className="mt-2"
+          title="Add waypoint"
+          action={
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onPress={onLeave}>
+                Cancel
+              </Button>
+              <SubmitButton pendingLabel="Adding">Add</SubmitButton>
+            </div>
+          }
+        />
+        <FormErrorBanner className="mt-3" />
+        <div className="mt-4 flex flex-col gap-4">
+          <AddWaypointFields seed={seed} waypoint={waypoint} />
+        </div>
+      </Form>
+    </div>
   );
 }

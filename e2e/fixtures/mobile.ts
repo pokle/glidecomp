@@ -79,6 +79,10 @@ export const MOBILE_SPEC_FILES = [
   // on the screen — which is exactly what a phone's height, its keyboard and
   // a sheet's fixed header change.
   "forms.spec.ts",
+  // Where a refusal lands on the task's management tools — the manage grid's
+  // row actions and the manual-flight page (#808). A task is run from a hill,
+  // and a phone is where a refusal can land off-screen.
+  "task-scores-admin.spec.ts",
   // Starting a new competition: a page rather than a dialog with a text
   // field, which is the shape the phone could not use (#818).
   "comp-new.spec.ts",
@@ -90,6 +94,10 @@ export const MOBILE_SPEC_FILES = [
   // text field, which is the keyboard trouble the overlays rule is about. Now
   // a form on the page, with the new key shown in place.
   "settings-api-keys.spec.ts",
+  // The profile on Settings, saved through the kit form (#808): a refusal
+  // under its field and a dropped connection beside Save, where a phone's
+  // keyboard and height decide whether either is seen.
+  "settings-profile-form.spec.ts",
   // A metric's chart at full size (#815), a page where it was a full-screen
   // overlay. A phone is where the inline chart is too small to read, so it is
   // the width this page exists for.

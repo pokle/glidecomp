@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { NavActionRow, NavList, NavRow } from "@/react/rac/nav-list";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { api } from "@/comp/api";
-import { toast } from "@/react/lib/toast";
+import { ActionErrorBanner, useAction } from "@/react/rac/form";
 import { useConfirm } from "@/react/lib/confirm";
 import { underComp } from "@/react/lib/crumbs";
 import { compCopyPath, compSettingsPath } from "@/react/lib/slug";
@@ -67,6 +67,8 @@ export function CompSettingsIndex({
   const navigate = useNavigate();
   const confirm = useConfirm();
 
+  const deletion = useAction();
+
   async function deleteComp() {
     const confirmed = await confirm({
       title: "Delete this competition?",
@@ -75,17 +77,11 @@ export function CompSettingsIndex({
       destructive: true,
     });
     if (!confirmed) return;
-    try {
-      const res = await api.api.comp[":comp_id"].$delete({ param: { comp_id: compId } });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to delete competition");
-        return;
-      }
-      navigate("/comp");
-    } catch {
-      toast.error("Network error. Please try again.");
-    }
+    const res = await deletion.run(
+      () => api.api.comp[":comp_id"].$delete({ param: { comp_id: compId } }),
+      { fallback: "Failed to delete the competition." }
+    );
+    if (res) navigate("/comp");
   }
 
   const groupPath = (group: SettingsGroup) =>
@@ -124,9 +120,12 @@ export function CompSettingsIndex({
         <NavActionRow
           destructive
           label="Delete competition"
+          isPending={deletion.pending}
+          pendingLabel="Deleting the competition"
           onPress={() => void deleteComp()}
         />
       </NavList>
+      <ActionErrorBanner action={deletion} />
     </SettingsPage>
   );
 }

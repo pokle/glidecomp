@@ -17,32 +17,20 @@
  * competition's waypoints only when the route is saved, so throwing the route
  * away throws it away too. Back is Cancel, and so is the Cancel button.
  */
-import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { SectionHeader } from "../components/SectionHeader";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Button } from "@/react/rac/button";
-import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
+import { Loading } from "@/react/rac/progress";
 import { underTaskRoute } from "../lib/crumbs";
 import { taskRouteAddWaypointPath } from "../lib/slug";
-import { toast } from "../lib/toast";
 import { useCanonicalPath } from "../lib/use-canonical-path";
-import {
-  AddWaypointFields,
-  buildNewWaypoint,
-  newWaypointProblems,
-  readNewWaypointSeed,
-  useNewWaypoint,
-  type NewWaypointSeed,
-} from "../comp/AddWaypointForm";
+import { NewWaypointPage, readNewWaypointSeed } from "../comp/AddWaypointForm";
 import { addNewWaypoint } from "../comp/route-draft";
-import { useRouteEditor, type RouteEditorState } from "../comp/use-route-editor";
+import { useRouteEditor } from "../comp/use-route-editor";
 import { routeEditorGate } from "../comp/RouteEditorGate";
 
 export function TaskRouteAddWaypointPage() {
   const editor = useRouteEditor();
   const [searchParams] = useSearchParams();
-  const { urlId, compName, taskId, taskName } = editor;
+  const { urlId, compName, taskId, taskName, openDistance } = editor;
   useCanonicalPath(
     editor.comp && editor.task && editor.current
       ? taskRouteAddWaypointPath(urlId, compName, taskId, taskName)
@@ -51,64 +39,19 @@ export function TaskRouteAddWaypointPage() {
   const gate = routeEditorGate(editor);
   if (gate) return gate;
   // Wait for the waypoints, so the code it suggests is unique among them.
-  if (editor.wpLoading) return null;
-  return <NewWaypointForm editor={editor} seed={readNewWaypointSeed(searchParams)} />;
-}
-
-function NewWaypointForm({
-  editor,
-  seed: seedNow,
-}: {
-  editor: RouteEditorState;
-  seed: NewWaypointSeed;
-}) {
-  const { urlId, compName, taskId, taskName, openDistance } = editor;
-  // Where it started, read once: the fields are the reader's from here on.
-  const [seed] = useState(seedNow);
-  const [taken] = useState(() => editor.waypoints.map((w) => w.code));
-  const waypoint = useNewWaypoint(seed, taken);
-
+  if (editor.wpLoading) return <Loading>Loading waypoints…</Loading>;
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs
-        items={underTaskRoute(urlId, compName, taskId, taskName)}
-        current="Add waypoint"
-      />
-      <Form
-        validate={() => newWaypointProblems(waypoint.state)}
+    <NewWaypointPage
+      crumbs={underTaskRoute(urlId, compName, taskId, taskName)}
+      seed={readNewWaypointSeed(searchParams)}
+      codes={() => editor.waypoints.map((w) => w.code)}
+      onAdd={(record) => {
         // Nothing to send: the waypoint joins the route's draft, and the
         // competition's waypoints when the route is saved.
-        onSubmit={async () => undefined}
-        onSuccess={() => {
-          const built = buildNewWaypoint(
-            waypoint.state,
-            editor.waypoints.map((w) => w.code)
-          );
-          if (!built) return;
-          if (built.adjusted) toast.warning(built.adjusted);
-          editor.update((d) => addNewWaypoint(d, built.record, { openDistance }));
-          toast.success(`Added ${built.record.code} to the route. Save to keep it.`);
-          editor.leave();
-        }}
-      >
-        <SectionHeader
-          as="h1"
-          className="mt-2"
-          title="Add waypoint"
-          action={
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onPress={() => editor.leave()}>
-                Cancel
-              </Button>
-              <SubmitButton pendingLabel="Adding">Add</SubmitButton>
-            </div>
-          }
-        />
-        <FormErrorBanner className="mt-3" />
-        <div className="mt-4 flex flex-col gap-4">
-          <AddWaypointFields seed={seed} waypoint={waypoint} />
-        </div>
-      </Form>
-    </div>
+        editor.update((d) => addNewWaypoint(d, record, { openDistance }));
+        return `Added ${record.code} to the route. Save to keep it.`;
+      }}
+      onLeave={() => editor.leave()}
+    />
   );
 }

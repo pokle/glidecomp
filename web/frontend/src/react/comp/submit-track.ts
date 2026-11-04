@@ -105,6 +105,13 @@ export const MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024;
 export const NOT_AN_IGC_MESSAGE = "That is not an IGC file.";
 
 /**
+ * The browser could not read or compress the chosen file — moved, deleted, or
+ * a browser with no CompressionStream. It happened before anything was sent,
+ * so it is not a dropped connection, and must not be said as one.
+ */
+export const UNREADABLE_FILE_MESSAGE = "Could not read that file. Choose it again, then try again.";
+
+/**
  * Why the server will refuse this file on size alone, or null if it will not.
  *
  * Say the number, and say what to do about it: "too large" with no limit and
@@ -501,6 +508,8 @@ export function looksLikeIgc(name: string | null, text: string): boolean {
 export interface SubmitError {
   error: string;
   code?: SubmitErrorCode;
+  /** The form field that can fix it ({@link SUBMIT_FIELD}), when one can. */
+  field?: string;
   comp?: { comp_id: string; name: string };
   organisers?: Organiser[];
   identifier_label?: string;
@@ -532,6 +541,43 @@ export function repairStepFor(code: SubmitErrorCode | undefined): SubmitStep | n
       return "task";
     // An ambiguous roster, a closed comp, a comp that wants a sign-in, a full
     // task, a spent budget: none of these are repairable by trying again.
+    default:
+      return null;
+  }
+}
+
+/**
+ * The form's field names, one per step's answer. The upload routes send the
+ * same names as `field` (`SUBMIT_FIELD` in competition-api's
+ * submission-gate.ts), and the kit form shows a refusal under the field it
+ * names, focused.
+ */
+export const SUBMIT_FIELD = {
+  task: "task",
+  /** What an anonymous pilot typed to be found on the roster. */
+  identifier: "identifier",
+  /** Which registration a signed-in pilot is. */
+  registration: "registration",
+  file: "file",
+} as const;
+
+/**
+ * The field a failure is shown under, or null when no field can fix it and it
+ * is shown beside Submit instead, with its organisers, sign-in or wait.
+ *
+ * The server's `field` when it sent one. Otherwise the field of the step
+ * {@link repairStepFor} names — for a refusal the form makes itself, and for
+ * a server from before `field`.
+ */
+export function refusalField(failure: SubmitError, signedIn: boolean): string | null {
+  if (failure.field) return failure.field;
+  switch (repairStepFor(failure.code)) {
+    case "task":
+      return SUBMIT_FIELD.task;
+    case "file":
+      return SUBMIT_FIELD.file;
+    case "identity":
+      return signedIn ? SUBMIT_FIELD.registration : SUBMIT_FIELD.identifier;
     default:
       return null;
   }

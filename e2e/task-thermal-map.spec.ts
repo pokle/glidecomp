@@ -13,7 +13,11 @@
  * - a reload rebuilds it from the URL alone — the thermal, the backdrop and
  *   the report — where the sheet was handed all three in memory;
  * - Back returns to the section on the same thermal, with the backdrop still
- *   on, and the restore control in the map's corner is that same Back;
+ *   on and at the scroll it was left at (#844), and the restore control in
+ *   the map's corner is that same Back;
+ * - side by side, the section opens with its default thermal named in the URL
+ *   and lit in the census, though it loads from a bare-id URL whose canonical
+ *   replace used to wipe the seed (#845);
  * - opened from a shared link, restore goes to the section in place of the
  *   map page rather than leaving the site.
  *
@@ -33,6 +37,7 @@
  */
 import { execSync } from "node:child_process";
 import { test, expect, type Page } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { FRONTEND_URL } from "./fixtures/stack";
 
 const COMP_NAME = "Corryong Cup 2026";
@@ -128,15 +133,18 @@ function urlState(page: Page): { path: string; thermal: string | null; map: stri
 async function openSectionWithMap(page: Page): Promise<string> {
   await page.goto(sectionPath, { waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: THERMALS_HEADING }).waitFor();
-  // Choose a thermal from the census. Stacked (a phone) that navigates to
-  // the detail; side by side it only names the thermal in the URL, which is
-  // chosen here rather than left to the layout's own default so both
-  // projects take the same path.
-  const first = page
-    .getByRole("grid", { name: "Reconstructed thermals" })
-    .locator("tbody tr")
-    .first();
-  await first.locator("th, td").first().click();
+  const census = page.getByRole("grid", { name: "Reconstructed thermals" });
+  if (await thermalPane(page).isVisible()) {
+    // Side by side the pane is on screen from the start, showing the default
+    // thermal — which the URL names and the census lights, even on this
+    // bare-id URL that the page replaces with its canonical one (#845).
+    await expect.poll(() => urlState(page).thermal).toBeTruthy();
+    await expect(census.locator("tbody tr[aria-selected='true']")).toHaveCount(1);
+  } else {
+    // Stacked (a phone) the census is the view until a thermal is chosen,
+    // and choosing one navigates to its detail.
+    await census.locator("tbody tr").first().locator("th, td").first().click();
+  }
   await expect(thermalPane(page)).toBeVisible();
   await expect.poll(() => urlState(page).thermal).toBeTruthy();
   const heading = (await thermalPane(page).locator("h3").first().innerText()).trim();
@@ -151,12 +159,16 @@ async function openSectionWithMap(page: Page): Promise<string> {
   return title;
 }
 
-/** Nothing on the page reaches past the viewport's right edge. */
-async function expectNoSidewaysScroll(page: Page) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
+/**
+ * Back has put the page within a few pixels of `y`, and it stays there once
+ * whatever loads late has landed — a restore that scrolled once and stopped
+ * let late content above move the reader off it (#846).
+ */
+async function expectScrollRestoredTo(page: Page, y: number) {
+  const offBy = async () => Math.abs((await page.evaluate(() => window.scrollY)) - y);
+  await expect.poll(offBy).toBeLessThanOrEqual(3);
+  await page.waitForTimeout(1000);
+  expect(await offBy()).toBeLessThanOrEqual(3);
 }
 
 test("maximise is a link to the thermal map page: reload keeps it, Back returns", async ({
@@ -168,7 +180,13 @@ test("maximise is a link to the thermal map page: reload keeps it, Back returns"
   // A link, naming the thermal the pane shows — not a button opening a layer.
   const maximise = thermalsCard(page).getByRole("link", { name: "Maximise map" });
   await expect(maximise).toHaveAttribute("href", new RegExp(`/analysis/thermals/map\\?(.*&)?thermal=${thermal}(&|$)`));
-  await maximise.scrollIntoViewIfNeeded();
+  // Somewhere down the page, so Back has an offset to restore: the control
+  // mid-screen, clear of the sticky header. Nothing scrolls after the Map
+  // toggle's REPLACE, so this also pins that the offset carries over to the
+  // entry that replace made.
+  await maximise.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  const leftAt = await page.evaluate(() => window.scrollY);
+  expect(leftAt, "the section should have scrolled").toBeGreaterThan(0);
   const entries = await page.evaluate(() => history.length);
   await maximise.click();
 
@@ -206,12 +224,10 @@ test("maximise is a link to the thermal map page: reload keeps it, Back returns"
     ).toHaveAttribute("aria-pressed", "true");
   };
 
-  // Back returns the section as it was left. Its SCROLL is not asserted:
-  // Back to any task-analysis page lands at the top today (the strategies
-  // page too, which this change does not touch) — lib/scroll-restoration.ts
-  // does not yet cover these pages, and that is its own fix.
+  // Back returns the section as it was left, scroll included (#844).
   await page.goBack();
   await expectSectionAsLeft();
+  await expectScrollRestoredTo(page, leftAt);
 
   // A reload rebuilds the same view from the URL alone.
   await page.goForward();

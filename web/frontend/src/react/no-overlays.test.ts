@@ -20,6 +20,12 @@
  * again: navigation goes through the router (`navigate()`, `<Link>`), and
  * Back is the browser's.
  *
+ * A page that another page opened leaves by a real Back — and only one module
+ * decides that: `lib/leave.ts` (`useLeave`, `openedHere`). The pages had grown
+ * six names for the same marker, each checked by its own copy of the same
+ * three lines. So `navigate(-1)` is allowed there, and in the master-detail
+ * selection, which unwinds only the one entry it pushed itself.
+ *
  * Same shape as `one-kit.test.ts`: a test rather than a lint rule, because the
  * repo has no ESLint.
  */
@@ -74,6 +80,19 @@ describe("no full-screen overlays", () => {
         )
       )
       .map((f) => f.slice(REACT.length + 1));
+    expect(offenders).toEqual([]);
+  });
+
+  it("nothing but lib/leave.ts walks back a page", () => {
+    const allowed = ["lib/leave.ts", "components/use-master-detail-selection.ts"];
+    const offenders = sourceFiles(REACT)
+      .filter((f) =>
+        /\bnavigate\(\s*-\d/.test(
+          readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")
+        )
+      )
+      .map((f) => f.slice(REACT.length + 1))
+      .filter((f) => !allowed.includes(f));
     expect(offenders).toEqual([]);
   });
 });

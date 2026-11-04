@@ -36,9 +36,18 @@
  * closure that can predate the seed — so a seed written first is wiped, and a
  * latched guard never writes another. The reader is then wide with a pane that
  * has a subject and a list with nothing lit, until they pick something.
+ *
+ * Dropping the latch was not enough on its own (issue #845). The effect ran
+ * again only when one of its inputs changed, and a wiped seed changes none of
+ * them: `chosen` was null before the seed and is null after it, because the
+ * seed never reached a render. So it also runs on every change of location,
+ * and the URL is what it asks — is the parameter there? — rather than whether
+ * it has written one. (`useCanonicalPath` no longer wipes it either: it now
+ * carries the query the address bar holds when it replaces. This is the
+ * other half, for any replace built from a query older than the seed.)
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 /**
  * Should the side-by-side layout write the default into the query right now?
@@ -48,19 +57,32 @@ import { useNavigate, useSearchParams } from "react-router-dom";
  * missing a selection while wide" — so it answers true again after a seed is
  * undone. The version this replaces latched on a ref and could not (see the
  * note at the top of this file).
+ *
+ * `named` is the parameter as the URL holds it. When it already names the
+ * default and `chosen` is still null, the list does not carry the default,
+ * and writing it again would only replace the URL with itself — on every
+ * location change, for ever, now that the seed runs on each one.
  */
 export function shouldSeedSelection<T extends string | number>({
   enabled,
   wide,
   chosen,
   defaultId,
+  named = null,
 }: {
   enabled: boolean;
   wide: boolean;
   chosen: T | null;
   defaultId: T | null;
+  named?: string | null;
 }): boolean {
-  return enabled && wide && chosen === null && defaultId !== null;
+  return (
+    enabled &&
+    wide &&
+    chosen === null &&
+    defaultId !== null &&
+    named !== String(defaultId)
+  );
 }
 
 export interface MasterDetailSelection<T extends string | number> {
@@ -103,6 +125,8 @@ export function useMasterDetailSelection<T extends string | number>({
 }): MasterDetailSelection<T> {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  // Every change of address re-asks whether the seed is still in it.
+  const { key: locationKey } = useLocation();
 
   // The measured breakpoint, reported by MasterDetail. Held rather than
   // queried so the two can never disagree about where the layout splits.
@@ -124,14 +148,17 @@ export function useMasterDetailSelection<T extends string | number>({
     [param, searchParams, setSearchParams]
   );
 
+  const named = searchParams.get(param);
   useEffect(() => {
-    if (!shouldSeedSelection({ enabled, wide, chosen, defaultId })) return;
+    if (!shouldSeedSelection({ enabled, wide, chosen, defaultId, named })) return;
     // Narrowed by the predicate; TypeScript cannot see through the call.
     choose(defaultId as T, true);
-    // `choose` closes over the current query; re-running on every render of
-    // it would fight the reader's own navigation.
+    // `choose` is a new function whenever the query changes, which the
+    // location key already covers. A location whose query still names a
+    // selection answers false above, so this never overrides one the reader
+    // made — it only notices a selection that went missing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, wide, chosen, defaultId]);
+  }, [enabled, wide, chosen, defaultId, named, locationKey]);
 
   const back = useCallback(() => {
     if (pushed.current) {

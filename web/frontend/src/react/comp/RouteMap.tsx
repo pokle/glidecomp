@@ -74,7 +74,7 @@ export default function RouteMap({
    * Open on this exact view instead of the globe (or wherever the last map
    * anywhere in the app left off). For handing the camera between two
    * instances of the same map — the waypoint editor's pane and its
-   * full-screen sheet. Read once, at mount; changing it later does nothing.
+   * full-size page. Read once, at mount; changing it later does nothing.
    *
    * Passing one also suppresses the mount-time fit to the waypoints: an
    * explicit view beats a computed one, or maximising would throw the admin

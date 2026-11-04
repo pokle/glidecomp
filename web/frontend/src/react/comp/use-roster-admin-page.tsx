@@ -9,18 +9,20 @@
  * roster as it is NOW — a pilot who joined since the list loaded is in it.
  *
  * Leaving goes back the way the reader came, as on a pilot's page
- * (pages/CompPilotPage.tsx): opened from the list (`state.fromList`), a real
+ * (pages/CompPilotPage.tsx, lib/leave.ts): opened from the list, a real
  * Back, so the list returns searched, sorted and scrolled as it was left;
  * opened any other way, it replaces this entry with the list.
  */
 import { useEffect, useState, type ReactElement } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useLeave } from "../lib/leave";
 import { NotFound } from "@/react/components/NotFound";
+import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { underCompPilots } from "../lib/crumbs";
-import { compPilotsPath, compUrlId, idFromSegment } from "../lib/slug";
+import { compPilotsPath, compScoresPath, compUrlId, idFromSegment } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { useAdminView, useUser } from "../lib/user";
@@ -56,8 +58,7 @@ export function useRosterAdminPage({
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const { loading, user } = useUser();
-  const location = useLocation();
-  const navigate = useNavigate();
+  const leave = useLeave();
 
   const { data: comp, notFound, current: fresh, setData: setComp } = useSeededResource<CompDetailData>({
     ids: [compId],
@@ -103,18 +104,9 @@ export function useRosterAdminPage({
     return { ready: false, element: <Loading>Loading pilots…</Loading> };
   }
   const crumbs = underCompPilots(urlId, comp.name);
+  // Visitors find every pilot in the score tables.
   if (!isAdmin || !user) {
-    return {
-      ready: false,
-      element: (
-        <div>
-          <Breadcrumbs items={crumbs} current={current} />
-          <p className="mt-2 text-muted-foreground">
-            Pilot management is for the competition’s organisers.
-          </p>
-        </div>
-      ),
-    };
+    return { ready: false, element: <OrganisersOnly to={compScoresPath(urlId, comp.name)} /> };
   }
   if (rosterError || !roster) {
     return {
@@ -136,8 +128,7 @@ export function useRosterAdminPage({
     userId: user.id,
     updateComp: (change) => setComp((c) => (c ? { ...c, ...change } : c)),
     leave: () => {
-      if ((location.state as { fromList?: boolean } | null)?.fromList) navigate(-1);
-      else navigate(compPilotsPath(urlId, comp.name), { replace: true });
+      leave(compPilotsPath(urlId, comp.name));
     },
   };
 }

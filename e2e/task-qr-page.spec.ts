@@ -21,6 +21,7 @@ import { readFile } from "fs/promises";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { test, expect, type Page } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { e2eCompName, FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
 
 const TASK_NAME = "Task 4";
@@ -112,10 +113,7 @@ test("the task page links to the QR page; a reload keeps it and Back leaves it",
   const right = column.x + column.width - (box.x + box.width);
   expect(Math.abs(left - right)).toBeLessThanOrEqual(2);
   // A phone never scrolls this page sideways.
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
+  await expectNoSidewaysScroll(page);
 
   // A reload has no task page underneath it: the page fetches the route itself.
   await page.reload();

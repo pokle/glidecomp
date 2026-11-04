@@ -17,6 +17,7 @@
  * field is exactly what the overlays rule moved off a phone's dialog.
  */
 import { test, expect, type Page } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { FRONTEND_URL, e2eCompName } from "./fixtures/stack";
 import { idFromSegment } from "../web/frontend/src/react/lib/slug";
 
@@ -97,10 +98,7 @@ test("New task is a page: its own URL, a reload stands on it, and Back leaves it
   // own, under the comp's slug.
   expect(idFromSegment(new URL(page.url()).pathname.split("/")[2])).toBe(compId);
   // Nothing on it scrolls sideways — the reason a phone needed a page.
-  const scrolls = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
-  );
-  expect(scrolls, "the page must not scroll sideways").toBe(false);
+  await expectNoSidewaysScroll(page);
 
   // It stands on its own: reloaded, it is the same page, not a 404 or the comp.
   await page.reload();
@@ -201,7 +199,7 @@ test("a hidden comp's share key rides along to the new task", async ({ page }) =
   expect(page.url()).toContain(`${keyed}/task/draft-day-`);
 });
 
-test("a signed-in visitor who is not an organiser gets a notice, not the form", async ({
+test("a signed-in visitor who is not an organiser is sent to the competition, not the form", async ({
   page,
 }) => {
   await signIn(page, ADMIN_USER);
@@ -210,9 +208,8 @@ test("a signed-in visitor who is not an organiser gets a notice, not the form", 
   await signIn(page, VISITOR_USER);
 
   await page.goto(`/comp/${compId}/task/new`);
-  await expect(page.getByText("Creating tasks is for the competition’s organisers.")).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(page.getByText("That page is for the competition’s organisers.")).toBeVisible({ timeout: 20_000 });
+  await expect(page).not.toHaveURL(/\/task\/new/);
   await expect(page.getByRole("textbox", { name: "Name" })).toHaveCount(0);
   // And the comp page offers them no way here.
   await page.goto(`/comp/${compId}`);

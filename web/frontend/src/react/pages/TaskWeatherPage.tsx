@@ -9,11 +9,9 @@
  */
 import { useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { Loading } from "@/react/rac/progress";
-import { underTask } from "../lib/crumbs";
-import { compUrlId, idFromSegment, taskPath, taskWeatherPath } from "../lib/slug";
-import { useCanonicalPath } from "../lib/use-canonical-path";
+import { idFromSegment, taskPath, taskWeatherPath } from "../lib/slug";
 import { useTaskAdminPage } from "../lib/use-task-admin-page";
 import { TaskWeatherNotes } from "../comp/TaskWeatherNotes";
 
@@ -26,36 +24,18 @@ export function TaskWeatherPage() {
   const taskId = idFromSegment(taskParam ?? "");
   const navigate = useNavigate();
 
-  const { comp, task, isAdmin, notFound, loading, current } = useTaskAdminPage(
+  const { comp, task, isAdmin, notFound, loading } = useTaskAdminPage({
     compId,
     taskId,
-    (t) => `GlideComp - ${t.name} weather notes`
-  );
-
-  useCanonicalPath(
-    comp && task && current
-      ? taskWeatherPath(compUrlId(comp, compId), comp.name, taskId, task.name)
-      : null
-  );
+    title: (t) => `GlideComp - ${t.name} weather notes`,
+    path: taskWeatherPath,
+  });
 
   if (notFound) return <NotFound title="Task not found" />;
   if (loading || !comp || !task) return <Loading>Loading…</Loading>;
 
-  if (!isAdmin) {
-    return (
-      <div>
-        <Breadcrumbs
-          items={underTask(compId, comp.name, taskId, task.name)}
-          current="Weather notes"
-        />
-        <h1 className="mt-2 text-2xl font-bold">Weather notes</h1>
-        <p className="mt-2 text-muted-foreground">
-          Writing the day&rsquo;s weather notes is for the competition’s organisers. The
-          notes themselves are on the task page, for everyone.
-        </p>
-      </div>
-    );
-  }
+  // The notes themselves are on the task page, for everyone.
+  if (!isAdmin) return <OrganisersOnly to={taskPath(compId, comp.name, taskId, task.name)} />;
 
   return (
     <TaskWeatherNotes

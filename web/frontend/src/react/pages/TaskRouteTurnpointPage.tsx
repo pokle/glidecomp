@@ -38,11 +38,11 @@ import { ChoiceList } from "@/react/rac/choice-list";
 import { NumberField, SearchField, TextField } from "@/react/rac/field";
 import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { ListBox, ListBoxItem } from "@/react/rac/list-box";
-import { AltitudeField } from "../comp/fields";
+import { AltitudeField, CoordsField, coordsProblem } from "../comp/fields";
 import { underTaskRoute } from "../lib/crumbs";
 import { compWaypointsPath, taskRouteTurnpointPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
-import { parseCoords, type RouteRow } from "../comp/route-editor";
+import type { RouteRow } from "../comp/route-editor";
 import { editTurnpoint, removeTurnpoint } from "../comp/route-draft";
 import {
   RADIUS_PRESETS,
@@ -56,8 +56,6 @@ import { ADDING_TYPE, useRouteEditor, type RouteEditorState } from "../comp/use-
 import { routeEditorGate } from "../comp/RouteEditorGate";
 import { RouteGoalSettings, RouteStartSettings } from "../comp/RouteSettings";
 
-/** Under a coordinates field that does not parse. */
-const COORDS_HINT = 'Enter "lat, lon" decimal degrees';
 
 export function TaskRouteTurnpointPage() {
   const editor = useRouteEditor();
@@ -129,7 +127,6 @@ function TurnpointForm({
   // that NaN.
   const altitudeM = String(row.altitude ?? "").trim() === "" ? NaN : Number(row.altitude);
   const label = row.name || "turnpoint";
-  const coordsValid = String(row.coords).trim() === "" || parseCoords(row.coords) !== null;
 
   /** Change this turnpoint, in the draft, now. */
   const set = (patch: Partial<TurnpointDraft>) => {
@@ -173,9 +170,8 @@ function TurnpointForm({
         current={row.name || "Turnpoint"}
       />
       <Form
-        validate={() => ({ coords: coordsValid ? null : COORDS_HINT })}
+        validate={() => ({ coords: coordsProblem(String(row.coords)) })}
         // Nothing to send: every change is in the draft already.
-        onSubmit={async () => undefined}
         onSuccess={() => editor.leave()}
       >
         {/* Done where the sheet had it, top right: in reach without scrolling
@@ -303,15 +299,7 @@ function TurnpointForm({
               />
             </div>
           </div>
-          <TextField
-            label="Coordinates (lat, lon)"
-            name="coords"
-            value={row.coords}
-            onChange={(v) => set({ coords: v })}
-            placeholder="-36.550979, 147.890395"
-            isInvalid={!coordsValid}
-            errorMessage={coordsValid ? undefined : COORDS_HINT}
-          />
+          <CoordsField value={String(row.coords)} onChange={(v) => set({ coords: v })} />
           <AltitudeField
             description="Waypoint altitude, optional"
             valueM={altitudeM}

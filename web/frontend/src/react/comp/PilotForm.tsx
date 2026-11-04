@@ -40,8 +40,7 @@ import {
   FormErrorBanner,
   FormSection,
   SubmitButton,
-  UNREACHABLE,
-  readRefusal,
+  useFormAction,
   useFormState,
 } from "@/react/rac/form";
 import { Radio, RadioGroup } from "@/react/rac/radio-group";
@@ -235,8 +234,9 @@ function PilotFields({
   onRemoved: () => void;
 }) {
   const confirm = useConfirm();
-  const { pending, setFormError } = useFormState();
-  const [removing, setRemoving] = useState(false);
+  const { pending } = useFormState();
+  // Its refusal goes in the form's banner, focused, like a failed Done.
+  const removal = useFormAction();
 
   const set = (key: DraftKey, value: string) =>
     setDraft((d) =>
@@ -258,23 +258,14 @@ function PilotFields({
       destructive: true,
     });
     if (!ok) return;
-    setRemoving(true);
-    setFormError(null);
-    try {
-      const res = await api.api.comp[":comp_id"].pilot[":comp_pilot_id"].$delete({
+    const res = await removal.run(() =>
+      api.api.comp[":comp_id"].pilot[":comp_pilot_id"].$delete({
         param: { comp_id: compId, comp_pilot_id: pilot.comp_pilot_id },
-      });
-      if (!res.ok) {
-        setFormError((await readRefusal(res)).message);
-        return;
-      }
-      toast.success(`Removed ${pilot.name}`);
-      onRemoved();
-    } catch {
-      setFormError(UNREACHABLE);
-    } finally {
-      setRemoving(false);
-    }
+      })
+    );
+    if (!res) return;
+    toast.success(`Removed ${pilot.name}`);
+    onRemoved();
   }
 
   return (
@@ -402,7 +393,7 @@ function PilotFields({
         <div className="mt-8 border-t border-border pt-4">
           <Button
             variant="destructive"
-            isPending={removing}
+            isPending={removal.pending}
             pendingLabel="Removing"
             isDisabled={pending}
             onPress={() => void remove()}

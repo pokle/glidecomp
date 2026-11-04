@@ -32,6 +32,9 @@ import {
 } from "./types";
 import { displayReport } from "./units";
 
+/** The query parameter naming the class a task analysis is read for. */
+export const CLASS_PARAM = "class";
+
 export type TaskReportStatus =
   | "loading"
   | "ready"
@@ -226,7 +229,7 @@ export function useTaskAnalysis(): TaskReportBundle {
   const isAdmin = useAdminView(!!comp?.is_admin);
 
   const classes = data?.classes ?? [];
-  const classParam = searchParams.get("class");
+  const classParam = searchParams.get(CLASS_PARAM);
   const selectedClass =
     classParam && classes.some((c) => c.pilot_class === classParam)
       ? classParam
@@ -237,7 +240,7 @@ export function useTaskAnalysis(): TaskReportBundle {
   // the walk out to a sub-page and back.
   const selectClass = (pilotClass: string) => {
     const next = new URLSearchParams(searchParams);
-    next.set("class", pilotClass);
+    next.set(CLASS_PARAM, pilotClass);
     setSearchParams(next, { replace: true });
   };
 

@@ -9,9 +9,13 @@
  * on its own page AND the Select replaced by a list in flow, that geometry has
  * no way left to go wrong here.
  *
- * RAC (see docs/2026-07-18-rac-adoption-guide.md): kit Form/TextField/
- * NumberField/ChoiceList. The coordinates field uses RAC's `validate` so "must
- * be lat, lon" shows inline as the user types, not as a toast on save.
+ * RAC (see docs/2026-07-18-rac-adoption-guide.md): the kit `Form`
+ * (rac/form.tsx) with TextField/NumberField/ChoiceList. The coordinates field
+ * uses RAC's `validate` so "must be lat, lon" shows inline as the user types.
+ * Record flight with no landing point, and every refusal the server gives,
+ * lands under the field it is about — the server's `landing_lat`/`landing_lon`
+ * are this page's one Landing point field — or beside the button when it is
+ * about no field. Never a toast: toasts are for "recorded".
  *
  * Pre-scoped to one pilot (unlike SubmitTrackForm, which picks the pilot
  * inside). The made-good distance is computed live by the SAME engine helpers
@@ -28,7 +32,6 @@
  * (a "lat, lon" field). A map picker is a planned follow-up.
  */
 import { useMemo, useState } from "react";
-import { Form } from "react-aria-components";
 import type { XCTask } from "@glidecomp/engine";
 import {
   taskForDistanceOrigin,
@@ -36,7 +39,9 @@ import {
   manualOpenDistanceGeometry,
 } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
-import { NumberField, TextField } from "@/react/rac/field";
+import { NumberField } from "@/react/rac/field";
+import { CoordsField, coordsProblem } from "./fields";
+import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { ChoiceList } from "@/react/rac/choice-list";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { underPilot } from "../lib/crumbs";
@@ -114,8 +119,6 @@ export function ManualFlightForm({
       ? Math.round(existing.duration_seconds / 60)
       : NaN,
   );
-  const [saving, setSaving] = useState(false);
-
   // GAP only: in goal when the last reached turnpoint is the goal.
   const madeGoal = !openDistance && lastIdx === goalIdx;
 
@@ -129,7 +132,6 @@ export function ManualFlightForm({
   const offset = task.turnpoints.length - scoringTask.turnpoints.length;
 
   const landing = parseCoords(coords);
-  const coordsValid = landing !== null;
 
   const madeGood = useMemo(() => {
     if (!landing) return null;
@@ -138,43 +140,27 @@ export function ManualFlightForm({
       : distanceMadeGoodTo(scoringTask, lastIdx - offset, landing);
   }, [openDistance, task, scoringTask, offset, lastIdx, landing]);
 
-  async function save() {
-    if (!landing) {
-      toast.warning('Enter the landing point as "latitude, longitude"');
-      return;
-    }
+  /** Send it: the kit form reads a refusal and puts it where it belongs. */
+  function save() {
+    // `validate` has already refused a missing landing point.
+    const at = landing!;
     const durationSeconds =
       madeGoal && Number.isFinite(durationMin)
         ? Math.round(durationMin * 60)
         : null;
-
-    setSaving(true);
-    try {
-      const res = await api.api.comp[":comp_id"].task[":task_id"][
-        "manual-flight"
-      ][":comp_pilot_id"].$put({
-        param: { comp_id: compId, task_id: taskId, comp_pilot_id: compPilotId },
-        json: {
-          // Open distance has no turnpoints or finish time — the server ignores
-          // the index and computes distance from the take-off exit.
-          last_reached_tp_index: openDistance ? 0 : lastIdx,
-          landing_lat: landing.lat,
-          landing_lon: landing.lon,
-          duration_seconds: openDistance ? null : durationSeconds,
-        },
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to record manual flight");
-        return;
-      }
-      toast.success(`Manual flight recorded for ${pilotName}`);
-      onSaved();
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSaving(false);
-    }
+    return api.api.comp[":comp_id"].task[":task_id"]["manual-flight"][
+      ":comp_pilot_id"
+    ].$put({
+      param: { comp_id: compId, task_id: taskId, comp_pilot_id: compPilotId },
+      json: {
+        // Open distance has no turnpoints or finish time — the server ignores
+        // the index and computes distance from the take-off exit.
+        last_reached_tp_index: openDistance ? 0 : lastIdx,
+        landing_lat: at.lat,
+        landing_lon: at.lon,
+        duration_seconds: openDistance ? null : durationSeconds,
+      },
+    });
   }
 
   return (
@@ -199,9 +185,19 @@ export function ManualFlightForm({
     >
       <Form
         className="flex flex-col gap-6"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void save();
+        validate={() => ({
+          landing: coordsProblem(coords, true),
+        })}
+        onSubmit={save}
+        onSuccess={() => {
+          toast.success(`Manual flight recorded for ${pilotName}`);
+          onSaved();
+        }}
+        // The server's names for the parts of the one Landing point field.
+        fieldNames={{
+          landing_lat: "landing",
+          landing_lon: "landing",
+          duration_seconds: "duration",
         }}
       >
         {!openDistance ? (
@@ -210,6 +206,7 @@ export function ManualFlightForm({
           // which a collapsed select shows one entry of.
           <ChoiceList
             label="Last turnpoint reached"
+            name="last_reached_tp_index"
             description="The furthest turnpoint the pilot legally tagged, in order."
             value={String(lastIdx)}
             onChange={(v) => setLastIdx(Number(v))}
@@ -220,24 +217,18 @@ export function ManualFlightForm({
           />
         ) : null}
 
-        <TextField
+        <CoordsField
           label="Landing point"
-          placeholder="-36.550979, 147.890395"
+          name="landing"
           description="Latitude, longitude — paste straight from Google Maps."
           value={coords}
           onChange={setCoords}
-          // Inline validation: flags a malformed pair as the user types
-          // (only once touched), instead of a toast at save time.
-          validate={(v) =>
-            v.trim() === "" || parseCoords(v) !== null
-              ? null
-              : 'Enter "latitude, longitude" decimal degrees'
-          }
         />
 
         {madeGoal ? (
           <NumberField
             label="Finish time (minutes)"
+            name="duration"
             description="Speed-section time, for time and speed points. Optional."
             placeholder="e.g. 92"
             minValue={1}
@@ -272,15 +263,9 @@ export function ManualFlightForm({
           )}
         </div>
 
+        <FormErrorBanner />
         <div className="flex items-center gap-3">
-          <Button
-            type="submit"
-            isDisabled={!coordsValid}
-            isPending={saving}
-            pendingLabel="Saving"
-          >
-            Record flight
-          </Button>
+          <SubmitButton>Record flight</SubmitButton>
           <Button variant="outline" onPress={onCancel}>
             Cancel
           </Button>

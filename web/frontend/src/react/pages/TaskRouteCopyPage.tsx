@@ -23,10 +23,10 @@
  */
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Alert, AlertDescription } from "@/react/rac/alert";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
 import { SearchField } from "@/react/rac/field";
+import { ActionErrorBanner, useAction } from "@/react/rac/form";
 import { NavActionRow, NavList } from "@/react/rac/nav-list";
 import { Loading } from "@/react/rac/progress";
 import type { XCTask } from "@glidecomp/engine";
@@ -86,9 +86,9 @@ function CopyRoute({ editor }: { editor: RouteEditorState }) {
   const [query, setQuery] = useState(text.trim());
   const [result, setResult] = useState<{ query: string; data: RouteSources } | null>(null);
   const [failed, setFailed] = useState(false);
-  /** The route being read, between the press and the draft. */
-  const [choosing, setChoosing] = useState<RouteSource | null>(null);
-  const [chooseError, setChooseError] = useState<string | null>(null);
+  // Choosing a route is an action, not a form: one press at a time, the row
+  // pressed says it is busy, and a refusal sits beside the list (rac/form).
+  const action = useAction();
 
   // The search box is in the URL, replacing rather than pushing, so Back
   // leaves the page instead of walking back through every letter typed.
@@ -130,37 +130,33 @@ function CopyRoute({ editor }: { editor: RouteEditorState }) {
   }, [urlId, taskId, query]);
 
   async function choose(source: RouteSource) {
-    setChoosing(source);
-    setChooseError(null);
-    try {
-      const res = await fetchWithRetry(() =>
-        api.api.comp[":comp_id"].task[":task_id"].$get({
-          param: { comp_id: source.comp_id, task_id: source.task_id },
-        })
-      );
-      const body = res.ok
-        ? ((await res.json()) as unknown as { task_date: string; xctsk: XCTask | null })
-        : null;
-      if (!body?.xctsk) {
-        setChooseError(`Could not read the route of ${source.task_name}. Try again.`);
-        return;
-      }
-      const task = rebaseRouteTimes(
-        body.xctsk,
-        body.task_date,
-        editor.task?.task_date ?? body.task_date,
-        editor.tz
-      );
-      const label = source.this_comp
-        ? source.task_name
-        : `${source.task_name} (${source.comp_name})`;
-      // The load may have asked first ("Replace the route…?").
-      if (await loadRoute(task, label)) editor.leave();
-    } catch {
-      setChooseError("Network error. Check your connection, then try again.");
-    } finally {
-      setChoosing(null);
+    const res = await action.run(
+      // A dropped request is not a missing route (#481).
+      () =>
+        fetchWithRetry(() =>
+          api.api.comp[":comp_id"].task[":task_id"].$get({
+            param: { comp_id: source.comp_id, task_id: source.task_id },
+          })
+        ),
+      { key: source.task_id, fallback: `Could not read the route of ${source.task_name}.` }
+    );
+    if (!res) return;
+    const body = (await res.json()) as unknown as { task_date: string; xctsk: XCTask | null };
+    if (!body.xctsk) {
+      action.refuse(`${source.task_name} has no saved route any more.`);
+      return;
     }
+    const task = rebaseRouteTimes(
+      body.xctsk,
+      body.task_date,
+      editor.task?.task_date ?? body.task_date,
+      editor.tz
+    );
+    const label = source.this_comp
+      ? source.task_name
+      : `${source.task_name} (${source.comp_name})`;
+    // The load may have asked first ("Replace the route…?").
+    if (await loadRoute(task, label)) editor.leave();
   }
 
   const data = result?.data ?? null;
@@ -188,12 +184,7 @@ function CopyRoute({ editor }: { editor: RouteEditorState }) {
           value={text}
           onChange={setText}
         />
-        {chooseError ? (
-          <Alert variant="destructive">
-            <AlertDescription>{chooseError}</AlertDescription>
-          </Alert>
-        ) : null}
-        {choosing ? <Loading>Loading {choosing.task_name}…</Loading> : null}
+        <ActionErrorBanner action={action} />
         {failed ? (
           <p className="text-muted-foreground">Could not load the routes. Try again.</p>
         ) : !data ? (
@@ -209,7 +200,8 @@ function CopyRoute({ editor }: { editor: RouteEditorState }) {
                   <NavActionRow
                     key={r.task_id}
                     onPress={() => void choose(r)}
-                    isDisabled={choosing !== null}
+                    isPending={action.pendingKey === r.task_id}
+                    pendingLabel={`Loading ${r.task_name}`}
                     label={r.task_name}
                     description={[
                       r.this_comp ? "This competition" : r.comp_name,

@@ -25,8 +25,8 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
+import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { SettingsPage } from "@/react/components/SettingsPage";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { CheckList, type Choice } from "@/react/rac/choice-list";
 import { TextField } from "@/react/rac/field";
 import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
@@ -60,17 +60,8 @@ export function CompCopyPage() {
   if (notFound || !compId) return <NotFound title="Competition not found" />;
   if (!comp || loading) return <Loading>Loading competition…</Loading>;
 
-  if (!isAdmin) {
-    return (
-      <div>
-        <Breadcrumbs items={underComp(urlId, comp.name)} current={TITLE} />
-        <h1 className="mt-2 text-2xl font-bold">{TITLE}</h1>
-        <p className="mt-2 text-muted-foreground">
-          Copying a competition is for its organisers.
-        </p>
-      </div>
-    );
-  }
+  // Anyone else goes to the competition itself (OrganisersOnly).
+  if (!isAdmin) return <OrganisersOnly to={compPath(urlId, comp.name)} />;
 
   return <CopyForm compId={urlId} comp={comp} />;
 }
