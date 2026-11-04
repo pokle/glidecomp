@@ -2,7 +2,7 @@
  * Goal settings — cylinder vs line, the optional deadline, and the
  * optional Elevated Goal height.
  *
- * Shared by the route page's Goal disclosure and the last turnpoint's sheet,
+ * Shared by the route page's Goal disclosure and the last turnpoint's page,
  * so opening the goal and expanding the page panel edit the same state.
  */
 import type { GoalConfig } from "@glidecomp/engine";

@@ -51,8 +51,16 @@ import { Alert, AlertDescription } from "@/react/rac/alert";
 import { Button, ToggleButton } from "@/react/rac/button";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Disclosure } from "@/react/rac/disclosure";
-import { Form, FormErrorBanner, SubmitButton, type SubmitResponse } from "@/react/rac/form";
+import {
+  Form,
+  FormErrorBanner,
+  SubmitButton,
+  refusal,
+  type SubmitResponse,
+} from "@/react/rac/form";
 import { api } from "../../comp/api";
+import { openedHere } from "../lib/leave";
+import { fetchWithRetry } from "./types";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { downloadFile } from "../lib/format";
@@ -89,23 +97,16 @@ import {
 } from "./route-draft";
 import {
   ADDING_TYPE,
-  FROM_ROUTE,
+  ROUTE_DISCARD,
   useLoadRoute,
   type RouteEditorState,
 } from "./use-route-editor";
+import { DraftNotices } from "./DraftNotices";
 import { RouteGoalSettings, RouteStartSettings } from "./RouteSettings";
 
 // Lazy so the map library (mapbox) and its CSS load only when the editor
 // opens and never enter the SSR'd task-detail bundle.
 const RouteMap = lazy(() => import("./RouteMap"));
-
-/** A refusal the page decided itself, in the shape the kit form reads. */
-function refusal(message: string): SubmitResponse {
-  return new Response(JSON.stringify({ error: message }), {
-    status: 422,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 /** The whole task the draft describes, or the problems that stop it being one. */
 function assemble(editor: RouteEditorState, d: RouteDraft) {
@@ -141,7 +142,7 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
   }, []);
 
   // Into one of the editor's pages, marked so it can come back here by Back.
-  const fromHere = { state: { [FROM_ROUTE]: true } };
+  const fromHere = openedHere();
 
   const [fillingAlts, setFillingAlts] = useState(false);
 
@@ -246,7 +247,7 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
       id = added.id;
       return added.draft;
     });
-    navigate(turnpointPath(id), { state: { [FROM_ROUTE]: true, [ADDING_TYPE]: type } });
+    navigate(turnpointPath(id), openedHere({ [ADDING_TYPE]: type }));
   }
 
   /**
@@ -413,8 +414,7 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
   async function cancel() {
     if (editor.dirty) {
       const ok = await confirm({
-        title: "Discard route changes?",
-        message: "This route has unsaved changes. Leaving will discard them.",
+        ...ROUTE_DISCARD,
         confirmLabel: "Discard changes",
         cancelLabel: "Keep editing",
         destructive: true,
@@ -435,17 +435,20 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
   async function persistPendingWaypoints(
     pending: WaypointFileRecord[]
   ): Promise<SubmitResponse | null> {
-    let base = editor.savedWaypoints;
-    try {
-      const res = await api.api.comp[":comp_id"].waypoints.$get({
-        param: { comp_id: editor.compId },
-      });
-      if (res.ok) {
-        base = ((await res.json()) as unknown as { waypoints: WaypointFileRecord[] }).waypoints;
-      }
-    } catch {
-      /* fall back to the list we already loaded */
+    // No fallback to the list this page loaded: when the freshest set cannot
+    // be read, nothing is written. A PUT over a list that failed to arrive
+    // replaced the competition's whole set with the new waypoints alone. (A
+    // dropped connection throws, which the kit form says in its own words.)
+    const res = await fetchWithRetry(() =>
+      api.api.comp[":comp_id"].waypoints.$get({ param: { comp_id: editor.compId } })
+    );
+    if (!res.ok) {
+      return refusal(
+        "Could not read the competition’s waypoints, so nothing was saved. Try again."
+      );
     }
+    const base = ((await res.json()) as unknown as { waypoints: WaypointFileRecord[] })
+      .waypoints;
     const put = await api.api.comp[":comp_id"].waypoints.$put({
       param: { comp_id: editor.compId },
       json: { waypoints: [...base, ...pending] },
@@ -501,11 +504,18 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
       {/* The saved route moved under a draft with edits in it: another
           organiser (or another tab) saved meanwhile. The draft is the
           reader's work and stays; Save would replace what they saved. */}
-      {editor.serverChanged ? (
-        <Alert>
+      <DraftNotices
+        serverChanged={editor.serverChanged}
+        notKept={editor.notKept}
+        changed="The saved route has changed since these edits were started. Saving replaces it with the route below."
+      />
+      {/* Not "this competition has no waypoints" (#481): they failed to
+          arrive, and saying so is the difference. */}
+      {editor.wpError ? (
+        <Alert variant="destructive">
           <AlertDescription>
-            The saved route has changed since these edits were started. Saving
-            replaces it with the route below.
+            Could not load the competition’s waypoints, so none can be picked for this route.
+            Reload the page to try again.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -731,6 +741,7 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
       <Form
         className="sticky bottom-0 z-20 border-t border-border bg-background/95 pt-3 pb-gutter-safe backdrop-blur-sm"
         onSubmit={save}
+        onPendingChange={editor.setSaving}
         onSuccess={() => {
           const { turnpoints, newWaypoints } = saving.current;
           editor.markSaved();

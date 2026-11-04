@@ -25,6 +25,7 @@
  * a killed run is swept) and the suite deletes them afterwards.
  */
 import { test, expect, type APIRequestContext, type Locator, type Page } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { e2eCompName } from "./fixtures/stack";
 
 const TEST_USER = {
@@ -188,14 +189,6 @@ async function openPage(page: Page, compId: string): Promise<void> {
 async function names(page: Page): Promise<string[]> {
   const texts = await rows(page).locator("p.font-medium").allInnerTexts();
   return texts.map((t) => t.trim());
-}
-
-/** See comp-waypoints.spec.ts: asserted, because it is what the grid failed. */
-async function expectNoSidewaysScroll(page: Page): Promise<void> {
-  const scrolls = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
-  );
-  expect(scrolls, "the page must not scroll sideways").toBe(false);
 }
 
 /** A target a thumb can hit, measured on the rendered box (44px). */

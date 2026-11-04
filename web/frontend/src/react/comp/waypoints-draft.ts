@@ -39,6 +39,11 @@
  */
 import { cleanWaypointCodes, type WaypointFileRecord } from "@glidecomp/engine";
 import { defineDraft } from "../lib/draft-store";
+import {
+  resolveStoredDraft,
+  type DraftModel,
+  type DraftResolution,
+} from "../lib/draft-editor";
 import { formatCoords, parseCoords } from "./route-editor";
 import { feetToMetres, needsReview, reviewSortKey, type AltitudePair } from "./altitude-check";
 
@@ -212,25 +217,25 @@ export function isDirty(rows: WpFields[], base: string): boolean {
 }
 
 /**
+ * How the editor reads a draft against the saved set (lib/draft-editor.ts):
+ * its content is the waypoints it would save. A review in progress is not
+ * content, so a rebased draft keeps it.
+ */
+export const waypointsModel: DraftModel<WaypointsDraft> = {
+  base: (d) => d.base,
+  content: (d) => serialize(validRecords(d.rows)),
+  rebase: (d, base) => ({ ...d, base }),
+};
+
+/**
  * The draft to edit, given the one in storage (if any) and the set the server
- * holds now.
- *
- * A stored draft with no edits of its own is only a copy of an older save:
- * when the server's set has changed since, the draft is dropped and the editor
- * starts from what is saved. One WITH edits is the organiser's work, so it is
- * kept, and `serverChanged` says the saved file moved under it.
+ * holds now — the shared rule, `resolveStoredDraft` in lib/draft-editor.ts.
  */
 export function resolveDraft(
   stored: WaypointsDraft | null,
   saved: WaypointFileRecord[]
-): { draft: WaypointsDraft; fromStorage: boolean; serverChanged: boolean } {
-  const savedBase = baselineJson(saved);
-  if (!stored) return { draft: freshDraft(saved), fromStorage: false, serverChanged: false };
-  if (stored.base === savedBase) return { draft: stored, fromStorage: true, serverChanged: false };
-  if (!isDirty(stored.rows, stored.base)) {
-    return { draft: freshDraft(saved), fromStorage: false, serverChanged: false };
-  }
-  return { draft: stored, fromStorage: true, serverChanged: true };
+): DraftResolution<WaypointsDraft> {
+  return resolveStoredDraft(stored, freshDraft(saved), waypointsModel);
 }
 
 /** Change one row's fields. */

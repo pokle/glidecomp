@@ -22,6 +22,7 @@
  * API.
  */
 import { test, expect, type Page } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { FRONTEND_URL } from "./fixtures/stack";
 import { stubTerrainElevations } from "./fixtures/mapbox";
 import {
@@ -61,14 +62,6 @@ async function checkAltitudes(page: Page, alt: number, alpha?: number): Promise<
   await expect(page).toHaveURL(reviewUrl, { timeout: 20_000 });
   await expect(h1(page, "Check altitudes")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
-}
-
-/** The page must never scroll sideways, at either project's width. */
-async function expectNoSidewaysScroll(page: Page): Promise<void> {
-  const scrolls = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
-  );
-  expect(scrolls, "the page must not scroll sideways").toBe(false);
 }
 
 /** The codes down the review's list, in order. */
@@ -223,13 +216,13 @@ test("typing a coordinate in the review keeps the comparison on screen", async (
   // used to destroy the comparison this page exists to show. The page holds
   // the reading it opened with, so type a character at a time and none of
   // that moves.
-  const coords = page.getByRole("textbox", { name: "Coordinates" });
+  const coords = page.getByRole("textbox", { name: "Coordinates (lat, lon)" });
   await coords.fill("");
   await coords.pressSequentially("-36.61234, 146.61234", { delay: 10 });
   await expect(page.getByRole("main")).toContainText("4000 m");
   await expect(page.getByRole("main")).toContainText("apart");
   await expect(accept).toBeVisible();
-  await expect(page.getByText("Enter coordinates as")).toHaveCount(0);
+  await expect(page.getByText('Enter "lat, lon" decimal degrees')).toHaveCount(0);
 
   // Back on the list the waypoint has moved, so its reading is gone.
   await page.getByRole("button", { name: /^All \d+$/ }).click();

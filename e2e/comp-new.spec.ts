@@ -21,6 +21,7 @@
  * swept) and deleted afterwards.
  */
 import { test, expect, type Page } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { e2eCompName } from "./fixtures/stack";
 import { bareCompId, idFromSegment } from "../web/frontend/src/react/lib/slug";
 
@@ -166,12 +167,7 @@ test("the list's search and + share one row, thumb-sized, that stays at the top"
   const searchGroup = page.getByRole("group").filter({ has: search }).first();
   await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(40);
 
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth
-    ),
-    "the page must not scroll sideways"
-  ).toBe(false);
+  await expectNoSidewaysScroll(page);
 
   const plus = await startLink(page).boundingBox();
   const box = await searchGroup.boundingBox();

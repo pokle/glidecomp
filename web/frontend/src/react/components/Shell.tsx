@@ -29,6 +29,7 @@ import {
   type PreviewRole,
 } from "../lib/user";
 import { useScrollRestoration } from "../lib/scroll-restoration";
+import { useRouteFocus } from "../lib/route-focus";
 import { toast } from "../lib/toast";
 
 declare const __GIT_SHA__: string;
@@ -45,6 +46,7 @@ export function Shell() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   useScrollRestoration();
+  useRouteFocus();
   const flightsHref = user?.username ? `/u/${user.username}` : "/u/me";
 
   // NavLink works out its own active state, but the overflow menu needs the

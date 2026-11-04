@@ -33,11 +33,10 @@ import { useCanonicalPath } from "../lib/use-canonical-path";
 import { parseCoords } from "../comp/route-editor";
 import { newWaypointSearch } from "../comp/AddWaypointForm";
 import {
-  FROM_WAYPOINTS,
-  FROM_WAYPOINTS_MAP,
   useWaypointsEditor,
   waypointCameras,
 } from "../comp/use-waypoints-editor";
+import { openedHere } from "../lib/leave";
 import { waypointsEditorGate } from "../comp/WaypointsEditorGate";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
@@ -88,7 +87,7 @@ export function CompWaypointsMapPage() {
           variant="outline"
           size="sm"
           className="ml-auto"
-          onPress={() => editor.leave(compWaypointsPath(urlId, compName), FROM_WAYPOINTS)}
+          onPress={() => editor.leave(compWaypointsPath(urlId, compName))}
         >
           <Minimize2Icon className="size-4" aria-hidden="true" />
           Done
@@ -112,9 +111,10 @@ export function CompWaypointsMapPage() {
             onCameraChange={(camera) => waypointCameras.set(bareId, camera)}
             onWaypointPick={() => {}}
             onMapPick={(lat, lon, details) =>
-              navigate(compWaypointsNewPath(urlId, compName, newWaypointSearch(lat, lon, details)), {
-                state: { [FROM_WAYPOINTS_MAP]: true },
-              })
+              navigate(
+                compWaypointsNewPath(urlId, compName, newWaypointSearch(lat, lon, details)),
+                openedHere()
+              )
             }
           />
         </Suspense>

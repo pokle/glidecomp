@@ -24,6 +24,7 @@
  * they were not designed for.
  */
 import { test, expect, PHONE_ONLY, type Page } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { e2eCompName } from "./fixtures/stack";
 
 const ADMIN_USER = {
@@ -83,16 +84,24 @@ test.afterAll(async ({ playwright }) => {
   await api.dispose();
 });
 
-test("a visitor gets the admin-only notice, and an unknown group 404s", async ({
+test("a visitor is sent to the competition, signed in or not, and an unknown group 404s", async ({
   page,
 }) => {
   // Before any admin test hides or reshapes the comp: a signed-in non-admin
-  // reaches the URL but not the settings.
+  // reaching the URL is sent to the competition itself, and told why.
   await devLogin(page, VISITOR_USER);
   await page.goto(`/comp/${compId}/settings`);
+  await expect(page.getByText("That page is for the competition’s organisers.")).toBeVisible({ timeout: 20_000 });
+  await expect(page).not.toHaveURL(/\/settings/);
+  await expect(page.getByRole("textbox", { name: "Name" })).toHaveCount(0);
+
+  // Signed out, the same — told to sign in if they are an organiser.
+  await page.context().clearCookies();
+  await page.goto(`/comp/${compId}/settings`);
   await expect(
-    page.getByText("Competition settings are for the competition’s organisers.")
-  ).toBeVisible();
+    page.getByText("That page is for the competition’s organisers. Sign in if you are one.")
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(page).not.toHaveURL(/\/settings/);
 
   // An unknown group is a dead URL, not an empty page.
   await devLogin(page, ADMIN_USER);
@@ -383,20 +392,13 @@ test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY
   // that only means something there.
   await devLogin(page, ADMIN_USER);
 
-  const noHorizontalOverflow = async (where: string) => {
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth
-    );
-    expect(overflow, `${where} must not scroll sideways on a phone`).toBeLessThanOrEqual(0);
-  };
-
   // Comp page → Settings link → index.
   await page.goto(`/comp/${compId}`);
   const settingsLink = page.getByRole("link", { name: "Settings", exact: true });
   await expect(settingsLink).toBeVisible();
   await settingsLink.click();
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
-  await noHorizontalOverflow("the settings index");
+  await expectNoSidewaysScroll(page, "the settings index");
 
   // Rows are comfortably tappable (44px minimum target).
   const general = page.getByRole("main").getByRole("link", { name: /^General/ });
@@ -407,8 +409,8 @@ test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY
   // Index → sub-page → untouched Save → back on the index.
   await general.click();
   await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
-  await noHorizontalOverflow("the General sub-page");
+  await expectNoSidewaysScroll(page, "the General sub-page");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
-  await noHorizontalOverflow("the settings index after saving");
+  await expectNoSidewaysScroll(page, "the settings index after saving");
 });

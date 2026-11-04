@@ -3,7 +3,7 @@
  * freshness line, the class select, and the four states the report can be in
  * before there is anything to show.
  *
- * The summary page and its five sub-pages are the same report seen from
+ * The summary page and its six sections (and their leaf pages) are the same report seen from
  * different angles, so they must agree about all of that — a sub-page that
  * showed a different class, or forgot the stale-first freshness poll, would be
  * a different report wearing the same name. The body is a render prop, called
@@ -29,8 +29,9 @@ import {
 } from "../lib/crumbs";
 import { compAnalysisPath, taskAnalysisSectionPath } from "../lib/slug";
 import { PilotHighlightProvider } from "./PilotHighlightContext";
-import { PilotPicker } from "./PilotPicker";
-import type { TaskReportBundle } from "./use-task-report";
+import { PILOT_PARAM, PilotPicker } from "./PilotPicker";
+import type { TaskAnalysisSectionSlug } from "./sections";
+import { CLASS_PARAM, type TaskReportBundle } from "./use-task-report";
 import type { displayReport } from "./units";
 
 export interface TaskAnalysisFrameProps {
@@ -48,7 +49,7 @@ export interface TaskAnalysisFrameProps {
    * or, given `search`, that query instead: the thermal map knows which of its
    * own parameters the Thermals section reads.
    */
-  parent?: { slug: string; label: string; search?: string };
+  parent?: { slug: TaskAnalysisSectionSlug; label: string; search?: string };
   /** Shown beside the class select. Only pages with per-pilot rows want it. */
   pilotPicker?: boolean;
   children: (ctx: {
@@ -102,35 +103,39 @@ export function TaskAnalysisFrame({
   // A sub-page hangs off the chapter; the chapter hangs off the task. Both
   // trails come from lib/crumbs so they agree crumb for crumb.
   //
-  // The chapter crumb carries the query on: which class is being read, and
-  // which pilot is pinned, live in the URL and are the same choice on every
-  // page of the report. Walking up out of a section and arriving back at the
-  // default class would undo a choice the reader made two clicks ago. The
-  // crumbs above it are other pages and take none of it.
-  const chapterCrumbs = underTaskAnalysis(compId, comp?.name, taskId, task?.name);
-  const crumbs = section
-    ? withQuery(
-        parent
-          ? [
-              ...chapterCrumbs,
+  // Every crumb from the chapter down carries the report's view state: which
+  // class is being read, and which pilot is pinned, live in the URL and are
+  // the same choice on every page of the report. Walking up out of a section
+  // and arriving back at the default class would undo a choice the reader
+  // made two clicks ago — and a leaf page (one metric's chart, one thermal's
+  // map) used to put it only on its parent crumb, so the chapter crumb above
+  // that dropped it. The parent crumb also carries what the parent section
+  // reads (its own `search`, or this page's query). The crumbs above the
+  // chapter are other pages and take none of it.
+  const viewState = reportViewState(searchParams);
+  const chapterCrumbs = withQuery(
+    underTaskAnalysis(compId, comp?.name, taskId, task?.name),
+    viewState
+  );
+  const crumbs = !section
+    ? underTask(compId, comp?.name, taskId, task?.name)
+    : !parent
+      ? chapterCrumbs
+      : [
+          ...chapterCrumbs,
+          withQuery(
+            [
               {
                 label: parent.label,
                 to:
                   compId && taskId
-                    ? taskAnalysisSectionPath(
-                        compId,
-                        comp?.name,
-                        taskId,
-                        task?.name,
-                        parent.slug
-                      )
+                    ? taskAnalysisSectionPath(compId, comp?.name, taskId, task?.name, parent.slug)
                     : "/comp",
               },
-            ]
-          : chapterCrumbs,
-        parent?.search ?? search
-      )
-    : underTask(compId, comp?.name, taskId, task?.name);
+            ],
+            parent.search ?? search
+          )[0],
+        ];
 
   // Gate on `status` only, never on the user session: the content is public,
   // and useUser().loading is true throughout SSR + the first hydration render,
@@ -260,7 +265,17 @@ export function TaskAnalysisFrame({
   );
 }
 
-/** The trail's LAST crumb — the chapter — keeps the report's view state. */
+/** The report's view state alone — the class and the pinned pilot — as a query. */
+export function reportViewState(params: URLSearchParams): string {
+  const kept = new URLSearchParams();
+  for (const key of [CLASS_PARAM, PILOT_PARAM]) {
+    const value = params.get(key);
+    if (value !== null) kept.set(key, value);
+  }
+  return kept.toString();
+}
+
+/** The trail's LAST crumb, with `search` on it. */
 function withQuery(crumbs: Crumb[], search: string): Crumb[] {
   if (!search) return crumbs;
   return crumbs.map((c, i) =>

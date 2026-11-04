@@ -88,7 +88,7 @@ export function useCanonicalPath(canonicalPath: string | null): void {
       // as arriving somewhere new. The names this waits on can land seconds
       // after the reader has started scrolling.
       // Whatever the page was navigated in with is kept: a correction is not
-      // a new arrival (the pilot page reads `fromList` off it).
+      // a new arrival (lib/leave.ts reads its `openedHere()` marker off it).
       state: { ...(location.state as object | null), preserveScroll: true },
     });
   }, [canonicalPath, location.pathname, location.search, location.hash, location.state, navigate]);

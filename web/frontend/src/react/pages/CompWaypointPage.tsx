@@ -35,14 +35,11 @@ import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { underCompWaypoints } from "../lib/crumbs";
 import { compWaypointPath, compWaypointsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
-import { parseCoords } from "../comp/route-editor";
+import { CoordsField, coordsProblem } from "../comp/fields";
 import { RADIUS_PRESETS, radiusChipLabel } from "../comp/turnpoint-draft";
-import { FROM_WAYPOINTS, useWaypointsEditor } from "../comp/use-waypoints-editor";
+import { useWaypointsEditor } from "../comp/use-waypoints-editor";
 import { waypointsEditorGate } from "../comp/WaypointsEditorGate";
 import { deleteRow, updateRow, type WpFields, type WpRow } from "../comp/waypoints-draft";
-
-/** Under a coordinates field that does not parse. */
-const COORDS_HINT = "Enter coordinates as “lat, lon”";
 
 export function CompWaypointPage() {
   const editor = useWaypointsEditor();
@@ -63,10 +60,9 @@ export function CompWaypointPage() {
   if (!row) return <NotFound title="Waypoint not found" />;
 
   const listPath = compWaypointsPath(urlId, compName);
-  const back = () => editor.leave(listPath, FROM_WAYPOINTS);
+  const back = () => editor.leave(listPath);
   const set = (patch: Partial<WpFields>) => editor.update((d) => updateRow(d, id, patch));
 
-  const coordsValid = parseCoords(row.coords) !== null;
   const altNumber = Number(row.altitude);
   const radiusNumber = Number(row.radius);
 
@@ -74,9 +70,8 @@ export function CompWaypointPage() {
     <div className="max-w-2xl">
       <Breadcrumbs items={underCompWaypoints(urlId, compName)} current={row.code || "Waypoint"} />
       <Form
-        validate={() => ({ coords: coordsValid ? null : COORDS_HINT })}
+        validate={() => ({ coords: coordsProblem(row.coords, true) })}
         // Nothing to send: every change is in the draft already.
-        onSubmit={async () => undefined}
         onSuccess={back}
       >
         {/* Done where the sheet had it, top right: in reach without scrolling
@@ -106,14 +101,11 @@ export function CompWaypointPage() {
           {/* No "show on the map" button here: the list row this page opens
               from has a pin that does it, and one waypoint does not need two
               ways to be looked at. */}
-          <TextField
-            label="Coordinates"
-            name="coords"
+          <CoordsField
             value={row.coords}
             onChange={(coords) => set({ coords })}
+            required
             className="font-mono"
-            isInvalid={!coordsValid}
-            errorMessage={coordsValid ? undefined : COORDS_HINT}
           />
           {/* Metres, stated — the file's own unit, not the reader's. */}
           <NumberField

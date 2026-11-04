@@ -15,7 +15,7 @@ import {
   FormErrorBanner,
   SubmitButton,
   useAction,
-  useFormState,
+  type Refusal,
   type SubmitResponse,
 } from "@/react/rac/form";
 import { Loading } from "@/react/rac/progress";
@@ -25,7 +25,7 @@ import { api } from "../../comp/api";
 import { deleteAccount } from "../../auth/client";
 import { storage } from "../../analysis/storage";
 import { useConfirm } from "../lib/confirm";
-import { useUnsavedChangesGuard } from "../lib/use-unsaved-changes-guard";
+import { SettingsForm } from "../components/SettingsForm";
 import { useGoToSignIn, useUser } from "../lib/user";
 import { type ThemePreference, useTheme } from "../lib/theme";
 import { setUnit, useUnits, type UnitPreferences } from "../lib/units";
@@ -369,13 +369,6 @@ function ProfileSection() {
     state === "ready" &&
     PROFILE_FIELDS.some((f) => values[f.key] !== savedValues[f.key]);
 
-  // Guard against silently losing edits — see lib/use-unsaved-changes-guard.
-  useUnsavedChangesGuard(dirty, {
-    title: "Discard profile changes?",
-    message:
-      "Your profile has unsaved changes. Leaving this page will discard them.",
-  });
-
   /** The PATCH: every field, a cleared one as null rather than "". */
   function save() {
     const payload: Record<string, string | null> = {};
@@ -433,13 +426,22 @@ function ProfileSection() {
       ) : state === "error" ? (
         <p role="alert">Failed to load profile</p>
       ) : (
-        <Form
+        // The settings pages' form: Save beside its error, and the guard
+        // against silently losing edits (lib/use-unsaved-changes-guard).
+        <SettingsForm
           onSubmit={save}
           onSuccess={saved}
           validate={() => ({
             name: values.name.trim() === "" && "Display name is required",
           })}
-          className="flex flex-col gap-6"
+          dirty={dirty}
+          submitLabel="Save profile"
+          pendingLabel="Saving your profile"
+          disableWhenClean
+          guard={{
+            title: "Discard profile changes?",
+            message: "Your profile has unsaved changes. Leaving this page will discard them.",
+          }}
         >
           <FieldGroup label="Name &amp; contact">
             <CardGrid min="15rem">{NAME_CONTACT_FIELDS.map(renderField)}</CardGrid>
@@ -457,33 +459,9 @@ function ProfileSection() {
               account.
             </p>
           ) : null}
-
-          <ProfileSaveRow dirty={dirty} />
-        </Form>
+        </SettingsForm>
       )}
     </Card>
-  );
-}
-
-/** Save profile, with the error that belongs to no field directly above it. */
-function ProfileSaveRow({ dirty }: { dirty: boolean }) {
-  const { pending } = useFormState();
-  return (
-    <div className="flex flex-col gap-3">
-      <FormErrorBanner />
-      <div className="flex items-center gap-3">
-        {/* isDisabled for "nothing to save" (a standing state); the kit's
-            pending state for the save in flight — two different things. */}
-        <SubmitButton isDisabled={!dirty} pendingLabel="Saving your profile">
-          Save profile
-        </SubmitButton>
-        {/* The dirty hint doubles as the explanation for why Save is
-            enabled; role=status so the state change is announced. */}
-        <span role="status" className="text-sm text-muted-foreground">
-          {dirty && !pending ? "Unsaved changes" : ""}
-        </span>
-      </div>
-    </div>
   );
 }
 
@@ -496,42 +474,22 @@ function ProfileSaveRow({ dirty }: { dirty: boolean }) {
 const API_KEY_LABEL_MAX = 32;
 
 /**
- * auth-api answers a refusal in Better Auth's shape, `{ code, message }`, and
- * the kit form reads `{ error, field }` (rac/form.tsx). This is the
- * translation: a code that is about the label lands under the Label field
- * (`name`, which is also the server's name for it), and any other refusal
- * keeps its own message for the form's banner. A body already in the kit's
- * shape — GlideComp's own routes in auth-api, its rate limits — passes through.
+ * auth-api answers a refusal in Better Auth's shape, `{ code, message }`, words
+ * for a developer — so the kit form shows the form's own `fallback` for it, as
+ * Revoke does. A code that is about the label is the exception: it lands under
+ * the Label field (`name`, which is also the server's name for it). A body
+ * already in the kit's shape — GlideComp's own routes in auth-api, its rate
+ * limits — is read as it is.
  */
 const KEY_LABEL_REFUSALS: Record<string, string> = {
   INVALID_NAME_LENGTH: `A label can be at most ${API_KEY_LABEL_MAX} characters.`,
 };
 
-async function asKitRefusal(res: Response): Promise<SubmitResponse> {
-  if (res.ok) return res;
-  const text = await res.text().catch(() => "");
-  let body: unknown = null;
-  try {
-    body = JSON.parse(text);
-  } catch {
-    // Not JSON: the kit reads plain text itself.
-  }
-  const { code, message, error } = (body ?? {}) as Record<string, unknown>;
-  const kit =
-    typeof error === "string"
-      ? null
-      : typeof code === "string" && code in KEY_LABEL_REFUSALS
-        ? { error: KEY_LABEL_REFUSALS[code], field: "name" }
-        : typeof message === "string"
-          ? { error: message }
-          : null;
-  const out = kit ? JSON.stringify(kit) : text;
-  return {
-    ok: false,
-    status: res.status,
-    text: async () => out,
-    json: async () => JSON.parse(out) as unknown,
-  };
+function keyLabelRefusal(refusal: Refusal, body: unknown): Refusal {
+  const code = (body as { code?: unknown } | null)?.code;
+  return typeof code === "string" && code in KEY_LABEL_REFUSALS
+    ? { message: KEY_LABEL_REFUSALS[code], field: "name" }
+    : refusal;
 }
 
 function ApiKeysSection() {
@@ -544,7 +502,6 @@ function ApiKeysSection() {
   // shows the list without it, as the warning beside it promises.
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [revokingId, setRevokingId] = useState<string | null>(null);
   // Revoke's refusal, beside the list it was pressed in (rac/form.tsx).
   const revoke = useAction();
   const createdHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -584,24 +541,22 @@ function ApiKeysSection() {
       destructive: true,
     });
     if (!confirmed) return;
-    setRevokingId(keyId);
-    try {
-      // Better Auth's api-key plugin refuses in `{ code, message }`, words for
-      // a developer, so the refusal is in this page's own words.
-      const res = await revoke.run(
-        () =>
-          fetch("/api/auth/api-key/delete", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ keyId }),
-          }),
-        { fallback: "Failed to revoke key. Please try again." }
-      );
-      if (res) await loadKeys();
-    } finally {
-      setRevokingId(null);
-    }
+    // Better Auth's api-key plugin refuses in `{ code, message }`, words for
+    // a developer, so the refusal is in this page's own words. The list is
+    // reloaded inside the action, so the row stays busy until it is gone.
+    await revoke.run(
+      async () => {
+        const res = await fetch("/api/auth/api-key/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ keyId }),
+        });
+        if (res.ok) await loadKeys();
+        return res;
+      },
+      { fallback: "Failed to revoke key. Please try again.", key: keyId }
+    );
   }
 
   return (
@@ -632,16 +587,16 @@ function ApiKeysSection() {
       <div ref={formRef}>
         <Form
           className="flex flex-col gap-4"
-          onSubmit={async () =>
-            asKitRefusal(
-              await fetch("/api/auth/api-key/create", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ name: keyName.trim() || undefined }),
-              })
-            )
+          onSubmit={() =>
+            fetch("/api/auth/api-key/create", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ name: keyName.trim() || undefined }),
+            })
           }
+          shapeRefusal={keyLabelRefusal}
+          fallback="Failed to create the key. Please try again."
           onSuccess={async (res) => {
             const data = (await res!.json()) as { key: string };
             setKeyName("");
@@ -757,7 +712,7 @@ function ApiKeysSection() {
                       <Button
                         variant="outline"
                         size="sm"
-                        isPending={revokingId === key.id}
+                        isPending={revoke.pendingKey === key.id}
                         pendingLabel="Revoking this key"
                         onPress={() => void handleRevoke(key.id)}
                       >
@@ -804,7 +759,6 @@ function ConnectedAssistantsSection() {
   const [copied, setCopied] = useState(false);
   const [assistants, setAssistants] = useState<ConnectedAssistant[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   // Disconnect's refusal, beside the list it was pressed in (rac/form.tsx).
   const disconnect = useAction();
 
@@ -828,23 +782,19 @@ function ConnectedAssistantsSection() {
   }, [load]);
 
   async function handleDisconnect(clientId: string) {
-    setDisconnectingId(clientId);
-    try {
-      const res = await disconnect.run(
-        async () => {
-          const res = await fetch(
-            `/api/auth/connected-assistants/${encodeURIComponent(clientId)}`,
-            { method: "DELETE", credentials: "include" }
-          );
-          // "Not connected": already gone, which is what was asked for.
-          return res.status === 404 ? new Response(null, { status: 204 }) : res;
-        },
-        { fallback: "Failed to disconnect. Please try again." }
-      );
-      if (res) await load();
-    } finally {
-      setDisconnectingId(null);
-    }
+    await disconnect.run(
+      async () => {
+        const res = await fetch(
+          `/api/auth/connected-assistants/${encodeURIComponent(clientId)}`,
+          { method: "DELETE", credentials: "include" }
+        );
+        // "Not connected": already gone, which is what was asked for.
+        const done = res.status === 404 ? new Response(null, { status: 204 }) : res;
+        if (done.ok) await load();
+        return done;
+      },
+      { fallback: "Failed to disconnect. Please try again.", key: clientId }
+    );
   }
 
   return (
@@ -882,7 +832,7 @@ function ConnectedAssistantsSection() {
                   <Button
                     variant="outline"
                     size="sm"
-                    isPending={disconnectingId === a.client_id}
+                    isPending={disconnect.pendingKey === a.client_id}
                     pendingLabel={`Disconnecting ${name}`}
                     onPress={() => void handleDisconnect(a.client_id)}
                   >

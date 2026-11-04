@@ -143,7 +143,7 @@ export function underTaskRoute(
 
 /**
  * Ancestors of a page under a task analysis — today the
- * pilot-similarity sheet.
+ * pilot-similarity page.
  *
  * The chapter itself is one crumb shorter: it calls {@link underTask} and
  * passes {@link TASK_ANALYSIS_LABEL} as its own `current`, so the two trails

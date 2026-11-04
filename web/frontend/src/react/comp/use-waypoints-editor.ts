@@ -22,42 +22,36 @@
  * now": the draft stays, and coming back to the waypoints finds it. A reload
  * finds it too.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import type { MapCamera } from "../../analysis/map-provider";
 import { api } from "../../comp/api";
 import { useInitialData } from "../lib/initial-data";
 import { bareCompId, compUrlId, idFromSegment } from "../lib/slug";
-import { useDraft } from "../lib/use-draft";
+import { useDraftEditor } from "../lib/draft-editor";
+import { useLeave } from "../lib/leave";
 import { useMounted } from "../lib/use-mounted";
-import { useUnsavedChangesGuard } from "../lib/use-unsaved-changes-guard";
 import { useAdminView, useUser } from "../lib/user";
 import type { CompWaypointsLoaderData } from "../loaders";
 import { toast } from "../lib/toast";
 import { fetchWithRetry } from "./types";
 import { parseCoords } from "./route-editor";
 import {
-  isDirty,
-  baselineJson,
-  resolveDraft,
+  freshDraft,
   startReview,
-  validRecords,
   waypointsDraft,
+  waypointsModel,
   type WaypointsDraft,
 } from "./waypoints-draft";
 
 export type WaypointsComp = CompWaypointsLoaderData["comp"];
 
-/**
- * How a page was reached, set on the `navigate()` state that opens it. A page
- * leaves by a real Back when its flag is there — the page underneath then
- * returns as it was left, scroll and all — and by replacing itself with its
- * parent when it is not (a reload of a bookmark, a link opened elsewhere).
- */
-export const FROM_WAYPOINTS = "fromWaypoints";
-export const FROM_WAYPOINTS_MAP = "fromWaypointsMap";
-export const FROM_ALTITUDE_REVIEW = "fromAltitudeReview";
+/** The question asked before the waypoints editor is left with unsaved edits. */
+export const WAYPOINTS_DISCARD = {
+  title: "Discard changes?",
+  message: "This page has unsaved changes. Leaving will discard them.",
+};
 
 /**
  * The last view of each comp's waypoints map, so the list's small map and the
@@ -79,6 +73,11 @@ export interface WaypointsEditor {
   loading: boolean;
   notFound: boolean;
   /**
+   * The comp loaded and its waypoints did not, after retries. Never shown as
+   * "no waypoints": an empty editor's Save would replace the real set.
+   */
+  loadError: boolean;
+  /**
    * An organiser's draft has been read from storage (or found absent). Until
    * then `draft` is the saved set, and a page addressing a row that exists
    * only in the draft must wait rather than call it missing.
@@ -93,25 +92,29 @@ export interface WaypointsEditor {
   draft: WaypointsDraft;
   /** The working copy differs from the saved set. */
   dirty: boolean;
-  /** The saved set changed after this draft was started (see resolveDraft). */
+  /** The saved set changed after this draft was started (see resolveStoredDraft). */
   serverChanged: boolean;
+  /** The browser is not storing the draft: a reload will lose it. */
+  notKept: boolean;
   /** Change the draft; the change is in storage before this returns. */
   update: (change: (d: WaypointsDraft) => WaypointsDraft) => void;
-  /** Forget the draft: back to the saved set. */
   /**
    * Change the draft in storage only, for a page on its way out: it stays as
    * it is on screen until it has gone, rather than flash the state the change
    * leaves it in. The next page reads the change when it mounts.
    */
   updateOnLeave: (change: (d: WaypointsDraft) => WaypointsDraft) => void;
+  /** Forget the draft: back to the saved set. */
   discard: () => void;
   /** The server now holds `records`: a new baseline, and no draft. */
   markSaved: (records: WaypointFileRecord[]) => void;
+  /** A save is in flight (the kit form's `onPendingChange`). */
+  setSaving: (saving: boolean) => void;
   /**
-   * Leave this page: a real Back when it was opened with `flag` set, else
-   * replace it with `fallback`. See {@link FROM_WAYPOINTS}.
+   * Leave this page for `fallback`: a real Back when a page of the editor
+   * opened it, else a replace (lib/leave.ts).
    */
-  leave: (fallback: string, ...flags: string[]) => void;
+  leave: (fallback: string) => void;
 }
 
 /** Whether `url` is a page of this comp's waypoints editor. */
@@ -125,8 +128,7 @@ export function useWaypointsEditor(): WaypointsEditor {
   const compId = idFromSegment(compParam ?? "");
   const bareId = bareCompId(compId);
   const { user, loading: userLoading } = useUser();
-  const location = useLocation();
-  const navigate = useNavigate();
+  const leave = useLeave();
   const mounted = useMounted();
 
   // SSR seed — the list page only (null on a client boot, on an SPA
@@ -138,6 +140,7 @@ export function useWaypointsEditor(): WaypointsEditor {
   const [saved, setSaved] = useState<WaypointFileRecord[]>(() => initial?.waypoints ?? []);
   const [loading, setLoading] = useState(!initial);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     // Clear any previous verdict first. react-router keeps a page mounted
@@ -145,6 +148,7 @@ export function useWaypointsEditor(): WaypointsEditor {
     // the old id would mask whatever the new one loads — and the 404 page's
     // own "did you mean" links point back at this very route.
     setNotFound(false);
+    setLoadError(false);
     if (!compId) {
       setNotFound(true);
       return;
@@ -172,9 +176,16 @@ export function useWaypointsEditor(): WaypointsEditor {
         // encodeComp is loosely typed, so read the fields we need via unknown.
         // The server already computes is_admin (super-admins included).
         const c = (await compRes.json()) as unknown as WaypointsComp;
-        const wp = wpRes.ok
-          ? ((await wpRes.json()) as unknown as { waypoints: WaypointFileRecord[] }).waypoints
-          : [];
+        // A failure to ask is not an answer (#481): waypoints that did not
+        // load are not "no waypoints", which would also drop a draft started
+        // against the real ones and offer to save an empty set over them.
+        if (!wpRes.ok) {
+          setComp(c);
+          setLoadError(true);
+          return;
+        }
+        const wp = ((await wpRes.json()) as unknown as { waypoints: WaypointFileRecord[] })
+          .waypoints;
         if (cancelled) return;
         setComp(c);
         setSaved(wp);
@@ -195,42 +206,17 @@ export function useWaypointsEditor(): WaypointsEditor {
 
   const isAdmin = useAdminView(!!comp?.is_admin);
 
-  // Only an organiser has a draft, and only once mounted (see the note above).
-  const draftOn = mounted && isAdmin && !!comp && !loading;
-  const stored = useDraft(
-    waypointsDraft,
-    draftOn ? [bareId] : null,
-    draftOn && user ? user.id : null
-  );
-  const resolved = useMemo(() => resolveDraft(stored.draft, saved), [stored.draft, saved]);
-  const savedBase = useMemo(() => baselineJson(saved), [saved]);
-
-  // A stored draft that resolveDraft passed over (an unedited copy of an
-  // older save) is never going to be read: it does not stay.
-  const passedOver = stored.draft !== null && !resolved.fromStorage;
-  useEffect(() => {
-    if (passedOver) waypointsDraft.clear([bareId]);
-  }, [passedOver, bareId]);
-
-  // The latest working copy, so two changes in one event both land.
-  const latest = useRef(resolved.draft);
-  latest.current = resolved.draft;
-
-  const dirty = useMemo(
-    () => isAdmin && isDirty(resolved.draft.rows, savedBase),
-    [isAdmin, resolved.draft.rows, savedBase]
-  );
-
-  const discard = () => {
-    stored.clearDraft();
-    latest.current = resolveDraft(null, saved).draft;
-  };
-
-  useUnsavedChangesGuard(dirty, {
-    title: "Discard changes?",
-    message: "This page has unsaved changes. Leaving will discard them.",
-    isWithin: (url) => inEditor(url, bareId),
-    onDiscard: () => waypointsDraft.clear([bareId]),
+  const fresh = useMemo(() => freshDraft(saved), [saved]);
+  const editor = useDraftEditor({
+    store: waypointsDraft,
+    draftKey: [bareId],
+    owner: user?.id ?? null,
+    // Only an organiser has a draft, only once mounted (see the note above),
+    // and only against waypoints that really loaded.
+    enabled: mounted && isAdmin && !!comp && !loading && !loadError,
+    fresh,
+    model: waypointsModel,
+    guard: { ...WAYPOINTS_DISCARD, isWithin: (url) => inEditor(url, bareId) },
   });
 
   return {
@@ -241,40 +227,25 @@ export function useWaypointsEditor(): WaypointsEditor {
     compName: comp?.name ?? "",
     loading,
     notFound,
-    draftReady: draftOn && !!user,
+    loadError,
+    draftReady: editor.ready,
     userLoading,
     isAdmin,
     saved,
-    draft: resolved.draft,
-    dirty,
-    serverChanged: resolved.serverChanged,
-    update(change) {
-      const next = change(latest.current);
-      if (next === latest.current) return;
-      latest.current = next;
-      stored.setDraft(next);
-    },
-    updateOnLeave(change) {
-      if (!draftOn || !user) return;
-      waypointsDraft.save([bareId], user.id, change(latest.current));
-    },
-    discard,
+    draft: editor.draft,
+    dirty: editor.dirty,
+    serverChanged: editor.serverChanged,
+    notKept: editor.notKept,
+    update: editor.update,
+    updateOnLeave: editor.updateOnLeave,
+    discard: () => editor.discard(),
     markSaved(records) {
       setSaved(records);
-      stored.clearDraft();
-      latest.current = resolveDraft(null, records).draft;
+      editor.discard(freshDraft(records));
     },
-    leave(fallback, ...flags) {
-      const state = location.state as Record<string, unknown> | null;
-      if (flags.some((f) => state?.[f])) navigate(-1);
-      else navigate(fallback, { replace: true });
-    },
+    setSaving: editor.setSaving,
+    leave,
   };
-}
-
-/** The working copy's records, for a map or an export. */
-export function draftRecords(d: WaypointsDraft): WaypointFileRecord[] {
-  return validRecords(d.rows);
 }
 
 /**

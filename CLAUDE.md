@@ -422,7 +422,10 @@ These are the standing imperatives. Each links to the reference that explains it
     write the same stored file (`comp/use-waypoints-editor.ts`), its items
     addressed by the draft's own ids, its review's snapshot kept in it. The
     route editor (#812) is the same shape over a task's route
-    (`comp/use-route-editor.ts`). See [docs/drafts.md](docs/drafts.md).
+    (`comp/use-route-editor.ts`), and both are built on one
+    `useDraftEditor()` (`lib/draft-editor.ts`) — which draft to edit, the
+    write-through, dirty, and the guard — rather than a copy each. See
+    [docs/drafts.md](docs/drafts.md).
   - **Back is the browser's, with unsaved edits or a dialog open too.**
     Nothing holds a history entry to catch it. The unsaved-changes guard
     (`lib/use-unsaved-changes-guard.ts`) asks before a reload, a tab close or
@@ -432,6 +435,20 @@ These are the standing imperatives. Each links to the reference that explains it
     dialog holds no entry either: Back navigates, and the dialog closes with
     the page it was over (`rac/dialog.tsx`), so a page can go Back the
     moment a confirmation closes.
+  - **Leaving a page another page opened is `lib/leave.ts`.** The opener
+    marks the entry it pushes (`openedHere()`), and the page leaves with
+    `useLeave()(fallback)`: a real Back when one of ours opened it, so the
+    page underneath returns as it was left, else a replace with `fallback`
+    (a reload, a bookmark). It is the only `navigate(-1)` for a page
+    (`no-overlays.test.ts`); the pages had grown six names for that marker.
+  - **An organiser's page sends anyone else on** (`components/OrganisersOnly.tsx`,
+    owner decision 2026-11-03) to the public page it belongs to, signed in or
+    not, with a line saying why (and, signed out, to sign in if they are an
+    organiser) — never a page that only says they cannot be there.
+  - **Focus follows the page** (`lib/route-focus.ts`, in the Shell): arriving
+    on a page focuses its `<h1>` unless the page focused something itself,
+    and Back returns focus to the control it was left from — what a dialog
+    did for its trigger, which a page does not do by itself.
   - **The conversion is complete** ([#823](https://github.com/pokle/glidecomp/issues/823)):
     every full-screen overlay is a page, and #817 deleted what only overlays
     needed — `FullScreenSheet`, `FormSheet`, the history-entry machinery for
@@ -482,7 +499,11 @@ These are the standing imperatives. Each links to the reference that explains it
     A one-control action that is not a form (a grid row's status menu or
     Upload track, a ⋯ menu item) keeps the same rules through `useAction` +
     `ActionErrorBanner` in the same file: its refusal sits beside the
-    control, focused — `comp/TaskScoresAdmin.tsx` is the worked example.
+    control, focused — `comp/TaskScoresAdmin.tsx` is the worked example. An
+    action INSIDE a form that is not its submit (the pilot page's Remove) is
+    `useFormAction`, whose refusal goes in the form's banner, focused. A
+    refusal the page decides itself is `refusal()`, never a hand-built
+    `Response`; the submit stays busy until `onSuccess` has settled.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
     `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI

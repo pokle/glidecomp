@@ -25,13 +25,13 @@
  * shared link — it replaces this entry with the section instead, so Back from
  * there does not land on the map again.
  */
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+import { useLeave } from "../lib/leave";
 import { Card } from "@/react/rac/card";
 import { TaskAnalysisFrame } from "../analysis/TaskAnalysisFrame";
 import { useTaskAnalysis } from "../analysis/use-task-report";
 import { findTaskAnalysisSection } from "../analysis/sections";
 import {
-  FROM_THERMALS,
   NoThermalsNote,
   ThermalMapView,
   shownThermal,
@@ -44,8 +44,7 @@ export function TaskThermalMap() {
   const bundle = useTaskAnalysis();
   const { compId, taskId, comp, task, report, weather } = bundle;
   const [searchParams] = useSearchParams();
-  const location = useLocation();
-  const navigate = useNavigate();
+  const leave = useLeave();
   // The id every link carries: a hidden comp's share key rides along.
   const urlId = compUrlId(comp, compId);
   const thermalsSection = findTaskAnalysisSection("thermals")!;
@@ -72,13 +71,7 @@ export function TaskThermalMap() {
     thermalsSection.slug
   )}?${sectionQuery.toString()}`;
 
-  const restore = () => {
-    if ((location.state as Record<string, unknown> | null)?.[FROM_THERMALS]) {
-      navigate(-1);
-    } else {
-      navigate(sectionHref, { replace: true });
-    }
-  };
+  const restore = () => leave(sectionHref);
 
   const time = selected
     ? formatTimeOfDay(new Date(selected.startMs).toISOString(), comp?.timezone ?? undefined)

@@ -92,6 +92,21 @@ describe("resolveDraft", () => {
     expect(r.serverChanged).toBe(true);
     expect(r.draft).toBe(edited);
   });
+
+  it("rebases edits the server now holds, with nothing to warn about", () => {
+    // A save whose answer was lost: the draft was kept, and the save landed.
+    const edited = updateRow(freshDraft(SAVED), 1, { name: "Edited" });
+    const nowSaved = validRecords(edited.rows);
+    const flat = new Map([[2, 0]]);
+    const reviewing = startReview(edited, flat);
+    const r = resolveDraft(reviewing, nowSaved);
+    expect(r).toMatchObject({ fromStorage: true, serverChanged: false });
+    expect(r.draft.base).toBe(baselineJson(nowSaved));
+    expect(isDirty(r.draft.rows, baselineJson(nowSaved))).toBe(false);
+    // Its ids and the review in progress are the organiser's, and stay.
+    expect(r.draft.rows.map((x) => x.id)).toEqual(reviewing.rows.map((x) => x.id));
+    expect(r.draft.review).toEqual(reviewing.review);
+  });
 });
 
 describe("row ids", () => {

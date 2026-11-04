@@ -40,6 +40,7 @@ import { SimpleSelect } from "@/react/rac/select";
 import { SectionHeader } from "../components/SectionHeader";
 import { api } from "../../comp/api";
 import { downloadFile } from "../lib/format";
+import { openedHere } from "../lib/leave";
 import { ActionErrorBanner, useAction } from "@/react/rac/form";
 import { fetchWithRetry } from "./types";
 import { exportCsvContent, pilotToRow, slugify, type CompPilot } from "./csv";
@@ -186,7 +187,7 @@ export function PilotsSection({
     navigate(
       compPilotPath(compId, compName, "new") +
         (nobodyMatches ? `?${new URLSearchParams({ name: typedName })}` : ""),
-      { state: { fromList: true } }
+      openedHere()
     );
 
   async function addTestPilots() {
@@ -240,11 +241,11 @@ export function PilotsSection({
                 // "Import CSV…" always starts at choosing a file: a file
                 // chosen earlier and left unapplied is not what was asked for.
                 rosterImportDraft.clear([bareCompId(compId)]);
-                navigate(compPilotsImportPath(compId, compName), { state: { fromList: true } });
+                navigate(compPilotsImportPath(compId, compName), openedHere());
               }}
               onExport={exportCsv}
               onFillCivl={() =>
-                navigate(compPilotsCivlFillPath(compId, compName), { state: { fromList: true } })
+                navigate(compPilotsCivlFillPath(compId, compName), openedHere())
               }
               onAddTestPilots={() => void addTestPilots()}
             />
@@ -335,9 +336,10 @@ export function PilotsSection({
             onOpen={(id) => {
               const pilot = pilots.find((p) => p.comp_pilot_id === id);
               if (pilot) {
-                navigate(compPilotPath(compId, compName, pilot.comp_pilot_id, pilot.name), {
-                  state: { fromList: true },
-                });
+                navigate(
+                  compPilotPath(compId, compName, pilot.comp_pilot_id, pilot.name),
+                  openedHere()
+                );
               }
             }}
           />

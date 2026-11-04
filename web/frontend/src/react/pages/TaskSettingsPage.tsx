@@ -12,11 +12,9 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { Loading } from "@/react/rac/progress";
-import { underTask } from "../lib/crumbs";
-import { compUrlId, idFromSegment, taskPath, taskSettingsPath } from "../lib/slug";
-import { useCanonicalPath } from "../lib/use-canonical-path";
+import { idFromSegment, taskPath, taskSettingsPath } from "../lib/slug";
 import { useTaskAdminPage } from "../lib/use-task-admin-page";
 import { TaskSettings } from "../comp/settings/TaskSettings";
 
@@ -32,38 +30,20 @@ export function TaskSettingsPage() {
   // showing what it loaded before the edit.
   const [refresh, setRefresh] = useState(0);
 
-  const { comp, task, isAdmin, notFound, loading, current } = useTaskAdminPage(
+  // The address bar settles on the canonical slugged path once both names
+  // are known — the comp's name is half of it — for THIS URL's ids.
+  const { comp, task, isAdmin, notFound, loading } = useTaskAdminPage({
     compId,
     taskId,
-    (t) => `GlideComp - ${t.name} settings`,
-    refresh
-  );
-
-  // Settle the address bar on the canonical slugged path once both names are
-  // known — the comp's name is half of it — for THIS URL's ids.
-  useCanonicalPath(
-    comp && task && current
-      ? taskSettingsPath(compUrlId(comp, compId), comp.name, taskId, task.name)
-      : null
-  );
+    title: (t) => `GlideComp - ${t.name} settings`,
+    path: taskSettingsPath,
+    refresh,
+  });
 
   if (notFound) return <NotFound title="Task not found" />;
   if (loading || !comp || !task) return <Loading>Loading settings…</Loading>;
 
-  if (!isAdmin) {
-    return (
-      <div>
-        <Breadcrumbs
-          items={underTask(compId, comp.name, taskId, task.name)}
-          current="Settings"
-        />
-        <h1 className="mt-2 text-2xl font-bold">Settings</h1>
-        <p className="mt-2 text-muted-foreground">
-          Task settings are for the competition’s organisers.
-        </p>
-      </div>
-    );
-  }
+  if (!isAdmin) return <OrganisersOnly to={taskPath(compId, comp.name, taskId, task.name)} />;
 
   return (
     <TaskSettings

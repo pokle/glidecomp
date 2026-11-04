@@ -32,53 +32,71 @@ export function SettingsForm({
   validate,
   fieldNames,
   dirty,
+  submitLabel = "Save",
+  pendingLabel,
+  disableWhenClean = false,
+  guard = {
+    title: "Discard changes?",
+    message: "This page has unsaved changes. Leaving will discard them.",
+  },
   children,
 }: {
   /** Builds and sends the sub-page's PATCH; the caller owns the payload. */
   onSubmit: () => Promise<SubmitResponse>;
-  /** After the server said yes. */
-  onSuccess: () => void;
+  /** After the server said yes, with its answer. */
+  onSuccess: (res: SubmitResponse | undefined) => void | Promise<void>;
   /** The page's own checks: field name → message (see rac/form.tsx). */
   validate?: () => Record<string, string | undefined | null | false>;
   /** The server's field names, mapped onto this page's field `name`s. */
   fieldNames?: Record<string, string>;
   /** Arms the navigation guard and shows the unsaved hint. */
   dirty: boolean;
+  submitLabel?: string;
+  pendingLabel?: string;
+  /**
+   * Save disabled while there is nothing to save — the profile, where an
+   * untouched Save means nothing (a settings page's does: see above).
+   */
+  disableWhenClean?: boolean;
+  /** The unsaved-changes guard's question. */
+  guard?: { title: string; message: string };
   children: ReactNode;
 }) {
-  useUnsavedChangesGuard(dirty, {
-    title: "Discard changes?",
-    message: "This page has unsaved changes. Leaving will discard them.",
-  });
+  useUnsavedChangesGuard(dirty, guard);
 
   return (
     <Form
       onSubmit={onSubmit}
-      onSuccess={() => onSuccess()}
+      onSuccess={onSuccess}
       validate={validate}
       fieldNames={fieldNames}
       className="flex flex-col gap-6"
     >
       {children}
-      <SaveRow dirty={dirty} />
+      <div className="flex flex-col gap-3">
+        <FormErrorBanner />
+        <div className="flex items-center gap-3">
+          {/* isDisabled for "nothing to save" (a standing state); the kit's
+              pending state for the save in flight — two different things. */}
+          <SubmitButton isDisabled={disableWhenClean && !dirty} pendingLabel={pendingLabel}>
+            {submitLabel}
+          </SubmitButton>
+          <UnsavedHint dirty={dirty} />
+        </div>
+      </div>
     </Form>
   );
 }
 
-/** Save, with the error that belongs to no field directly above it. */
-function SaveRow({ dirty }: { dirty: boolean }) {
+/**
+ * The dirty hint doubles as the explanation for what Save will do; role=status
+ * so the state change is announced.
+ */
+function UnsavedHint({ dirty }: { dirty: boolean }) {
   const { pending } = useFormState();
   return (
-    <div className="flex flex-col gap-3">
-      <FormErrorBanner />
-      <div className="flex items-center gap-3">
-        <SubmitButton>Save</SubmitButton>
-        {/* The dirty hint doubles as the explanation for what Save will do;
-            role=status so the state change is announced. */}
-        <span role="status" className="text-sm text-muted-foreground">
-          {dirty && !pending ? "Unsaved changes" : ""}
-        </span>
-      </div>
-    </div>
+    <span role="status" className="text-sm text-muted-foreground">
+      {dirty && !pending ? "Unsaved changes" : ""}
+    </span>
   );
 }

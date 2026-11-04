@@ -30,7 +30,12 @@ import { NotFound } from "./components/NotFound";
  * that way: entry-server renders them, and a lazy boundary the server resolved
  * but the client hasn't fetched yet is exactly what makes hydration fall back
  * to a client render — discarding the SSR markup this architecture exists to
- * produce. See functions/comp/[[path]].ts ROUTES for the authoritative list.
+ * produce. Which routes those are is `COMP_SSR_ROUTES` in comp-routes.ts.
+ *
+ * Every `/comp` route below needs an answer there — server-rendered, a
+ * noindex shell (`COMP_SHELL_ROUTES`) or a redirect — or the SSR Function
+ * 404s it in production, though dev serves it. comp-routes.test.ts reads this
+ * file and fails on one that has none, so keep each `path` a string literal.
  */
 import { Competitions } from "./pages/Competitions";
 // Eager, not lazy: this is the homepage's primary call to action, so a pilot
@@ -195,7 +200,7 @@ export function AppProviders({
 /**
  * The per-task analysis lives under the task again:
  * /comp/:c/analysis/task/:t → /comp/:c/task/:t/analysis, and likewise for the
- * similarity sheet below it. Keeps old links (and anyone's open tab) working.
+ * similarity page below it. Keeps old links (and anyone's open tab) working.
  * `?class=`, `?pilot=` and friends are carried across — they are the shareable
  * part of the URL.
  *
@@ -291,9 +296,10 @@ export function AppRoutes() {
                 at /analysis, and one chapter per task UNDER THAT TASK — see the
                 task routes below. The comp report collects the chapters; it does
                 not own their URLs, and the breadcrumbs agree (lib/crumbs.ts).
-                PUBLIC and server-rendered since July 2026 — both have ROUTES
-                entries in functions/comp/[[path]].ts, and a cold report renders
-                its pending notice server-side (noindex) while the client polls.
+                PUBLIC and server-rendered since July 2026 — both have
+                COMP_SSR_ROUTES entries in comp-routes.ts, and a cold report
+                renders its pending notice server-side (noindex) while the
+                client polls.
                 A hidden `test` comp still 404s for non-admins. */}
             <Route path="/comp/:compId/analysis" element={<CompAnalysis />} />
             {/* Creating a task: a page, not a dialog over the comp (#819).
@@ -369,10 +375,10 @@ export function AppRoutes() {
               element={<TaskAnalysis />}
             />
             {/* Pilot-to-pilot behavioural similarity, a leaf of the chapter it
-                derives from. Client-only, so it needs a NOINDEX_SHELL_ROUTES
-                entry in functions/comp/[[path]].ts rather than a loader. It is
-                a STATIC segment, so it out-ranks the :section route below
-                whichever order they are declared in. */}
+                derives from. Client-only, so it needs a COMP_SHELL_ROUTES
+                entry in comp-routes.ts rather than a loader. It is a STATIC
+                segment, so it out-ranks the :section route below whichever
+                order they are declared in. */}
             <Route
               path="/comp/:compId/task/:taskId/analysis/similar"
               element={<TaskPilotSimilarity />}
@@ -381,14 +387,16 @@ export function AppRoutes() {
                 the screen — a leaf of the thermals section, where it was a
                 full-screen sheet until #816. Two segments deep, so the
                 :section route below can never match it; a noindex shell in
-                functions/comp/[[path]].ts. */}
+                comp-routes.ts. */}
             <Route
               path="/comp/:compId/task/:taskId/analysis/thermals/map"
               element={<TaskThermalMap />}
             />
-            {/* One section of the chapter, each showing that one thing. Five
+            {/* One section of the chapter, each showing that one thing. Six
                 slugs, listed in analysis/sections.ts and matched by the
-                SSR Function's own pattern; anything else renders NotFound. */}
+                SSR Function's own pattern (comp-routes.ts); anything else
+                renders NotFound. The leaf pages under a section (the metric
+                chart, the thermal map) are routes of their own. */}
             <Route
               path="/comp/:compId/task/:taskId/analysis/:section"
               element={<TaskAnalysisSection />}

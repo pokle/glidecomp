@@ -8,7 +8,7 @@
  *   - **It lists the teams there are**, each with its pilot count, narrowing
  *     as you type. Usually you pick one.
  *   - **A new team is a deliberate choice.** A name that is no team appears at
- *     the foot of the list as "New team: …", and the sheet will not save one
+ *     the foot of the list as "New team: …", and the page will not save one
  *     until it is chosen (PilotForm's `validate`).
  *   - **A near miss is caught.** A name a slip away from a team is offered as
  *     "Did you mean …?" above "New team". A name that differs only in case,

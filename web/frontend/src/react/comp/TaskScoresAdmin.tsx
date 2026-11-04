@@ -30,7 +30,7 @@ import { FileTrigger, Link as AriaLink } from "react-aria-components";
 import type { XCTask } from "@glidecomp/engine";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
-import { ActionErrorBanner, UNREACHABLE, useAction } from "@/react/rac/form";
+import { ActionErrorBanner, useAction } from "@/react/rac/form";
 import { SimpleSelect } from "@/react/rac/select";
 import { GridList, GridListItem } from "@/react/rac/grid-list";
 import { cn } from "@/react/lib/utils";
@@ -45,6 +45,7 @@ import { ScoreFreshness } from "./ScoreFreshness";
 import { compressIgc } from "./types";
 import {
   NOT_AN_IGC_MESSAGE,
+  UNREADABLE_FILE_MESSAGE,
   describeUploadOutcome,
   tooLargeReason,
   type TrackQualityWire,
@@ -640,7 +641,9 @@ function RowManage({
     try {
       compressed = await compressIgc(file);
     } catch {
-      action.refuse(UNREACHABLE);
+      // Nothing was sent: the file could not be read, which is not a
+      // dropped connection.
+      action.refuse(UNREADABLE_FILE_MESSAGE);
       return;
     }
     // The size rule is the server's, both halves of it. This used to be an
@@ -654,7 +657,8 @@ function RowManage({
       fetch(
         `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(row.compPilotId)}`,
         { method: "POST", credentials: "include", body: compressed }
-      )
+      ),
+      { key: "upload" }
     );
     if (!res) return;
     const data = (await res.json().catch(() => ({}))) as {
@@ -695,7 +699,8 @@ function RowManage({
       fetch(
         `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(row.compPilotId)}/restore`,
         { method: "POST", credentials: "include" }
-      )
+      ),
+      { key: "restore" }
     );
     if (res) onMutated();
   }
@@ -734,7 +739,15 @@ function RowManage({
             acceptedFileTypes={[".igc"]}
             onSelect={(files) => void uploadTrackFile(files)}
           >
-            <Button variant="outline" isDisabled={busy} className={tap}>
+            <Button
+              variant="outline"
+              // Busy while its own upload is in flight; another of the row's
+              // actions in flight leaves it unavailable meanwhile.
+              isPending={action.pendingKey === "upload"}
+              pendingLabel={`Uploading ${row.name}'s track`}
+              isDisabled={busy && action.pendingKey !== "upload"}
+              className={tap}
+            >
               {row.evidence === "track" ? "Replace track" : "Upload track"}
             </Button>
           </FileTrigger>
@@ -757,7 +770,9 @@ function RowManage({
         <TooltipTrigger>
           <Button
             variant="outline"
-            isDisabled={busy}
+            isPending={action.pendingKey === "restore"}
+            pendingLabel={`Restoring ${row.name}'s track`}
+            isDisabled={busy && action.pendingKey !== "restore"}
             onPress={() => void restoreTrack()}
             className={tap}
           >

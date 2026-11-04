@@ -8,6 +8,10 @@
  * fix — a sign-in, a closed comp, a duplicated roster row — names none, and is
  * shown beside Submit with who to ask. `SUBMIT_FIELD` in submission-gate.ts;
  * docs/track-submission.md, "Errors are repairable".
+ *
+ * The refusals the three routes share are phrased ONCE (`submissionComp`,
+ * `submissionTask`, `uploadRejection`), so the last block here holds them to
+ * the same body on every route — code, words, organisers and all.
  */
 import { beforeEach, describe, expect, test } from "vitest";
 import {
@@ -191,8 +195,33 @@ describe("the signed-in upload names the field that can fix it", () => {
 
   test("a hidden comp answers exactly as a missing one", async () => {
     const hidden = await compWithPilot({ test: true });
-    const data = await bodyOf(await upload(hidden.compId, hidden.taskId, AS_NEW_PILOT));
-    expect(data).toEqual({ error: "Competition not found", field: "task" });
+    const res = await upload(hidden.compId, hidden.taskId, AS_NEW_PILOT);
+    expect(res.status).toBe(404);
+    // The anonymous route's answer, word for word: the same gate.
+    const data = await bodyOf(res);
+    expect(data).toEqual({ error: "We could not find that competition.", code: "comp_not_found", field: "task" });
+
+    // And a comp that really is missing answers the same, so the two cannot
+    // be told apart.
+    const { compId } = await compWithPilot();
+    await authRequest("DELETE", `/api/comp/${compId}`);
+    const missing = await upload(compId, hidden.taskId, AS_NEW_PILOT);
+    expect(missing.status).toBe(404);
+    expect(await bodyOf(missing)).toEqual(data);
+  });
+
+  test("a closed competition names no field, but the organisers", async () => {
+    const { compId, taskId } = await compWithPilot({ close_date: "2020-01-01" });
+    const res = await upload(compId, taskId, AS_NEW_PILOT);
+    expect(res.status).toBe(400);
+    const data = await bodyOf(res);
+    expect(data).toMatchObject({
+      code: "comp_closed",
+      error: "Test Comp has closed for track submissions.",
+      close_date: "2020-01-01",
+    });
+    expect(data).not.toHaveProperty("field");
+    expect(data.organisers).toEqual([{ email: "pilot@test.com", name: "Test Pilot" }]);
   });
 
   test("a comp that does not take self-registration names no field", async () => {
@@ -229,6 +258,116 @@ describe("the on-behalf upload names the field that can fix it", () => {
     const { compId, taskId, compPilotId } = await compWithPilot({ close_date: "2020-01-01" });
     const res = await onBehalf(compId, taskId, compPilotId);
     expect(res.status).toBe(400);
-    expect(await bodyOf(res)).not.toHaveProperty("field");
+    const data = await bodyOf(res);
+    expect(data.code).toBe("comp_closed");
+    expect(data).not.toHaveProperty("field");
+  });
+});
+
+describe("the three upload routes answer a shared refusal in one body", () => {
+  /** The same refusal from the self, on-behalf and anonymous routes. */
+  async function allThree(
+    compId: string,
+    taskId: string,
+    compPilotId: string,
+    body: Uint8Array = fakeIgcPayload()
+  ): Promise<Array<{ status: number; body: Body }>> {
+    const responses = [
+      // user-2 is not this comp's organiser, so a closed task stops them.
+      await uploadRequest(`/api/comp/${compId}/task/${taskId}/igc`, body, {
+        user: "user-2",
+        headers: AS_NEW_PILOT,
+      }),
+      await uploadRequest(`/api/comp/${compId}/task/${taskId}/igc/${compPilotId}`, body, {
+        user: "user-1",
+      }),
+      await anonUploadRequest(compId, taskId, body, { kind: "civl_id", value: "12345" }),
+    ];
+    return Promise.all(responses.map(async (r) => ({ status: r.status, body: await bodyOf(r) })));
+  }
+
+  function expectAlike(answers: Array<{ status: number; body: Body }>): void {
+    for (const answer of answers.slice(1)) expect(answer).toEqual(answers[0]);
+  }
+
+  test("a closed competition", async () => {
+    const { compId, taskId, compPilotId } = await compWithPilot({ close_date: "2020-01-01" });
+    const answers = await allThree(compId, taskId, compPilotId);
+    expect(answers[0]).toMatchObject({ status: 400, body: { code: "comp_closed" } });
+    expectAlike(answers);
+  });
+
+  test("a task that is not the competition's", async () => {
+    const { compId, compPilotId } = await compWithPilot();
+    const strayTask = await createTask(await createComp());
+    const answers = await allThree(compId, strayTask, compPilotId);
+    expect(answers[0]).toMatchObject({
+      status: 404,
+      body: { code: "task_not_found", field: "task", error: "That task is not part of Test Comp." },
+    });
+    expectAlike(answers);
+  });
+
+  test("a file that is not an IGC", async () => {
+    const { compId, taskId, compPilotId } = await compWithPilot();
+    const answers = await allThree(compId, taskId, compPilotId, NOT_AN_IGC);
+    expect(answers[0]).toMatchObject({ status: 400, body: { code: "invalid_file", field: "file" } });
+    expect(answers[0].body.reason).toEqual(expect.any(String));
+    expectAlike(answers);
+  });
+});
+
+describe("the gate keeps its order", () => {
+  // Cheapest rejection first, and each route's own rule where it always sat.
+  // A refactor that reordered these would change which refusal a pilot reads.
+
+  test("anonymously, a comp wanting a sign-in says so before its close date", async () => {
+    const { compId, taskId } = await compWithPilot({ close_date: "2020-01-01" });
+    await authRequest("PATCH", `/api/comp/${compId}`, { open_igc_upload: false });
+    const res = await anonUploadRequest(compId, taskId, fakeIgcPayload(), {
+      kind: "civl_id",
+      value: "12345",
+    });
+    expect(res.status).toBe(403);
+    expect((await bodyOf(res)).code).toBe("anonymous_not_permitted");
+  });
+
+  test("on behalf, the close date comes before the authorisation, and that before the task", async () => {
+    const { compId, compPilotId } = await compWithPilot();
+    await authRequest("PATCH", `/api/comp/${compId}`, { open_igc_upload: false });
+    const strayTask = await createTask(await createComp());
+    // user-2 may not upload for others here: told so, not that the task is
+    // somebody else's.
+    const unauthorised = await uploadRequest(
+      `/api/comp/${compId}/task/${strayTask}/igc/${compPilotId}`,
+      fakeIgcPayload(),
+      { user: "user-2" }
+    );
+    expect(unauthorised.status).toBe(403);
+
+    await authRequest("PATCH", `/api/comp/${compId}`, { close_date: "2020-01-01" });
+    const closed = await uploadRequest(
+      `/api/comp/${compId}/task/${strayTask}/igc/${compPilotId}`,
+      fakeIgcPayload(),
+      { user: "user-2" }
+    );
+    expect(closed.status).toBe(400);
+    expect((await bodyOf(closed)).code).toBe("comp_closed");
+  });
+
+  test("an organiser passes a task closed for the day, on both signed-in routes", async () => {
+    const { compId, taskId, compPilotId } = await compWithPilot();
+    await closeTask(compId, taskId);
+    const onBehalf = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${compPilotId}`,
+      fakeIgcPayload(),
+      { user: "user-1" }
+    );
+    expect(onBehalf.status).toBe(201);
+    const self = await uploadRequest(`/api/comp/${compId}/task/${taskId}/igc`, fakeIgcPayload(), {
+      user: "user-1",
+      headers: AS_NEW_PILOT,
+    });
+    expect(self.status).toBe(201);
   });
 });

@@ -39,7 +39,7 @@ import {
   scoringFormatLabel,
 } from "../lib/format";
 import { useInitialData } from "../lib/initial-data";
-import { compPath, compUrlId } from "../lib/slug";
+import { compPath, compUrlId, newCompPath } from "../lib/slug";
 import { SearchResults } from "../search/SearchResults";
 import { MIN_SEARCH_CHARS, useSiteSearch } from "../search/use-site-search";
 import type { CompListEntry, CompetitionsLoaderData } from "../loaders";
@@ -147,7 +147,7 @@ export function Competitions() {
             className="min-w-0 flex-1"
           />
           <LinkButton
-            href="/comp/new"
+            href={newCompPath()}
             aria-label="Start a new competition"
             className="size-12 shrink-0 rounded-full shadow-lg"
           >

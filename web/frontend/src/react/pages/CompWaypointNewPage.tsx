@@ -16,30 +16,12 @@
  * list, or to the full-size map with Add from map still armed. Nothing is
  * saved until Save on the list. Back is Cancel, and so is the Cancel button.
  */
-import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { SectionHeader } from "../components/SectionHeader";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Button } from "@/react/rac/button";
-import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { underCompWaypoints } from "../lib/crumbs";
 import { compWaypointsNewPath, compWaypointsPath } from "../lib/slug";
-import { toast } from "../lib/toast";
 import { useCanonicalPath } from "../lib/use-canonical-path";
-import {
-  AddWaypointFields,
-  buildNewWaypoint,
-  newWaypointProblems,
-  readNewWaypointSeed,
-  useNewWaypoint,
-  type NewWaypointSeed,
-} from "../comp/AddWaypointForm";
-import {
-  FROM_WAYPOINTS,
-  FROM_WAYPOINTS_MAP,
-  useWaypointsEditor,
-  type WaypointsEditor,
-} from "../comp/use-waypoints-editor";
+import { NewWaypointPage, readNewWaypointSeed } from "../comp/AddWaypointForm";
+import { useWaypointsEditor } from "../comp/use-waypoints-editor";
 import { waypointsEditorGate } from "../comp/WaypointsEditorGate";
 import { addRecord } from "../comp/waypoints-draft";
 
@@ -48,59 +30,23 @@ export function CompWaypointNewPage() {
   const [searchParams] = useSearchParams();
   const { urlId, compName } = editor;
 
-  useCanonicalPath(
-    compName ? compWaypointsNewPath(urlId, compName) : null
-  );
+  useCanonicalPath(compName ? compWaypointsNewPath(urlId, compName) : null);
 
   const gate = waypointsEditorGate(editor);
   if (gate) return gate;
   // Mounted once the draft is known, so the code it suggests is unique among
   // the codes the draft holds.
-  return <NewWaypointForm editor={editor} seed={readNewWaypointSeed(searchParams)} />;
-}
-
-function NewWaypointForm({ editor, seed: seedNow }: { editor: WaypointsEditor; seed: NewWaypointSeed }) {
-  const { urlId, compName } = editor;
-  // Where it started, read once: the fields are the reader's from here on.
-  const [seed] = useState(seedNow);
-  const [taken] = useState(() => editor.draft.rows.map((r) => r.code));
-  const waypoint = useNewWaypoint(seed, taken);
-  const leave = () =>
-    editor.leave(compWaypointsPath(urlId, compName), FROM_WAYPOINTS, FROM_WAYPOINTS_MAP);
-
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={underCompWaypoints(urlId, compName)} current="Add waypoint" />
-      <Form
-        validate={() => newWaypointProblems(waypoint.state)}
+    <NewWaypointPage
+      crumbs={underCompWaypoints(urlId, compName)}
+      seed={readNewWaypointSeed(searchParams)}
+      codes={() => editor.draft.rows.map((r) => r.code)}
+      onAdd={(record) => {
         // Nothing to send: a new waypoint joins the draft, saved with the set.
-        onSubmit={async () => undefined}
-        onSuccess={() => {
-          const built = buildNewWaypoint(waypoint.state, editor.draft.rows.map((r) => r.code));
-          if (!built) return;
-          if (built.adjusted) toast.warning(built.adjusted);
-          editor.update((d) => addRecord(d, built.record).draft);
-          leave();
-        }}
-      >
-        <SectionHeader
-          as="h1"
-          className="mt-2"
-          title="Add waypoint"
-          action={
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onPress={leave}>
-                Cancel
-              </Button>
-              <SubmitButton pendingLabel="Adding">Add</SubmitButton>
-            </div>
-          }
-        />
-        <FormErrorBanner className="mt-3" />
-        <div className="mt-4 flex flex-col gap-4">
-          <AddWaypointFields seed={seed} waypoint={waypoint} />
-        </div>
-      </Form>
-    </div>
+        editor.update((d) => addRecord(d, record).draft);
+        return `Added ${record.code}. Save to keep it.`;
+      }}
+      onLeave={() => editor.leave(compWaypointsPath(urlId, compName))}
+    />
   );
 }

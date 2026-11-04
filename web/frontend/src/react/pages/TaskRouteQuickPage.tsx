@@ -126,7 +126,6 @@ function QuickEntryForm({ editor }: { editor: RouteEditorState }) {
       />
       <Form
         // Nothing to send: the route joins the draft, saved with the route.
-        onSubmit={async () => undefined}
         onSuccess={() => {
           editor.update((d) => applyQuickEntry(d, parsed, { openDistance }));
           editor.leave();

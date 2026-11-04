@@ -20,29 +20,16 @@ import {
   supersedeActiveManualFlights,
   markLandedFromEvidence,
 } from "../manual-flight-store";
-import { ingestTrackSubmission, type TrackSubmissionRejection } from "../track-upload";
+import { ingestTrackSubmission } from "../track-upload";
 import {
-  isCompClosed,
   maskEmail,
   organisersOf,
-  submissionsClosedBody,
+  submissionComp,
+  submissionTask,
   SUBMIT_FIELD,
+  uploadRejection,
 } from "../submission-gate";
-import { hiddenFromCaller, hiddenFromViewer } from "../comp-visibility";
-
-/**
- * The signed-in routes' answer when the pipeline refuses a file. A bad file
- * names the file field, so the form shows the message under it; a full task is
- * the organiser's to fix, so it names no field.
- */
-function uploadRejection(rejection: TrackSubmissionRejection): {
-  error: string;
-  field?: typeof SUBMIT_FIELD.file;
-} {
-  return rejection.kind === "invalid_file"
-    ? { error: rejection.message, field: SUBMIT_FIELD.file }
-    : { error: rejection.message };
-}
+import { hiddenFromViewer } from "../comp-visibility";
 
 /**
  * Ensure a `pilot` row exists for the given user. Returns the pilot_id.
@@ -279,56 +266,20 @@ export const igcRoutes = new Hono<AuthedEnv>()
       const taskId = c.var.ids.task_id!;
       const alphabet = c.env.SQIDS_ALPHABET;
 
-      // Verify comp exists and check close_date
-      const comp = await c.env.DB.prepare(
-        "SELECT comp_id, name, close_date, default_pilot_class, open_registration, test FROM comp WHERE comp_id = ?"
-      )
-        .bind(compId)
-        .first<{
-          comp_id: number;
-          name: string;
-          close_date: string | null;
-          default_pilot_class: string;
-          open_registration: number;
-          test: number;
-        }>();
+      // The comp: real, visible to this caller (a hidden test comp answers
+      // exactly as a missing one does), and not past its close date.
+      const gate = await submissionComp(c.env.DB, alphabet, compId, user);
+      if ("refusal" in gate) return c.json(gate.refusal.body, gate.refusal.status);
+      const { comp } = gate;
 
-      if (!comp) {
-        return c.json({ error: "Competition not found", field: SUBMIT_FIELD.task }, 404);
-      }
-
-      // A hidden test comp answers exactly as a missing one does — being
-      // signed in is not a claim to somebody's rehearsal.
-      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
-        return c.json({ error: "Competition not found", field: SUBMIT_FIELD.task }, 404);
-      }
-
-      if (isCompClosed(comp.close_date)) {
-        return c.json(
-          { error: "Competition is closed for track submissions" },
-          400
-        );
-      }
-
-      // Verify task exists and belongs to comp
-      const task = await c.env.DB.prepare(
-        "SELECT task_id, name, submissions_closed FROM task WHERE task_id = ? AND comp_id = ?"
-      )
-        .bind(taskId, compId)
-        .first<{ task_id: number; name: string; submissions_closed: number }>();
-
-      if (!task) {
-        return c.json({ error: "Task not found", field: SUBMIT_FIELD.task }, 404);
-      }
-
-      // Closed for the day. Before the body read: a refusal should cost a
-      // header parse, not a megabyte and a decompression.
-      if (task.submissions_closed && !(await isCompAdmin(c.env.DB, compId, user))) {
-        return c.json(
-          { ...(await submissionsClosedBody(c.env.DB, compId, taskId)), field: SUBMIT_FIELD.task },
-          403
-        );
-      }
+      // The task: this comp's, and not closed for the day — which the comp's
+      // organisers pass. Before the body read: a refusal should cost a header
+      // parse, not a megabyte and a decompression.
+      const opened = await submissionTask(c.env.DB, alphabet, comp, taskId, () =>
+        isCompAdmin(c.env.DB, compId, user)
+      );
+      if ("refusal" in opened) return c.json(opened.refusal.body, opened.refusal.status);
+      const { task } = opened;
 
       // WHO before WHAT. Identity is resolved ahead of the body read so an
       // unanswerable one costs a header parse rather than a megabyte and a
@@ -469,7 +420,10 @@ export const igcRoutes = new Hono<AuthedEnv>()
         describeUpload: ({ replaced, size, previously }) =>
           `${replaced ? "Replaced" : "Uploaded"} IGC for ${filedForName} (${size})${previously}`,
       });
-      if (!ingested.ok) return c.json(uploadRejection(ingested.rejection), 400);
+      if (!ingested.ok) {
+        const refusal = await uploadRejection(c.env.DB, compId, ingested.rejection);
+        return c.json(refusal.body, refusal.status);
+      }
 
       return c.json(ingested.result, ingested.status);
     }
@@ -489,32 +443,12 @@ export const igcRoutes = new Hono<AuthedEnv>()
       const user = c.var.user;
       const alphabet = c.env.SQIDS_ALPHABET;
 
-      // Look up the comp once — need open_igc_upload to gate authorisation
-      const comp = await c.env.DB.prepare(
-        "SELECT comp_id, name, close_date, open_igc_upload, test FROM comp WHERE comp_id = ?"
-      )
-        .bind(compId)
-        .first<{
-          comp_id: number;
-          name: string;
-          close_date: string | null;
-          open_igc_upload: number;
-          test: number;
-        }>();
-      if (!comp) return c.json({ error: "Competition not found", field: SUBMIT_FIELD.task }, 404);
-
       // As the self route: a hidden test comp is missing to everyone but its
-      // admins, whichever pilot the track is being filed for.
-      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
-        return c.json({ error: "Competition not found", field: SUBMIT_FIELD.task }, 404);
-      }
-
-      if (isCompClosed(comp.close_date)) {
-        return c.json(
-          { error: "Competition is closed for track submissions" },
-          400
-        );
-      }
+      // admins, whichever pilot the track is being filed for. The comp row
+      // carries open_igc_upload, which gates the authorisation below.
+      const gate = await submissionComp(c.env.DB, alphabet, compId, user);
+      if ("refusal" in gate) return c.json(gate.refusal.body, gate.refusal.status);
+      const { comp } = gate;
 
       // Authorisation: admin OR registered pilot (when open_igc_upload enabled)
       const isAdmin = await isCompAdmin(c.env.DB, compId, user);
@@ -541,25 +475,17 @@ export const igcRoutes = new Hono<AuthedEnv>()
         }
       }
 
-      // Verify task exists and belongs to comp
-      const task = await c.env.DB.prepare(
-        "SELECT task_id, name, submissions_closed FROM task WHERE task_id = ? AND comp_id = ?"
-      )
-        .bind(taskId, compId)
-        .first<{ task_id: number; name: string; submissions_closed: number }>();
-
-      if (!task) {
-        return c.json({ error: "Task not found", field: SUBMIT_FIELD.task }, 404);
-      }
-
-      // Closed for the day. `isAdmin` is already resolved above, so the
-      // organiser bypass costs nothing extra here.
-      if (task.submissions_closed && !isAdmin) {
-        return c.json(
-          { ...(await submissionsClosedBody(c.env.DB, compId, taskId)), field: SUBMIT_FIELD.task },
-          403
-        );
-      }
+      // The task, and whether it is closed for the day. `isAdmin` is already
+      // resolved above, so the organiser bypass costs nothing extra here.
+      const opened = await submissionTask(
+        c.env.DB,
+        alphabet,
+        comp,
+        taskId,
+        async () => isAdmin
+      );
+      if ("refusal" in opened) return c.json(opened.refusal.body, opened.refusal.status);
+      const { task } = opened;
 
       // Verify comp_pilot exists and belongs to this comp
       const cp = await c.env.DB.prepare(
@@ -593,7 +519,10 @@ export const igcRoutes = new Hono<AuthedEnv>()
         describeUpload: ({ replaced, size, previously }) =>
           `${replaced ? "Replaced" : "Uploaded"} IGC for ${targetPilotName} on behalf (${size})${previously}`,
       });
-      if (!ingested.ok) return c.json(uploadRejection(ingested.rejection), 400);
+      if (!ingested.ok) {
+        const refusal = await uploadRejection(c.env.DB, compId, ingested.rejection);
+        return c.json(refusal.body, refusal.status);
+      }
 
       return c.json(ingested.result, ingested.status);
     }

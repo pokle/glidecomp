@@ -5,6 +5,7 @@
  * last Base UI pieces (the two selects) converted with the CompDetail page.
  */
 import { PILOT_CLASS_EXAMPLES } from "./comp-fields";
+import { parseCoords } from "./route-editor";
 import { useState } from "react";
 import {
   Button as AriaButton,
@@ -22,6 +23,7 @@ import {
   TextField,
 } from "@/react/rac/field";
 import { ChoiceList } from "@/react/rac/choice-list";
+import { useOptionalFormState } from "@/react/rac/form";
 import {
   fromAltitudeInput,
   getUnitLabel,
@@ -30,6 +32,64 @@ import {
 } from "@/react/lib/units";
 
 export { SimpleSelect } from "@/react/rac/select";
+
+/** What is wrong with coordinates that do not read as "lat, lon". */
+export const COORDS_HINT = 'Enter "lat, lon" decimal degrees';
+/** What is wrong with coordinates a form needs and was not given. */
+export const COORDS_MISSING = 'Enter the coordinates as "lat, lon"';
+
+/**
+ * The problem with `text` as coordinates, or null: blank is fine unless the
+ * form needs them. For a kit form's `validate`, which is what refuses a submit;
+ * {@link CoordsField} shows the malformed case live as well.
+ */
+export function coordsProblem(text: string, required = false): string | null {
+  if (String(text).trim() === "") return required ? COORDS_MISSING : null;
+  return parseCoords(String(text)) ? null : COORDS_HINT;
+}
+
+/**
+ * One "lat, lon" field — the waypoint, the turnpoint, a new waypoint, the
+ * altitude review and a manual flight's landing point. A malformed pair is
+ * flagged as it is typed. A missing one is flagged as it is typed only where
+ * the field is `required` and starts filled in (a waypoint's own page, where
+ * clearing it is the mistake); elsewhere only when the form is submitted (its
+ * `validate`, with {@link coordsProblem}), so a page does not open with an
+ * error on it.
+ */
+export function CoordsField({
+  label = "Coordinates (lat, lon)",
+  name = "coords",
+  value,
+  onChange,
+  description,
+  placeholder = "-36.550979, 147.890395",
+  required = false,
+  className,
+}: {
+  label?: string;
+  name?: string;
+  value: string;
+  onChange: (value: string) => void;
+  description?: string;
+  placeholder?: string;
+  required?: boolean;
+  className?: string;
+}) {
+  return (
+    <TextField
+      label={label}
+      name={name}
+      value={value}
+      onChange={onChange}
+      description={description}
+      placeholder={placeholder}
+      spellCheck="false"
+      className={className}
+      validate={(v) => coordsProblem(v, required)}
+    />
+  );
+}
 
 export interface SelectOption {
   value: string;
@@ -246,6 +306,9 @@ export function PilotClassesField({
   name?: string;
 }) {
   const examples = PILOT_CLASS_EXAMPLES[wing];
+  // An example chip sets the value without an input event of its own, which
+  // is what clears a field's error in a kit form — so it clears it itself.
+  const form = useOptionalFormState();
   return (
     <AriaTextField
       value={value}
@@ -263,7 +326,10 @@ export function PilotClassesField({
         {examples.map((example) => (
           <AriaButton
             key={example}
-            onPress={() => onChange(example)}
+            onPress={() => {
+              onChange(example);
+              form?.clearFieldError(name);
+            }}
             aria-label={`Use example: ${example}`}
             // 44px on a phone (issue #641). These are chips meant to be
             // tapped, and the row can simply grow — it is the last thing on

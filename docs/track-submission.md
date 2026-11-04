@@ -548,9 +548,13 @@ refusals, so they land by the same rule.
 | `identity_ambiguous` | 409 | `registration` | Saying which registration is theirs |
 | `claim_rejected` | 409 | `registration` | Picking another, or the organiser |
 
-The signed-in routes answer a missing comp or task, and a bad file, without a
-`code` (only the anonymous route has the full set); they carry the `field` all
-the same. An unreadable `x-comp-pilot` header names `registration`.
+The three upload routes — signed-in self, on-behalf, and anonymous — answer
+the comp and task checks and a refused file with the SAME body, code and
+`field` (one gate, `submission-gate.ts`, since 2026-11): before that the
+signed-in routes sent no `code`, and a signed-in pilot over a task's pilot
+limit was not told which organiser to write to. The codes only the anonymous
+route can meet (an identifier, an anonymous submission) stay its own. An
+unreadable `x-comp-pilot` header names `registration`.
 
 Where the pilot cannot fix it, the answer names the organiser and carries their
 address so the form can render a `mailto:` — the same thing the public comp

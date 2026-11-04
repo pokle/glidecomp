@@ -28,7 +28,7 @@ import { TextField, Description, Label } from "@/react/rac/field";
 import { DatePicker, TimePicker } from "@/react/rac/date-picker";
 import { Explain } from "@/react/rac/explain";
 import { api } from "@/comp/api";
-import { toast } from "@/react/lib/toast";
+import { ActionErrorBanner, useAction } from "@/react/rac/form";
 import { useConfirm } from "@/react/lib/confirm";
 import { underTask } from "@/react/lib/crumbs";
 import { compPath } from "@/react/lib/slug";
@@ -104,6 +104,8 @@ export function TaskSettings({
       ? zonedDateTimeLocalToUtcISO(`${taskDate}T${stopTime}`, timezone)
       : null;
 
+  const deletion = useAction();
+
   async function deleteTask() {
     const confirmed = await confirm({
       title: "Delete this task?",
@@ -112,22 +114,14 @@ export function TaskSettings({
       destructive: true,
     });
     if (!confirmed) return;
-
-    try {
-      const res = await api.api.comp[":comp_id"].task[":task_id"].$delete({
-        param: { comp_id: compId, task_id: taskId },
-      });
-
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to delete task");
-        return;
-      }
-
-      navigate(compPath(compId, comp.name));
-    } catch {
-      toast.error("Network error. Please try again.");
-    }
+    const res = await deletion.run(
+      () =>
+        api.api.comp[":comp_id"].task[":task_id"].$delete({
+          param: { comp_id: compId, task_id: taskId },
+        }),
+      { fallback: "Failed to delete the task." }
+    );
+    if (res) navigate(compPath(compId, comp.name));
   }
 
   return (
@@ -234,9 +228,12 @@ export function TaskSettings({
         <NavActionRow
           destructive
           label="Delete task"
+          isPending={deletion.pending}
+          pendingLabel="Deleting the task"
           onPress={() => void deleteTask()}
         />
       </NavList>
+      <ActionErrorBanner action={deletion} />
     </SettingsPage>
   );
 }

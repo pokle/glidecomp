@@ -39,6 +39,7 @@ import {
   type Locator,
   type Page,
 } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
 import { compScoresCsvPath } from "../web/frontend/src/react/lib/slug";
 
@@ -395,10 +396,8 @@ test("the section bar folds into More rather than wrapping on a phone", { tag: P
     (await bar.boundingBox())!.height,
     "one line at 320px, exactly as at 1280px"
   ).toBeCloseTo(wideHeight, 0);
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
-    "and the page still never scrolls sideways (WCAG 1.4.10)"
-  ).toBeLessThanOrEqual(0);
+  // And the page still never scrolls sideways (WCAG 1.4.10).
+  await expectNoSidewaysScroll(page);
 
   // Folded is not gone: every link the bar dropped is in the menu, named the
   // same way, and none of the ones still in the row is repeated there.

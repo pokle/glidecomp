@@ -105,6 +105,13 @@ export const MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024;
 export const NOT_AN_IGC_MESSAGE = "That is not an IGC file.";
 
 /**
+ * The browser could not read or compress the chosen file — moved, deleted, or
+ * a browser with no CompressionStream. It happened before anything was sent,
+ * so it is not a dropped connection, and must not be said as one.
+ */
+export const UNREADABLE_FILE_MESSAGE = "Could not read that file. Choose it again, then try again.";
+
+/**
  * Why the server will refuse this file on size alone, or null if it will not.
  *
  * Say the number, and say what to do about it: "too large" with no limit and

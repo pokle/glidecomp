@@ -41,10 +41,14 @@ import {
   RESULTS_RECORD_PATTERN,
   serveResultsRecord,
 } from "../../web/frontend/src/results-record/serve";
+import { findTaskAnalysisSection } from "../../web/frontend/src/react/analysis/sections";
 import {
-  TASK_ANALYSIS_SECTIONS,
-  findTaskAnalysisSection,
-} from "../../web/frontend/src/react/analysis/sections";
+  COMP_SHELL_ROUTES,
+  COMP_SSR_ROUTES,
+  LEGACY_TASK_ANALYSIS as LEGACY_TASK_ANALYSIS_ROUTE,
+  compRouteRegExp,
+  type CompSsrRouteName,
+} from "../../web/frontend/src/react/comp-routes";
 import {
   idFromSegment,
   compUrlId,
@@ -154,80 +158,35 @@ interface HeadTags {
 
 /**
  * SPA routes under /comp that are deliberately NOT server-rendered and must
- * not be indexed: admin-gated, private, and empty without a signed-in
- * admin's API session. Checked before ROUTES.
+ * not be indexed — the pages with nothing to server-render, most of them
+ * admin-only. Checked before ROUTES, so a shell entry that shares a public
+ * route's shape (`/comp/new`, `/task/new`) never reaches a loader.
  *
- * Task analysis (behavioural metrics) is now public and SSR'd — it has ROUTES
- * entries with loaders below (a pending/empty report is rendered but noindexed
- * per-request, not shell-noindexed here).
+ * The list, and why each entry is on it, is `COMP_SHELL_ROUTES` in
+ * web/frontend/src/react/comp-routes.ts — the one table the router, this
+ * Function, docs/ssr.md and e2e/ssr.spec.ts all answer to. A routed page that
+ * is in neither it nor `COMP_SSR_ROUTES` is a real 404 here.
  */
-const NOINDEX_SHELL_ROUTES: RegExp[] = [
-  // Starting a new competition — signed-in only. Checked before ROUTES, so
-  // "new" never reaches the comp-detail loader as an id it cannot parse (and
-  // could not be one: a comp id is at least four characters).
-  /^\/comp\/new\/?$/,
-  // Pilot roster editor — admin-only management surface, nothing for crawlers.
-  /^\/comp\/[^/]+\/pilots\/?$/,
-  // One pilot's editor (and /pilots/new), and the roster's CSV import and
-  // CIVL fill (/pilots/import, /pilots/civl-fill, #810) — admin-only, like
-  // the roster.
-  /^\/comp\/[^/]+\/pilots\/[^/]+\/?$/,
-  // The waypoints editor's pages (#811): one waypoint (/waypoints/:n), Add
-  // waypoint (/new), the map at full size (/map), and the altitude review
-  // (/altitudes, /altitudes/:n) — admin-only, and all of them edit a draft
-  // only the browser has. The list itself (/waypoints) is SSR'd below; this
-  // only matches a segment under it.
-  /^\/comp\/[^/]+\/waypoints\/[^/]+(\/[^/]+)?\/?$/,
-  // Creating a task (#819) — admin-only. It shares its shape with the public
-  // task page below, and must be caught here first: `new` is no task's id (a
-  // sqid is at least four letters), so the task route would only 404 it.
-  /^\/comp\/[^/]+\/task\/new\/?$/,
-  // Competition settings pages (index + group sub-pages) — admin-only.
-  /^\/comp\/[^/]+\/settings(\/[^/]+)?\/?$/,
-  // The task's three admin-only editors, the routed replacements for the Task
-  // Settings, route and weather-notes dialogs. The route editor has a second
-  // reason never to be server-rendered: it pulls Mapbox.
-  /^\/comp\/[^/]+\/task\/[^/]+\/(settings|route|weather)\/?$/,
-  // The route editor's other pages (#812): one turnpoint (/route/:n), Quick
-  // entry (/quick), Load from XContest (/xcontest) and Add waypoint
-  // (/add-waypoint) — admin-only, and all of them edit a draft only the
-  // browser has.
-  /^\/comp\/[^/]+\/task\/[^/]+\/route\/[^/]+\/?$/,
-  // Create a test IGC — admin-only like the editors, and nothing on it but a
-  // form whose result is a file made in the browser.
-  /^\/comp\/[^/]+\/task\/[^/]+\/test-igc\/?$/,
-  // The task's QR code (#813). PUBLIC, unlike most of this list, but a picture
-  // for a camera: nothing in it for a crawler that the SSR'd task page (the
-  // same route, as text) does not already give it.
-  /^\/comp\/[^/]+\/task\/[^/]+\/qr\/?$/,
-  // Recording a manual flight for one pilot (FAI S7F §9.2.2) — admin-only.
-  /^\/comp\/[^/]+\/task\/[^/]+\/pilot\/[^/]+\/manual-flight\/?$/,
-  // The pilot-similarity sheet under the per-task analysis. Everything
-  // on it is derived client-side from the report the page fetches anyway, so
-  // there is nothing to server-render; it is an interactive tool rather than a
-  // document, so there is nothing here for a crawler either.
-  /^\/comp\/[^/]+\/task\/[^/]+\/analysis\/similar\/?$/,
-  // One thermal's rose and map at the size of the screen (#816), a leaf of the
-  // SSR'd thermals section. The page is there to show the map, which is
-  // browser-only, and all it says about the thermal is already server-rendered
-  // on the section — a second indexed copy would only duplicate it.
-  /^\/comp\/[^/]+\/task\/[^/]+\/analysis\/thermals\/map\/?$/,
-];
+const NOINDEX_SHELL_ROUTES: RegExp[] = COMP_SHELL_ROUTES.map((r) => compRouteRegExp(r.path));
 
 /**
  * The superseded per-task task-analysis URLs, 301'd in onRequest. The slug
  * segments are carried across untouched — this is a re-shape of the path, not
  * a lookup, so it needs no comp or task data and costs no round trip.
+ * `m[1]` is the comp's segment, `m[2]` the task's, `m[3]` "/similar" or nothing.
  */
-const LEGACY_TASK_ANALYSIS =
-  /^\/comp\/([^/]+)\/analysis\/task\/([^/]+?)(\/similar)?\/?$/;
+const LEGACY_TASK_ANALYSIS = compRouteRegExp(LEGACY_TASK_ANALYSIS_ROUTE.path);
 
-const ROUTES: Array<{
-  pattern: RegExp;
-  run: (f: FetchFn, m: RegExpMatchArray, origin: string) => Promise<Rendered>;
-}> = [
-  {
-    pattern: /^\/comp\/?$/,
+type RouteRun = (f: FetchFn, m: RegExpMatchArray, origin: string) => Promise<Rendered>;
+
+/**
+ * One loader-and-head per server-rendered route, keyed by its name in
+ * `COMP_SSR_ROUTES` (comp-routes.ts), which holds the route's pattern and the
+ * order they are tried in. A `Record` over those names, so a route without a
+ * loader here, or a loader for no route, does not compile.
+ */
+const ROUTE_RUNS: { [K in CompSsrRouteName]: { run: RouteRun } } = {
+  comps: {
     async run(f, _m, origin) {
       const data = await loadCompetitions(f);
       return {
@@ -250,8 +209,7 @@ const ROUTES: Array<{
       };
     },
   },
-  {
-    pattern: /^\/comp\/([^/]+)\/?$/,
+  comp: {
     async run(f, m, origin) {
       const urlCompId = idFromSegment(m[1]);
       const data = await loadCompDetail(f, urlCompId);
@@ -286,8 +244,7 @@ const ROUTES: Array<{
       };
     },
   },
-  {
-    pattern: /^\/comp\/([^/]+)\/scores\/?$/,
+  scores: {
     async run(f, m, origin) {
       const urlCompId = idFromSegment(m[1]);
       const data = await loadCompScores(f, urlCompId);
@@ -315,8 +272,7 @@ const ROUTES: Array<{
       };
     },
   },
-  {
-    pattern: /^\/comp\/([^/]+)\/waypoints\/?$/,
+  waypoints: {
     async run(f, m, origin) {
       const urlCompId = idFromSegment(m[1]);
       const data = await loadCompWaypoints(f, urlCompId);
@@ -341,8 +297,7 @@ const ROUTES: Array<{
       };
     },
   },
-  {
-    pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/?$/,
+  task: {
     async run(f, m, origin) {
       const urlCompId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
@@ -375,13 +330,12 @@ const ROUTES: Array<{
       };
     },
   },
-  {
+  taskDiagram: {
     // The task's route at full size (#814 — it was an overlay over the comp
     // page). Server-rendered because the SVG costs nothing to draw here and a
     // reader on a weak signal gets the route in the first response; noindexed
     // because it says nothing the task page does not, and the task page is the
     // indexable form.
-    pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/diagram\/?$/,
     async run(f, m, origin) {
       const urlCompId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
@@ -410,8 +364,7 @@ const ROUTES: Array<{
       };
     },
   },
-  {
-    pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/pilot\/([^/]+)\/?$/,
+  pilot: {
     async run(f, m, origin) {
       const urlCompId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
@@ -446,9 +399,8 @@ const ROUTES: Array<{
       };
     },
   },
-  {
+  compAnalysis: {
     // Comp analysis (behavioural metrics across the comp's tasks).
-    pattern: /^\/comp\/([^/]+)\/analysis\/?$/,
     async run(f, m, origin) {
       const urlCompId = idFromSegment(m[1]);
       const data = await loadCompAnalysis(f, urlCompId);
@@ -482,10 +434,9 @@ const ROUTES: Array<{
       };
     },
   },
-  {
+  taskAnalysis: {
     // Per-task analysis: this one task's chapter of the comp report
     // above, and a child of the task's own URL.
-    pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/analysis\/?$/,
     async run(f, m, origin) {
       const urlCompId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
@@ -527,16 +478,12 @@ const ROUTES: Array<{
       };
     },
   },
-  {
+  taskAnalysisSection: {
     // One section of the per-task chapter — the same report, seen from one
-    // angle. The pattern is built from the section list itself, so a section
-    // added there cannot be a 404 here. `similar` never reaches this: it is a
-    // client-only tool and NOINDEX_SHELL_ROUTES is checked first.
-    pattern: new RegExp(
-      `^/comp/([^/]+)/task/([^/]+)/analysis/(${TASK_ANALYSIS_SECTIONS.map(
-        (s) => s.slug
-      ).join("|")})/?$`
-    ),
+    // angle. Its pattern (comp-routes.ts) is built from the section list
+    // itself, so a section added there cannot be a 404 here, and `m[3]` is
+    // always a listed slug. `similar` never reaches this: it is no section,
+    // and NOINDEX_SHELL_ROUTES is checked first.
     async run(f, m, origin) {
       const urlCompId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
@@ -582,14 +529,13 @@ const ROUTES: Array<{
       };
     },
   },
-  {
+  taskAnalysisMetric: {
     // One metric's rank scatter at full size (#815), under the Metric details
     // section. Server-rendered through the same loader as the sections, so a
     // shared link opens on the chart and a hidden comp's key is settled here
     // like everywhere else — but ALWAYS noindexed: it is a bigger copy of a
     // chart the strategies page already shows, one page per metric, and the
     // index should hold the page that explains it rather than thirty copies.
-    pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/analysis\/metrics\/([^/]+)\/?$/,
     async run(f, m, origin) {
       const urlCompId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
@@ -654,7 +600,13 @@ const ROUTES: Array<{
       };
     },
   },
-];
+};
+
+/** The SSR routes in the order they are tried, each with its loader. */
+const ROUTES = COMP_SSR_ROUTES.map((r) => ({
+  pattern: compRouteRegExp(r.path),
+  run: ROUTE_RUNS[r.name].run,
+}));
 
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
@@ -712,12 +664,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   const match = ROUTES.map((r) => ({ r, m: path.match(r.pattern) })).find((x) => x.m);
-  // Not one of the SSR routes. Valid SPA-only /comp routes (the pilots roster,
-  // the old task-analysis redirect) were already handled above via
-  // NOINDEX_SHELL_ROUTES, so reaching here means the path matches no known
-  // /comp route at all (e.g. /comp/<id>/asdf) — it is a genuine 404. Render the
-  // SPA shell (react-router shows its NotFound page) but with a real 404 status
-  // + noindex, rather than the old soft-200 that made junk URLs look valid.
+  // Not one of the SSR routes. Valid SPA-only /comp routes (the pilots roster
+  // and the other shell pages) were already handled above via
+  // NOINDEX_SHELL_ROUTES, and the old task-analysis URL by its redirect, so
+  // reaching here means the path matches no known /comp route at all (e.g.
+  // /comp/<id>/asdf) — it is a genuine 404. Render the SPA shell (react-router
+  // shows its NotFound page) but with a real 404 status + noindex, rather than
+  // the old soft-200 that made junk URLs look valid.
   if (!match || !match.m) return notFoundShell(env, url);
 
   const fetcher = compFetcher(env, cookie);
