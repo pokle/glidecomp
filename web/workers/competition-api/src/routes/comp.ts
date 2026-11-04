@@ -29,7 +29,7 @@ import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 import { deleteTrackFiles, trackFileKeys } from "../track-files";
 import { classRefusal } from "../pilot-classes";
 
-const MAX_COMPS_PER_ACCOUNT = 50;
+export const MAX_COMPS_PER_ACCOUNT = 50;
 
 type GapParamInput = Partial<Omit<GAPParameters, "nominalDistance">> & {
   nominalDistance?: number | null;

@@ -93,6 +93,17 @@ const CompSettingsPage = lazy(() =>
 const CompPilotPage = lazy(() =>
   import("./pages/CompPilotPage").then((m) => ({ default: m.CompPilotPage }))
 );
+// Starting the next competition from this one, copying another roster in,
+// and choosing a route to copy: admin-only pages, noindex shells.
+const CompCopyPage = lazy(() =>
+  import("./pages/CompCopyPage").then((m) => ({ default: m.CompCopyPage }))
+);
+const CompPilotsCopyPage = lazy(() =>
+  import("./pages/CompPilotsCopyPage").then((m) => ({ default: m.CompPilotsCopyPage }))
+);
+const TaskRouteCopyPage = lazy(() =>
+  import("./pages/TaskRouteCopyPage").then((m) => ({ default: m.TaskRouteCopyPage }))
+);
 const CompRosterImportPage = lazy(() =>
   import("./pages/CompRosterImportPage").then((m) => ({ default: m.CompRosterImportPage }))
 );
@@ -269,6 +280,7 @@ export function AppRoutes() {
                 :pilotId below. Noindex shells, like the rest of /pilots. */}
             <Route path="/comp/:compId/pilots/import" element={<CompRosterImportPage />} />
             <Route path="/comp/:compId/pilots/civl-fill" element={<CompCivlFillPage />} />
+            <Route path="/comp/:compId/pilots/copy" element={<CompPilotsCopyPage />} />
             <Route path="/comp/:compId/pilots/:pilotId" element={<CompPilotPage />} />
             {/* Admin-only settings pages (index + one sub-page per group) —
                 noindex shell in the SSR Function, like /pilots. */}
@@ -292,6 +304,9 @@ export function AppRoutes() {
               element={<CompAltitudeReviewPage />}
             />
             <Route path="/comp/:compId/waypoints/:rowId" element={<CompWaypointPage />} />
+            {/* Copying this competition into a new one — admin-only, reached
+                from the settings index. Noindex shell, like /settings. */}
+            <Route path="/comp/:compId/copy" element={<CompCopyPage />} />
             {/* Analysis (behavioural metrics). One COMP analysis per competition
                 at /analysis, and one chapter per task UNDER THAT TASK — see the
                 task routes below. The comp report collects the chapters; it does
@@ -346,6 +361,10 @@ export function AppRoutes() {
             <Route
               path="/comp/:compId/task/:taskId/route/add-waypoint"
               element={<TaskRouteAddWaypointPage />}
+            />
+            <Route
+              path="/comp/:compId/task/:taskId/route/copy"
+              element={<TaskRouteCopyPage />}
             />
             <Route
               path="/comp/:compId/task/:taskId/route/:rowId"
