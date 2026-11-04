@@ -479,6 +479,33 @@ describe("POST .../igc/open-submit — budgets", () => {
     expect(last!.headers.get("Retry-After")).toBeTruthy();
   });
 
+  test("counts an IPv6 caller's effort by its /64, not by each address", async () => {
+    // Every address in a /64 is one caller: a budget per full address would
+    // be a fresh budget (and a fresh row) per request for anyone rotating
+    // through their own /64.
+    const { compId, taskId } = await openCompWithPilot();
+    let last: Response | undefined;
+    for (let i = 0; i < 41; i++) {
+      last = await uploadRequest(
+        `/api/comp/${compId}/task/${taskId}/igc/open-submit`,
+        fakeIgcPayload(),
+        {
+          headers: {
+            "cf-connecting-ip": `2001:db8:1:2:${(i + 1).toString(16)}::${i + 7}`,
+            "x-pilot-ident-kind": "email",
+            "x-pilot-ident": encodeURIComponent(`guess-${i}@example.com`),
+          },
+        }
+      );
+    }
+    expect(last!.status).toBe(429);
+    expect(((await last!.json()) as Record<string, any>).scope).toBe("attempts");
+    const rows = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM "rateLimit" WHERE "key" LIKE 'anon-igc:futile:%'`
+    ).first<{ n: number }>();
+    expect(rows?.n).toBe(1);
+  });
+
   test("charges the effort budget only when nothing was stored", async () => {
     const { compId, taskId } = await openCompWithPilot();
 

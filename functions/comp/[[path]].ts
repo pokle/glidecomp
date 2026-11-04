@@ -53,6 +53,8 @@ import {
   idFromSegment,
   compUrlId,
   pathCarriesShareKey,
+  redactShareKeys,
+  redactedError,
   compPath,
   compScoresPath,
   compWaypointsPath,
@@ -687,13 +689,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   } catch (err) {
     if (err instanceof NotFoundError) return notFoundShell(env, url);
     // Any other failure (upstream 5xx, timeout, render error) → plain SPA shell.
-    console.error("SSR loader/render error for", path, err);
+    console.error("SSR loader/render error for", redactShareKeys(path), redactedError(err));
     return fetchShell(env, url);
   }
 
   // A hidden comp, read by an admin or through its share link. Every route's
   // loader data carries the comp, so a route added later inherits this.
-  const hidden = isHiddenComp(rendered.data);
+  // A keyed path counts too: a loader that could not fetch the comp itself
+  // (an upstream blip on a side fetch) leaves `comp` null, and the page must
+  // still never be shared-cached or indexed.
+  const hidden = isHiddenComp(rendered.data) || pathCarriesShareKey(path);
 
   // Canonicalise the URL: 301 to `${slug}-${id}` whenever the request path is
   // not already it (a bare `${id}`, a stale/mis-cased slug, a trailing slash).
@@ -724,7 +729,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     const stream = await render(path + url.search, ssrData);
     bodyHtml = await new Response(stream as ReadableStream).text();
   } catch (err) {
-    console.error("SSR render error for", path, err);
+    console.error("SSR render error for", redactShareKeys(path), redactedError(err));
     return fetchShell(env, url);
   }
 
@@ -777,7 +782,7 @@ async function scoresCsv(
     data = await loadCompScores(compFetcher(env, cookie), compId);
   } catch (err) {
     if (err instanceof NotFoundError) return csvError(404, "Competition not found");
-    console.error("scores CSV error for", compId, err);
+    console.error("scores CSV error for", redactShareKeys(compId), redactedError(err));
     return csvError(503, "Scores are unavailable right now — please try again");
   }
 
