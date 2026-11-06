@@ -135,6 +135,13 @@ export function redactShareKeys(text: string): string {
   return text.replace(/([a-z]+)_[a-z0-9]{12}(?![a-z0-9])/g, "$1_[key]");
 }
 
+/** An error for a log line, its message and stack put through redactShareKeys():
+ * a failed fetch names the URL it fetched, which carries the comp's key. */
+export function redactedError(err: unknown): string {
+  const text = err instanceof Error ? (err.stack ?? `${err.name}: ${err.message}`) : String(err);
+  return redactShareKeys(text);
+}
+
 /**
  * Whether a `/comp/…` pathname's comp segment carries a share key. A page or
  * redirect for such a path is a hidden comp's, so it is never shared-cached

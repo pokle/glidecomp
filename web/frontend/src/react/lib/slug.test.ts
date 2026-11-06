@@ -25,6 +25,7 @@ import {
   compUrlId,
   pathCarriesShareKey,
   redactShareKeys,
+  redactedError,
   submitTrackPath,
 } from "./slug";
 
@@ -238,5 +239,13 @@ describe("hidden competitions' share links", () => {
       "/analysis?compId=vzuq_[key]&taskId=abcd"
     );
     expect(redactShareKeys("/comp/corryong-cup-2027-vzuq")).toBe("/comp/corryong-cup-2027-vzuq");
+  });
+
+  test("redactedError masks a key in an error's message and stack", () => {
+    const err = new Error("GET /api/comp/vzuq_7hq2m9xk4rwd → 503");
+    const out = redactedError(err);
+    expect(out).toContain("/api/comp/vzuq_[key]");
+    expect(out).not.toContain("7hq2m9xk4rwd");
+    expect(redactedError("plain vzuq_7hq2m9xk4rwd")).toBe("plain vzuq_[key]");
   });
 });

@@ -11,7 +11,7 @@
  * is still a 404 for anyone who cannot see it, exactly as on the page — and
  * opens for whoever's URL carries its share key, also as on the page.
  */
-import { compUrlId, idFromSegment } from "../react/lib/slug";
+import { compUrlId, idFromSegment, redactShareKeys, redactedError } from "../react/lib/slug";
 import { loadResultsRecord, NotFoundError, type FetchFn } from "../react/loaders";
 import { buildResultsRecord, resultsRecordFilename, type Fonts } from "./build";
 import { buildResultsZip } from "./zip";
@@ -51,7 +51,7 @@ export async function serveResultsRecord({
     data = await loadResultsRecord(fetch, compId);
   } catch (err) {
     if (err instanceof NotFoundError) return plain(404, "Competition not found");
-    console.error("results record error for", compId, err);
+    console.error("results record error for", redactShareKeys(compId), redactedError(err));
     return plain(503, "The results record could not be made right now — please try again");
   }
   // Every link in the document is built from comp.comp_id. On a hidden comp
@@ -66,7 +66,7 @@ export async function serveResultsRecord({
         ? buildResultsZip(data, { origin, generatedAt: now })
         : await buildResultsRecord(data, { origin, generatedAt: now, fonts: await loadFonts() });
   } catch (err) {
-    console.error("results record build error for", compId, format, err);
+    console.error("results record build error for", redactShareKeys(compId), format, redactedError(err));
     return plain(503, "The results record could not be made right now — please try again");
   }
   // pdf-lib and fflate allocate a fresh ArrayBuffer for the file, never a shared one.

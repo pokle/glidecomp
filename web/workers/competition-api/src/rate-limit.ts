@@ -105,6 +105,51 @@ export const ANON_SUBMIT_FUTILE: Budget = { max: 40, windowMs: DAY_MS };
  */
 export const RESOLVE_PER_USER: Budget = { max: 60, windowMs: DAY_MS };
 
+/**
+ * The client address a per-address budget is kept under.
+ *
+ * An IPv4 address is one budget. An IPv6 address is not: a single connection
+ * is routinely handed a whole /64, and any address in it is the same caller,
+ * so a budget per full IPv6 address is one budget per request for anyone who
+ * rotates through their own /64 — and every one of those requests would leave
+ * a row of its own in the database the whole site writes to. So an IPv6
+ * address is counted by its /64, the same grouping Better Auth's limiter uses
+ * in auth-api. An IPv4-mapped IPv6 address counts as the IPv4 address it maps.
+ *
+ * Anything that is not a well-formed address is returned as it came: it is
+ * Cloudflare's own header, so in production that is only ever "unknown" for a
+ * request that reached the Worker some other way.
+ */
+export function addressBucket(ip: string): string {
+  const raw = ip.trim().toLowerCase();
+  if (!raw.includes(":")) return raw;
+
+  const zoneless = raw.split("%")[0];
+  const mapped = /^(?:0{0,4}:){0,5}(?:0{0,4}:)?ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(
+    zoneless.startsWith("::") ? zoneless.slice(2) : zoneless
+  );
+  if (mapped) return mapped[1];
+
+  const halves = zoneless.split("::");
+  if (halves.length > 2) return raw;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  // A trailing dotted quad is the last two groups.
+  const last = tail.length > 0 ? tail : head;
+  if (last.length > 0 && last[last.length - 1].includes(".")) {
+    last.splice(last.length - 1, 1, "0", "0");
+  }
+  const missing = 8 - head.length - tail.length;
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return raw;
+  const groups = [...head, ...Array(halves.length === 2 ? missing : 0).fill("0"), ...tail];
+  if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return raw;
+
+  return `${groups
+    .slice(0, 4)
+    .map((g) => g.replace(/^0+(?=.)/, ""))
+    .join(":")}::/64`;
+}
+
 /** Where a budget's row lives. One place, so peek and charge cannot drift. */
 function keyFor(scope: string, identity: string | number): string {
   return `${KEY_PREFIX}${scope}:${identity}`;
