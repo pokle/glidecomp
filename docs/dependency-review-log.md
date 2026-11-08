@@ -4,6 +4,107 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-11-08
+
+**`bun audit` opens and closes at 1 high, the same test-only
+`zod@3.25.76` as the last two weeks.** Everything taken is a patch or an
+additive minor, and no source change was needed. The headline is
+better-auth 1.7.15 → 1.7.18, whose 1.7.16 is a large security-hardening
+release. The two dead overrides that the "shadcn removed" entry left for this
+cycle (`protocol-buffers-schema`, `uuid`) are deleted. Node 22.23.4 is still
+the newest 22.x, so `.node-version` stays.
+
+### Security Vulnerabilities Fixed
+
+None new in `bun audit`. Several bumps carry hardening that no advisory names
+(better-auth, hono, jose — see the table below).
+
+**Open, and not reachable:**
+
+| Advisory | Severity | Package | Why it stays |
+|----------|----------|---------|--------------|
+| [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) | high | `zod@3.25.76` | Unchanged: pinned exactly by `@cloudflare/vitest-pool-workers@0.19.1`, test runner only. It leaves with the wrangler cap. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **better-auth**, **@better-auth/api-key**, **@better-auth/mcp** | 1.7.15 | 1.7.18 | frontend, auth-api | 1.7.16 is a security batch. The parts that touch what we use (`emailOTP`, `jwt`, `oAuthProxy`, `apiKey`, `mcp`): email-OTP `checkVerificationOtp`/`resetPassword` no longer allow more guesses than `allowedAttempts` under concurrent requests; email lookups match only the stored address (case-insensitive); email-change codes are bound to the account and new address; wildcard trusted origins match by parsed scheme/host/path. 1.7.17 fixes `rememberMe` refresh and adds TOTP for API-key sessions; 1.7.18 fixes "revoke all sessions" races. **No schema change:** `@better-auth/core`'s `db/get-tables.mjs` is identical, `@better-auth/mcp`'s dist is identical, and api-key's only change is one `markSessionOutsideStore(key)` call. |
+| **hono** | 4.13.16 | 4.13.17 | frontend, airscore-api, auth-api, competition-api + root override | Dist diff (no changelog): `__Secure-`/`__Host-` cookie prefixes checked case-insensitively; ETag `If-None-Match` parsed by quoted tag and the body cancelled on 304; `accepts()` prefers an exact type over a wildcard; MIME base types lower-cased; the single-key query fast path no longer takes keys with `&`/`=`. Nothing here changes an API we call. |
+| **@playwright/test** | 1.64.1 | 1.65.0 | root (dev) | Chromium 158. Breaking changes read against `e2e/`: no class-field initialisers (`useDefineForClassFields`), every `test.skip(cond, "…")` still valid, actions now wait for an element to be non-`inert`, RFC 6265 cookie matching, `params` now appended to an existing query. The e2e run below is the check. |
+| **mapbox-gl** | 3.34.1 | 3.34.2 | root, frontend | The changelog entry is empty. **CSP:** counts of `WebAssembly.` (27), `new Function` (0) and `eval(` (0) across `dist/*.js` are identical to 3.34.1. |
+| **astro** | 7.4.4 | 7.4.7 | frontend (dev) | Fixes only (image endpoint case-sensitivity, invalid percent-encoding answers 400, stricter string tag names, `astro check` exit codes). **Node floor unchanged at `>=22.23.4`** = `.node-version`. |
+| vite | 8.3.5 | 8.3.6 | frontend + root override | Fixes (stable chunk import-map hashes, CSS deps of dynamic imports with queries, ANSI escaping in `forwardConsole`). |
+| @vitejs/plugin-react | 6.1.2 | 6.2.1 | frontend (dev) | Adds `refreshInclude`/`refreshExclude` (unused); widens two optional peer ranges. |
+| tailwindcss, @tailwindcss/vite | 4.3.3 | 4.3.5 | frontend (dev) | Fixes. |
+| lucide-react | 1.66.0 | 1.70.0 | frontend | 27 names added. Thirteen icons (`CircleAlert`, `TriangleAlert`, `OctagonAlert`, `MailWarning`, …) became aliases of renamed ones; every old name is still exported, and the frontend's `TriangleAlertIcon` typechecks. |
+| jose | 6.2.15 | 6.2.16 | competition-api (dev), shared | Exposes invalid options in general JWS/JWE. |
+| @cfworker/json-schema | 4.1.4 | 4.1.6 | mcp-api | `$ref` fragment normalisation and format conformance fixes. |
+| `anthropics/claude-code-action` | v1.0.266 | v1.0.269 | `.github/workflows/claude.yml` | Re-pinned to the peeled commit `61a9c274…`. The other six actions are at the newest release in their major line. |
+
+### Code Changes Required
+
+None.
+
+### Overrides Added / Updated / Removed
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `protocol-buffers-schema` `^3.6.1` | **Removed** | Matched nothing in `bun.lock` (left over from the 2026-11-01 entry). |
+| `uuid` `^11.1.1` | **Removed** | Same. |
+| `hono` `^4.13.16` → `^4.13.17` | Updated | Aligned with the workspaces. |
+| `vite` `^8.3.5` → `^8.3.6` | Updated | Aligned with the frontend. |
+
+Every remaining override matches exactly one package key in `bun.lock`
+(checked with a grep per override).
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **wrangler** | 4.116.0 | 4.158.0 | Still capped (15 cycles). `wrangler@4.158.0` depends on `miniflare 5.20261104.0-beta` (miniflare's `beta` dist-tag); stable `latest` is still 4.20260730.0. |
+| @cloudflare/vitest-pool-workers, **vitest** 5 | 0.19.1, 4.1.12 | 0.23.0, 5.1.0 | Paired with the wrangler cap. Also holds the last `zod@3.25.76`. |
+| **@astrojs/mdx** | 7.0.8 | 8.1.3 | Still vestigial. It wants its own PR to delete it. |
+| **three**, **@types/three** | 0.185.x | 0.187.0 | Pre-1.0 minor (two); focused PR. |
+| **katex** | 0.18.11 | 0.19.1 | Pre-1.0 minor; focused PR. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20261108.1 | Major. |
+| kysely 0.29, jsdom, concurrently 10, @types/node 26 | — | 0.29.8, 31.0.0, 10.0.7, 26.6.6 | Majors / pre-1.0 minors. Reasons unchanged from 2026-09-27. |
+| Node | 22.23.4 | 22.23.4 | Already the newest 22.x (`nodejs.org/dist/index.json`). |
+
+### Verification
+
+- `bun run typecheck:all` and `bun run --filter '@glidecomp/frontend' typecheck`:
+  clean.
+- `bun run test:all`: 1892 root/engine/airscore/dev-router/mcp-api, 1305
+  frontend, 245 auth-api (6 todo), 924 competition-api. 0 fail.
+- `bun run build`: clean, 10 Astro pages, astro 7.4.7 on Node 22.23.4 (the
+  container's Node already matched `.node-version`).
+- `bun run test:e2e:ssr`: **92/92 passed** in 1.4 minutes, run first and from
+  a fresh state.
+- `bun run test:e2e`: **373 passed, 1 skipped, 0 failed** in 11.1 minutes, exit 0, on the first run (with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0`). wrangler logged one `✘ [ERROR]` mid-run (the known ProxyWorker restart, `docs/local-dev.md`); no test failed.
+- `bun audit`: 1 high before, 1 high after (the test-only `zod@3.25.76`).
+- `bun install` printed no `warn:` lines; both patches (`kysely-d1@0.4.0`,
+  `threebox-plugin@2.2.7`) still match the locked versions.
+- Root `package.json` `dependencies`: read first (the same three legitimate
+  entries). `git diff package.json` after every workspace `bun update` showed
+  no change; the root edits are by hand (`mapbox-gl`, `@playwright/test`, the
+  overrides above).
+- GitHub Actions: `git ls-remote --tags` for all seven; one re-pin.
+- Map-library bump: CSP grep done (above).
+
+### Lessons / Notes for Future Sessions
+
+- **Check a dead override against the log's history before deleting it, then
+  delete it.** `protocol-buffers-schema` and `uuid` had been carried as "floors
+  for nothing" across two entries. If a future dependency brings either back
+  with a vulnerable version, `bun audit` will say so, which is the cheaper
+  signal than an override nobody can explain.
+- **A schema check for a better-auth bump is three quick diffs:** `npm pack`
+  `@better-auth/core` at both versions and diff `dist/db/get-tables.mjs`, then
+  diff each plugin package's dist. It settled "does auth-api need a migration"
+  in a minute this cycle.
+- **`cd <workspace> && bun update <pkgs>` behaved for a tenth cycle.**
+
 ## 2026-11-01 — shadcn removed (focused PR)
 
 This is not a weekly cycle. It does the follow-up that the cycle below

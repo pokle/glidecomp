@@ -48,6 +48,7 @@ import {
   ANON_SUBMIT_FUTILE,
   ANON_SUBMIT_PER_COMP,
   ANON_SUBMIT_PER_PILOT,
+  addressBucket,
   chargeBudget,
   peekBudget,
 } from "../rate-limit";
@@ -134,7 +135,8 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
     const taskId = c.var.ids.task_id!;
     const alphabet = c.env.SQIDS_ALPHABET;
     const db = c.env.DB;
-    const clientIp = c.req.header("cf-connecting-ip") ?? "unknown";
+    // Per-address budgets count an IPv6 caller by its /64 (addressBucket).
+    const clientIp = addressBucket(c.req.header("cf-connecting-ip") ?? "unknown");
 
     const rateLimited = (retryAfterSeconds: number, scope: string) =>
       c.json(

@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cfworker/json-schema": "^4.1.4",
+    "@cfworker/json-schema": "^4.1.6",
     "@glidecomp/engine": "workspace:*",
     "@modelcontextprotocol/server": "2.4.0",
     "uqr": "0.1.3",
