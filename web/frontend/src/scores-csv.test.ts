@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildScoresCsv,
+  csvEscape,
   scoresCsvFilename,
   SCORES_CSV_COLUMNS,
   type ScoresCsvInput,
@@ -218,6 +219,14 @@ describe("buildScoresCsv", () => {
     expect(lines[1]).toContain('"Smith, ""Ace"""');
     expect(lines[1]).toContain('"Task 1, day one"');
     expect(cells(lines[2])[SCORES_CSV_COLUMNS.indexOf("pilot_name")]).toBe("'=cmd|calc");
+  });
+
+  test("defuses a formula behind a leading tab or carriage return", () => {
+    expect(csvEscape("\t=1+1")).toBe("'\t=1+1");
+    expect(csvEscape("\r=1+1")).toBe("\"'\r=1+1\"");
+    expect(csvEscape("-12.5")).toBe("'-12.5");
+    expect(csvEscape(-12.5)).toBe("-12.5");
+    expect(csvEscape("Ada")).toBe("Ada");
   });
 
   test("rounds to the published one-decimal points (S7F §15)", () => {

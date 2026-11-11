@@ -21,7 +21,6 @@ import {
   PDFDocument,
   PDFHexString,
   PDFName,
-  PDFString,
   rgb,
   type PDFDict,
   type PDFFont,
@@ -265,13 +264,14 @@ export class PdfWriter {
   /** A clickable rectangle over text already drawn (no underline: on paper
    * a link is just text, and the URL is printed where it matters). */
   link(url: string, x: number, top: number, w: number, h: number, page = this.page): void {
-    if (!/^https?:\/\//.test(url)) return;
+    const uri = linkUri(url);
+    if (!uri) return;
     const annot = this.doc.context.obj({
       Type: "Annot",
       Subtype: "Link",
       Rect: [x, top - h, x + w, top],
       Border: [0, 0, 0],
-      A: { Type: "Action", S: "URI", URI: PDFString.of(url) },
+      A: { Type: "Action", S: "URI", URI: uri },
     });
     page.node.addAnnot(this.doc.context.register(annot));
   }
@@ -552,4 +552,24 @@ export class PdfWriter {
     this.doc.catalog.set(PDFName.of("Outlines"), rootRef);
     this.doc.catalog.set(PDFName.of("PageMode"), PDFName.of("UseOutlines"));
   }
+}
+
+/**
+ * A link's target as a PDF URI string, or null for anything but http(s).
+ * `URL` percent-encodes it to 7-bit ASCII (what a PDF URI action holds), and
+ * the bytes go out as a hex string, so no character in the URL — a
+ * parenthesis or a backslash — can end the string or escape out of it.
+ */
+export function linkUri(url: string): PDFHexString | null {
+  let href: string;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    href = parsed.href;
+  } catch {
+    return null;
+  }
+  let hex = "";
+  for (let i = 0; i < href.length; i++) hex += href.charCodeAt(i).toString(16).padStart(2, "0");
+  return PDFHexString.of(hex);
 }
