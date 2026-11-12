@@ -84,32 +84,59 @@ function clip(v: unknown): unknown {
   return s.length > 300 ? `${s.slice(0, 300)}…` : s;
 }
 
-export const onRequestPost: PagesFunction = async ({ request }) => {
-  const declared = Number(request.headers.get("content-length") ?? 0);
-  if (declared <= MAX_BODY_BYTES) {
-    const text = await request.text();
-    if (text.length <= MAX_BODY_BYTES) {
-      let body: unknown = null;
-      try {
-        body = JSON.parse(text);
-      } catch {
-        // Not JSON: nothing to report.
-      }
-      for (const v of violations(body).slice(0, MAX_REPORTS)) {
-        console.warn(
-          "csp-violation",
-          JSON.stringify({
-            page: clip(v.page),
-            directive: clip(v.directive),
-            blocked: clip(v.blocked),
-            source: clip(v.source),
-            line: v.line,
-            disposition: clip(v.disposition),
-            sample: clip(v.sample),
-          })
-        );
-      }
+/**
+ * The body as text, or null once it passes `max` bytes. Counted as it
+ * streams, so a body sent without a Content-Length (chunked) is never read
+ * past the cap; a declared length over the cap is refused unread.
+ */
+export async function readCapped(request: Request, max: number): Promise<string | null> {
+  const declared = request.headers.get("content-length");
+  if (declared !== null && !(Number(declared) <= max)) return null;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel().catch(() => {});
+      return null;
     }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    all.set(c, at);
+    at += c.byteLength;
+  }
+  return new TextDecoder().decode(all);
+}
+
+export const onRequestPost: PagesFunction = async ({ request }) => {
+  const text = await readCapped(request, MAX_BODY_BYTES);
+  if (text === null) return new Response(null, { status: 204 });
+  let body: unknown = null;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    // Not JSON: nothing to report.
+  }
+  for (const v of violations(body).slice(0, MAX_REPORTS)) {
+    console.warn(
+      "csp-violation",
+      JSON.stringify({
+        page: clip(v.page),
+        directive: clip(v.directive),
+        blocked: clip(v.blocked),
+        source: clip(v.source),
+        line: v.line,
+        disposition: clip(v.disposition),
+        sample: clip(v.sample),
+      })
+    );
   }
   return new Response(null, { status: 204 });
 };
