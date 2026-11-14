@@ -1,5 +1,5 @@
 // The guard in front of Better Auth's social sign-in (src/index.ts): no
-// callback may leave the web, and no ID token may name a new account.
+// callback may leave the web, and no ID token is accepted at all.
 
 import { describe, expect, test } from "vitest";
 import { request } from "./helpers";
@@ -43,5 +43,15 @@ describe("social sign-in", () => {
       headers: { "cf-connecting-ip": "203.0.113.78" },
     });
     expect(res.status).toBe(400);
+  });
+
+  test("an ID token is refused before Better Auth verifies it", async () => {
+    const res = await request("POST", "/api/auth/sign-in/social", {
+      body: { provider: "google", idToken: { token: "x" } },
+      headers: { "cf-connecting-ip": "203.0.113.79" },
+    });
+    // 400 from the guard, not Better Auth's 401 for a token that fails to verify.
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { message?: string }).message).toBe("Unexpected field");
   });
 });

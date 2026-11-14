@@ -67,6 +67,9 @@ disclosed and are being fixed first.
 | SEC-67 | Dependency advisory, moderate (mobile build tooling) | 2026-10-14 |
 | SEC-70 | Open registration for AI-assistant connections could fill the shared database | 2026-10-28 |
 | SEC-71 | Dependency advisories, moderate (build and dev tooling) | 2026-10-28 |
+| SEC-75 | Anonymous track submission's per-caller budget could be sidestepped from one IPv6 network | 2026-11-06 |
+| SEC-76 | A hidden competition's page could be sent cacheable and indexable after a failed fetch | 2026-11-06 |
+| SEC-77 | Hidden-competition share links written to server logs | 2026-11-06 |
 
 **Closed without a fix:** SEC-09 (`Math.random()` used where nothing depends on
 it being unpredictable), SEC-14 (a misleading code comment), SEC-19

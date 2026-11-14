@@ -625,9 +625,12 @@ app.post("/api/auth/sign-in/email-otp", async (c, next) => {
 // - a callback URL that is not a web address or a path on this site. A
 //   custom scheme can be registered by any app on a phone, so a redirect to
 //   one would hand the session to whichever app claims it (RFC 8252 §8.1);
-// - an ID token's `user` (a provider-supplied name): it would name a new
-//   account around /set-name's checks — the same hole SEC-55 closed on the
-//   email-OTP route. Onboarding asks instead.
+// - an ID token. Sign-in with a provider's ID token is for native apps, and
+//   GlideComp has none since the app was removed; nothing here sends one.
+//   Refusing the field outright keeps a token that was never bound to a
+//   nonce from this site from signing anyone in, and keeps out the token's
+//   `user` (a provider-supplied name), which would name a new account around
+//   /set-name's checks. Onboarding asks for the name instead.
 
 const CALLBACK_FIELDS = ["callbackURL", "newUserCallbackURL", "errorCallbackURL"] as const;
 
@@ -651,14 +654,8 @@ app.post("/api/auth/sign-in/social", async (c, next) => {
       return c.json({ code: "BAD_REQUEST", message: `Invalid ${field}` }, 400);
     }
   }
-  const idToken = body.idToken;
-  if (idToken !== undefined && idToken !== null) {
-    if (typeof idToken !== "object" || Array.isArray(idToken)) {
-      return c.json({ code: "BAD_REQUEST", message: "Invalid idToken" }, 400);
-    }
-    if ("user" in idToken) {
-      return c.json({ code: "BAD_REQUEST", message: "Unexpected field" }, 400);
-    }
+  if ("idToken" in body) {
+    return c.json({ code: "BAD_REQUEST", message: "Unexpected field" }, 400);
   }
   await next();
 });

@@ -168,8 +168,9 @@ export function csvEscape(value: string | number): string {
   // Numbers pass through unguarded — a negative score must stay a number, and
   // it can't carry a formula anyway.
   if (typeof value === "number") return String(value);
-  // A leading =/+/-/@ is a formula in Excel and Sheets; prefix with an
-  // apostrophe so a pilot's name is never executed as one.
-  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  // A leading =/+/-/@ is a formula in Excel and Sheets, and so is one behind
+  // a leading tab or carriage return (OWASP's CSV-injection list); prefix with
+  // an apostrophe so a pilot's name is never executed as one.
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
