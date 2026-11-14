@@ -26,6 +26,7 @@ import { visibleCompsFilter } from "../comp-visibility";
 import { routeSourcesQuerySchema, validated } from "../validators";
 import { asLatLon, orderCandidates, type LatLon } from "../route-sources";
 import { likePattern } from "./lookup";
+import { bindList, chunkForBinds } from "../lib/bind-chunks";
 
 /** How many routes one answer lists. */
 const ROUTE_SOURCES_LIMIT = 50;
@@ -138,13 +139,16 @@ export const routeCopyRoutes = new Hono<AuthedEnv>().get(
     // The turnpoint names, for the shown routes only.
     const names = new Map<number, string[]>();
     if (shown.length > 0) {
-      const routes = await db
-        .prepare(
-          `SELECT task_id, xctsk FROM task WHERE task_id IN (${shown.map(() => "?").join(",")})`
+      // Chunked: D1 binds at most 100 parameters per statement, so the list
+      // must not depend on ROUTE_SOURCES_LIMIT staying small.
+      const batches = await db.batch<{ task_id: number; xctsk: string }>(
+        chunkForBinds(shown.map((r) => r.task_id)).map((ids) =>
+          db
+            .prepare(`SELECT task_id, xctsk FROM task WHERE task_id IN (${bindList(ids.length)})`)
+            .bind(...ids)
         )
-        .bind(...shown.map((r) => r.task_id))
-        .all<{ task_id: number; xctsk: string }>();
-      for (const r of routes.results) {
+      );
+      for (const r of batches.flatMap((b) => b.results)) {
         try {
           const parsed = JSON.parse(r.xctsk) as {
             turnpoints?: Array<{ waypoint?: { name?: unknown } }>;
