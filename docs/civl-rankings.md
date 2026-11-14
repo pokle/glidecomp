@@ -195,6 +195,12 @@ Both source columns being NULL is what the roster renders as "set by
 organiser" — an override (a pilot the list has missed, or has wrong) must not
 be indistinguishable from an import.
 
+**A copied roster leaves the points behind.** Copying pilots from another
+competition (or copying a whole competition) copies each registration but not
+these three columns: the points are a fact about the month that roster was
+built. Press "Fill from CIVL…" on the new roster to copy them from the lists
+that are current now. See [comp-copy.md](comp-copy.md).
+
 **Points and not a rank.** 0029 stored the rank and 0030 replaced it, because
 a rank is only a position within one list's pool and the pools run from six
 pilots to 6,875 — see [One number per pilot](#one-number-per-pilot-wprs-points-choose-the-list)

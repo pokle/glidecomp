@@ -77,7 +77,8 @@ export const COMP_SHELL_ROUTES: readonly CompShellRoute[] = [
     admin: true,
     why:
       "One pilot's editor, and the pages beside it: a blank one (`/new`), " +
-      "the roster's CSV import (`/import`) and its CIVL fill (`/civl-fill`, #810).",
+      "the roster's CSV import (`/import`) and its CIVL fill (`/civl-fill`, #810), " +
+      "and copying another competition's pilots in (`/copy`).",
   },
   {
     path: "/comp/:compId/waypoints/:page(/:rowId)?",
@@ -86,6 +87,13 @@ export const COMP_SHELL_ROUTES: readonly CompShellRoute[] = [
       "The waypoints editor's pages (#811): one waypoint (`/:n`), Add waypoint (`/new`), " +
       "the map at full size (`/map`) and the altitude review (`/altitudes`, `/altitudes/:n`), " +
       "all editing a draft only the browser has. Only BELOW the list: the list itself is SSR'd.",
+  },
+  {
+    path: "/comp/:compId/copy",
+    admin: true,
+    why:
+      "Copying the competition into a new one: its settings and, at the organiser's " +
+      "choice, its waypoints, pilots and other organisers. Reached from the settings index.",
   },
   {
     path: "/comp/:compId/task/new",
@@ -111,8 +119,8 @@ export const COMP_SHELL_ROUTES: readonly CompShellRoute[] = [
     admin: true,
     why:
       "The route editor's other pages (#812): one turnpoint (`/:n`), Quick entry (`/quick`), " +
-      "Load from XContest (`/xcontest`) and Add waypoint (`/add-waypoint`), " +
-      "all editing a draft only the browser has.",
+      "Load from XContest (`/xcontest`), Copy from another competition (`/copy`) and " +
+      "Add waypoint (`/add-waypoint`), all editing a draft only the browser has.",
   },
   {
     path: "/comp/:compId/task/:taskId/test-igc",

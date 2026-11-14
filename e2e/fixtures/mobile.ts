@@ -86,6 +86,10 @@ export const MOBILE_SPEC_FILES = [
   // Starting a new competition: a page rather than a dialog with a text
   // field, which is the shape the phone could not use (#818).
   "comp-new.spec.ts",
+  // Starting the next competition from this one, copying a roster in, and
+  // choosing a route to copy (comp-copy.spec.ts): three new pages, built as
+  // pages for this width, with their state in the URL so Back works there.
+  "comp-copy.spec.ts",
   // Creating an API key on Settings (#821): it was two dialogs, one with a
   // text field, which is the keyboard trouble the overlays rule is about. Now
   // a form on the page, with the new key shown in place.

@@ -12,6 +12,7 @@ import {
   bulkPilotsSchema,
   civlRankingLookupSchema,
   validated,
+  MAX_PILOTS_PER_COMP,
 } from "../validators";
 import { matchRoster, type RankedEntry } from "../civl-ranking-match";
 import { resolvePilotId, type MatchedBy } from "../pilot-resolver";
@@ -24,8 +25,6 @@ import { TeamSpellings, rosterTeamNames } from "../team-name";
 
 /** How many pilot-link lookups to run at once on a bulk roster import. */
 const PILOT_RESOLVE_CONCURRENCY = 10;
-
-const MAX_PILOTS_PER_COMP = 250;
 
 /**
  * Values per statement in the CIVL ranking lookup. D1 rejects a statement with

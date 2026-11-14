@@ -810,6 +810,7 @@ These are the standing imperatives. Each links to the reference that explains it
 | SSR'd public comp pages + `scores.csv` | [docs/ssr.md](docs/ssr.md) |
 | The results record (`scores.pdf`) | [docs/results-record.md](docs/results-record.md) |
 | Track submission (incl. anonymous) | [docs/track-submission.md](docs/track-submission.md) |
+| Copying a comp, a roster or a route (next year's event) | [docs/comp-copy.md](docs/comp-copy.md) |
 | Bundled comps, seeding, synthetic fixtures | [docs/sample-data.md](docs/sample-data.md) |
 | Task weather + weather notes | [docs/weather.md](docs/weather.md) |
 | Site search (comps/tasks/routes/pilots) | [docs/2026-08-01-site-search.md](docs/2026-08-01-site-search.md) |

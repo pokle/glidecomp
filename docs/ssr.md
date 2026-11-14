@@ -55,7 +55,8 @@ as an id.
 - **Signed-in**: starting a competition (`/comp/new`; a signed-out reader is
   offered sign-in there).
 - **Admin-only**, everything else: the roster, a pilot's editor and the
-  roster's import and CIVL fill; the competition settings; the waypoints
+  roster's import, CIVL fill and copy from another competition; the
+  competition settings, and copying the competition into a new one; the waypoints
   editor's pages under the SSR'd list; creating a task; the task's settings,
   route and weather-notes editors and the route editor's pages; Create a test
   IGC; and recording a manual flight.

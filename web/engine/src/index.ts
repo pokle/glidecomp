@@ -140,6 +140,9 @@ export {
 } from './forge-igc';
 export {
   ellipsoidDistance,
+  chordLowerBound,
+  ecefOnEllipsoid,
+  type EcefPoint,
   bearingFromComponents,
   calculateBearing,
   calculateBearingRadians,

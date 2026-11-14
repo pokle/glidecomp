@@ -33,7 +33,9 @@
  * Speed Section gates and goal configuration are edited on the start and goal
  * turnpoints' pages and in collapsible sections below the list, so a whole
  * .xctsk is editable in one place; routes can be imported from a .xctsk file
- * or an XContest task code, and exported to a .xctsk file. Saving PATCHes the
+ * or an XContest task code, copied from another task's saved route
+ * (/route/copy, pages/TaskRouteCopyPage.tsx, the same draft again), and
+ * exported to a .xctsk file. Saving PATCHes the
  * task's xctsk (the server validates strictly and audit-logs the change), on
  * the kit form, so a refused save says why beside Save.
  */
@@ -69,6 +71,7 @@ import { underTask } from "../lib/crumbs";
 import {
   taskPath,
   taskRouteAddWaypointPath,
+  taskRouteCopyPath,
   taskRouteQuickPath,
   taskRouteTurnpointPath,
   taskRouteXContestPath,
@@ -610,6 +613,15 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
             }
           >
             Load from XContest
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() =>
+              navigate(taskRouteCopyPath(urlId, compName, taskId, taskName), fromHere)
+            }
+          >
+            Copy from another competition
           </Button>
           <Button variant="outline" size="sm" onPress={exportFile}>
             Export .xctsk
