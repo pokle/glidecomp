@@ -12,7 +12,8 @@
  * Priority chain (first hit wins):
  *   1. CIVL ID
  *   2. Any of SAFA / USHPA / BHPA / DHV / FFVL / FAI IDs
- *   3. Email (joined to `user.email`)
+ *   3. Email (joined to `user.email`), whatever its capitals — an account's
+ *      address is stored lower-case, and an organiser's spreadsheet is not
  *   4. Exact name (case-insensitive)
  *
  * A name-only match does NOT auto-link — the admin must resolve it manually.
@@ -134,7 +135,7 @@ export async function resolvePilotId(
           OR p.dhv_id   = ?
           OR p.ffvl_id  = ?
           OR p.fai_id   = ?
-          OR u.email    = ?
+          OR u.email    = ? COLLATE NOCASE
           OR LOWER(p.name) = ?`
     )
     .bind(
@@ -166,7 +167,10 @@ export async function resolvePilotId(
   }
 
   if (email) {
-    const hit = results.find((r) => r.email === email);
+    // Case-insensitively, as the SQL above matched it: "Jane@Example.com" on
+    // a roster is the account "jane@example.com".
+    const wanted = email.toLowerCase();
+    const hit = results.find((r) => r.email?.toLowerCase() === wanted);
     if (hit) {
       return { pilot_id: hit.pilot_id, matched_by: "email", nameOnlyCandidates: [] };
     }

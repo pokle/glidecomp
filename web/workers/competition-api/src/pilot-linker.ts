@@ -131,7 +131,11 @@ export async function linkExistingRegistrations(
     bindings.push(value);
   }
   if (identity.email) {
-    conditions.push("registered_pilot_email = ?");
+    // Whatever its capitals: an account's address is stored lower-case, and
+    // the organiser's copy is stored as typed ("Jane@Example.com", straight
+    // out of a spreadsheet). A match that failed on capitals left the row
+    // unlinked, and the pilot was asked which registration was theirs.
+    conditions.push("registered_pilot_email = ? COLLATE NOCASE");
     bindings.push(identity.email);
   }
 
@@ -183,12 +187,15 @@ export async function linkExistingRegistrations(
     // the race), silently skip — we don't want a partial failure to
     // abort the rest of the pass.
     try {
-      await db
+      const res = await db
         .prepare(
           "UPDATE comp_pilot SET pilot_id = ? WHERE comp_pilot_id = ? AND pilot_id IS NULL"
         )
         .bind(pilotId, row.comp_pilot_id)
         .run();
+      // Another account claimed it between the SELECT and here. It is theirs:
+      // reporting it as linked would file this pilot's track under their row.
+      if (!res.meta.changes) continue;
     } catch (err) {
       // Most likely the partial unique index fired because the pilot is
       // already linked to another row in this comp. That's a pre-existing
@@ -339,7 +346,10 @@ function classifyMatch(
       return field;
     }
   }
-  if (identity.email !== null && row.registered_pilot_email === identity.email) {
+  if (
+    identity.email !== null &&
+    row.registered_pilot_email?.toLowerCase() === identity.email.toLowerCase()
+  ) {
     return "email";
   }
   return null;
