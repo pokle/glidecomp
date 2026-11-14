@@ -86,6 +86,34 @@ describe("sign-in pilot bootstrap", () => {
     expect(audit!.description).toContain("matched by email at sign-in");
   });
 
+  test("claims a pre-registration whose email the organiser typed with capitals", async () => {
+    await env.glidecomp_auth
+      .prepare(
+        `INSERT INTO comp (name, creation_date, category, pilot_classes, default_pilot_class)
+         VALUES ('Capitals Cup', '2026-01-01', 'hg', '["open"]', 'open')`
+      )
+      .run();
+    const comp = await env.glidecomp_auth
+      .prepare("SELECT comp_id FROM comp WHERE name = 'Capitals Cup'")
+      .first<{ comp_id: number }>();
+    await env.glidecomp_auth
+      .prepare(
+        `INSERT INTO comp_pilot (comp_id, registered_pilot_name, registered_pilot_email, pilot_class)
+         VALUES (?, 'Capital Pilot', 'Capital.Pilot@Example.com', 'open')`
+      )
+      .bind(comp!.comp_id)
+      .run();
+
+    await loginAs("capital.pilot@example.com", "Capital Pilot");
+
+    const pilot = await pilotRowFor("capital.pilot@example.com");
+    const linked = await env.glidecomp_auth
+      .prepare("SELECT pilot_id FROM comp_pilot WHERE comp_id = ?")
+      .bind(comp!.comp_id)
+      .first<{ pilot_id: number | null }>();
+    expect(linked!.pilot_id).toBe(pilot!.pilot_id);
+  });
+
   test("does not claim rows with a different email", async () => {
     await env.glidecomp_auth
       .prepare(

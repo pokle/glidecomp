@@ -615,6 +615,23 @@ describe("PATCH /api/comp/:comp_id", () => {
     expect(rows.results.length).toBe(2);
   });
 
+  // An account's address is stored lower-case. Typed with a capital, it named
+  // nobody — refused when it was the only address, and silently left out of
+  // the list when it was one of several.
+  test("an admin's address matches whatever its capitals", async () => {
+    const compId = await createComp();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      admin_emails: ["Pilot@Test.com", "ADMIN2@test.com"],
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { admins: Array<{ email: string }> };
+    expect(data.admins.map((a) => a.email).sort()).toEqual([
+      "admin2@test.com",
+      "pilot@test.com",
+    ]);
+  });
+
   test("rejects admin_emails with no registered users, and saves nothing", async () => {
     // The Access page saves its switches, its close date and its admin list
     // in ONE request. The admin list used to be checked only after the comp

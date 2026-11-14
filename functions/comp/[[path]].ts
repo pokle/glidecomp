@@ -68,6 +68,7 @@ import {
   pilotPath,
 } from "../../web/frontend/src/react/lib/slug";
 
+import { injectSsr, serialize, type HeadTags } from "../../web/frontend/src/ssr-inject";
 import type { AuthUser } from "../../web/frontend/src/auth/client";
 // By relative path: functions/ is not a workspace package, so it cannot name
 // @glidecomp/worker-kit. The kit's own `jose` import still resolves, from
@@ -146,16 +147,6 @@ interface Rendered {
    * known. When it differs from the request path, onRequest 301s to it. Absent
    * for routes with no id (the comp list) or when a name was unavailable. */
   canonicalPath?: string;
-}
-
-interface HeadTags {
-  title: string;
-  description: string;
-  /** Emit <meta robots noindex> — for pages with no substantive content yet
-   * (a pending or empty task analysis). */
-  noindex?: boolean;
-  /** Extra raw tags (JSON-LD) already HTML-serialized. */
-  extra: string;
 }
 
 /**
@@ -939,46 +930,6 @@ function mergeCookie(init: RequestInit | undefined, cookie: string | null): Requ
   return { ...init, headers };
 }
 
-/**
- * Splice the rendered page into the shell: per-route <head> tags, the markup
- * into #root, and the __SSR_DATA__ JSON block before the client module script.
- */
-function injectSsr(
-  template: string,
-  path: string,
-  bodyHtml: string,
-  head: HeadTags,
-  ssrData: { path: string; data: unknown; user: AuthUser | null | undefined }
-): string {
-  const headTags =
-    (head.noindex ? `<meta name="robots" content="noindex">\n` : "") +
-    `<title>${escapeHtml(head.title)}</title>\n` +
-    `<meta name="description" content="${escapeAttr(head.description)}">\n` +
-    `<meta property="og:title" content="${escapeAttr(head.title)}">\n` +
-    `<meta property="og:description" content="${escapeAttr(head.description)}">\n` +
-    head.extra;
-
-  // Replace the shell's placeholder <title> and add the rest before </head>.
-  let out = template
-    .replace(/<title>[\s\S]*?<\/title>/, "")
-    .replace("</head>", `${headTags}</head>`);
-
-  // __SSR_DATA__ must precede the client entry module (which sits after the
-  // root div in app.html), so the client hydrates from the same loader data.
-  // A JSON data block, not an executable script: the CSP (`script-src 'self'`,
-  // public/_headers) runs no inline script, and this needs none — the client
-  // reads it with readSsrData() (src/ssr-data.ts).
-  // JSON.stringify drops an `undefined` value entirely, which is exactly the
-  // encoding the client wants: no `user` key means "unknown, go and ask",
-  // distinct from `"user":null` meaning a known signed-out visitor.
-  const ssrScript = `<script type="application/json" id="__SSR_DATA__">${serialize(ssrData)}</script>`;
-  out = out.replace(
-    '<div id="root"></div>',
-    `<div id="root">${bodyHtml}</div>${ssrScript}`
-  );
-  return out;
-}
-
 // ── head builders ────────────────────────────────────────────────────────────
 
 // Deliberately no <link rel="canonical">: iOS Safari's share sheet copies the
@@ -1009,22 +960,4 @@ function pilotNameFrom(score: { class_scores: Array<{ pilots: Array<{ comp_pilot
     if (p) return p.pilot_name;
   }
   return "Pilot";
-}
-
-/** JSON for embedding in <script>: block `</script>` and `<!--` breakouts. */
-function serialize(obj: unknown): string {
-  return JSON.stringify(obj)
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function escapeAttr(s: string): string {
-  return escapeHtml(s).replace(/"/g, "&quot;");
 }

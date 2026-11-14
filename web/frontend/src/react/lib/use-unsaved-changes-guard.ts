@@ -8,6 +8,14 @@
  *   no useBlocker, so same-origin link clicks are intercepted before React's
  *   own handlers, confirmed with the app dialog, then re-navigated).
  *
+ * "Re-navigated" means the way the link itself would have gone. A link to a
+ * page of the app goes through the router. A same-origin link to a page the
+ * SERVER answers — Home, About, the scoring guides, `/analysis`, a file — is a
+ * real page load: sent through the router, it rendered the app's own "page
+ * not found" over an address that was perfectly good, which is what
+ * "Discard changes" on the header's GlideComp link did. A `download` link
+ * leaves nothing, so it is not asked about at all.
+ *
  * ## Back is not guarded
  *
  * Back is the browser's Back, and it leaves without asking (CLAUDE.md, "No
@@ -29,6 +37,7 @@
  */
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { isSpaRoute } from "../../spa-routes";
 import { useConfirm } from "./confirm";
 
 export function useUnsavedChangesGuard(
@@ -79,6 +88,9 @@ export function useUnsavedChangesGuard(
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const anchor = (e.target as Element | null)?.closest?.("a[href]");
       if (!anchor || anchor.getAttribute("target") === "_blank") return;
+      // A download saves a file and leaves the page, and its edits, where
+      // they are.
+      if (anchor.hasAttribute("download")) return;
       const href = anchor.getAttribute("href") ?? "";
       const url = new URL(href, window.location.href);
       // External links fall through to beforeunload; same-page hashes are fine.
@@ -108,7 +120,15 @@ export function useUnsavedChangesGuard(
           guard.prompting = false;
           if (!ok) return;
           guard.options.onDiscard?.();
-          guard.navigate(url.pathname + url.search + url.hash);
+          if (isSpaRoute(url.pathname)) {
+            guard.navigate(url.pathname + url.search + url.hash);
+          } else {
+            // A page the server answers, not the router. The reader has
+            // already said "Discard", so the browser's own "Leave site?"
+            // must not ask again.
+            window.removeEventListener("beforeunload", onBeforeUnload);
+            window.location.assign(url.href);
+          }
         });
     };
     document.addEventListener("click", onClickCapture, true);

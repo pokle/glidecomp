@@ -1,4 +1,6 @@
+import { env } from "cloudflare:test";
 import { describe, expect, test, beforeEach } from "vitest";
+import { decodeId } from "../src/sqids";
 import {
   authRequest,
   clearCompData,
@@ -58,6 +60,40 @@ describe("GET /api/comp/open-now", () => {
     expect(body.comps[0].tasks[0].pilot_classes).toEqual(["open"]);
     // Today's task is the one-click answer.
     expect(body.comps[0].suggested_task_id).toBe(taskId);
+  });
+
+  // D1 binds at most 100 parameters per statement, and the classes of every
+  // listed task were fetched with one IN list — up to 400 ids. The local
+  // SQLite allows far more, so the failure itself cannot be reproduced here;
+  // what can is that a list too long for one statement still gives every task
+  // its classes.
+  test("more than a hundred tasks still each carry their classes", async () => {
+    const today = isoDaysFromToday(0);
+    for (let c = 0; c < 6; c++) {
+      const compId = await createComp({ name: `Busy Week ${c}` });
+      const id = decodeId(env.SQIDS_ALPHABET, compId)!;
+      const inserted = await env.DB.batch<{ task_id: number }>(
+        Array.from({ length: 20 }, (_, t) =>
+          env.DB.prepare(
+            `INSERT INTO task (comp_id, name, task_date, creation_date)
+             VALUES (?, ?, ?, ?) RETURNING task_id`
+          ).bind(id, `Task ${t + 1}`, today, today)
+        )
+      );
+      await env.DB.batch(
+        inserted.map((r) =>
+          env.DB.prepare(
+            "INSERT INTO task_class (task_id, pilot_class) VALUES (?, 'open')"
+          ).bind(r.results[0].task_id)
+        )
+      );
+    }
+
+    const { res, body } = await openNow();
+    expect(res.status).toBe(200);
+    const tasks = body.comps.flatMap((comp) => comp.tasks);
+    expect(tasks).toHaveLength(120);
+    expect(tasks.every((t) => t.pilot_classes.join() === "open")).toBe(true);
   });
 
   test("is answerable without signing in and is edge-cacheable", async () => {
@@ -125,6 +161,31 @@ describe("GET /api/comp/open-now", () => {
     const { body } = await openNow();
     // A pilot uploads after landing, so the past beats the future on a tie.
     expect(body.comps[0].suggested_task_id).toBe(yesterday);
+  });
+
+  // A task's date is a calendar day where the comp is flown. West of
+  // Greenwich the evening is already tomorrow in UTC, and a task made ahead
+  // for the next day was suggested to a pilot who had just landed today's.
+  test("suggests the task dated today in the comp's own zone", async () => {
+    const zone = "Pacific/Pago_Pago"; // UTC−11
+    const localToday = new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const nextDay = new Date(`${localToday}T00:00:00Z`);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+
+    const compId = await createComp({ name: "Far West Cup", timezone: zone });
+    const flownToday = await createTask(compId, { name: "Today", task_date: localToday });
+    await createTask(compId, {
+      name: "Tomorrow",
+      task_date: nextDay.toISOString().slice(0, 10),
+    });
+
+    const { body } = await openNow();
+    expect(body.comps[0].suggested_task_id).toBe(flownToday);
   });
 
   test("lists a comp's tasks most recent first", async () => {

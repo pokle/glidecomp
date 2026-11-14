@@ -131,6 +131,29 @@ export const MAX_ORGANISER_NOTES = 4000;
 
 const pilotClassString = requiredName();
 
+/**
+ * A competition's close date: a calendar day (`2026-12-31`, which the
+ * settings page sends and which ends with that day in the comp's zone), or an
+ * ISO 8601 date and time. Null or empty leaves the competition open.
+ *
+ * It was any text at all, read later by `new Date()`: "31/12/2026" stored, an
+ * invalid date, and a competition that never closed without a word; "1 Jan"
+ * parsed as 2001 and closed it on the spot.
+ */
+const closeDate = () =>
+  z
+    .string()
+    .max(MAX_TEXT)
+    .refine(
+      (v) =>
+        v === "" ||
+        /^\d{4}-\d{2}-\d{2}$/.test(v) ||
+        (/^\d{4}-\d{2}-\d{2}T/.test(v) && !Number.isNaN(Date.parse(v))),
+      "Must be a date (YYYY-MM-DD)"
+    )
+    .nullable()
+    .optional();
+
 const pilotClassesArray = z
   .array(pilotClassString)
   .min(1)
@@ -234,7 +257,7 @@ export const ftvFactorSchema = z.number().gt(0).lt(1);
 export const createCompSchema = z.object({
   name: requiredName(),
   category: z.enum(["hg", "pg"]),
-  close_date: optionalPlain(),
+  close_date: closeDate(),
   // Omitted means hidden: a new comp starts as a `test` comp (see POST /api/comp).
   test: z.boolean().optional(),
   pilot_classes: pilotClassesArray.optional(),
@@ -249,7 +272,7 @@ export const createCompSchema = z.object({
 export const updateCompSchema = z.object({
   name: requiredName().optional(),
   category: z.enum(["hg", "pg"]).optional(),
-  close_date: optionalPlain(),
+  close_date: closeDate(),
   test: z.boolean().optional(),
   pilot_classes: pilotClassesArray.optional(),
   default_pilot_class: pilotClassString.optional(),

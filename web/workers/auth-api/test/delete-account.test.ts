@@ -101,4 +101,86 @@ describe("POST /api/auth/delete-account R2 cleanup", () => {
     expect(audit!.actor_user_id).toBeNull();
     expect(audit!.actor_name).toBe("Audit User");
   });
+
+  // task_manual_flight.set_by_user_id (migration 0014) is the fourth such
+  // column, and delete-account did not name it: an organiser who had ever
+  // recorded a manual flight got a FOREIGN KEY failure — after their files
+  // were already deleted from R2 and they had been signed out.
+  test("de-links a manual flight the account recorded", async () => {
+    const cookie = await loginAs("delete-manual-flight@test.com");
+    const { id: userId } = await getMe(cookie);
+    const db = env.glidecomp_auth;
+
+    const comp = await db
+      .prepare(
+        `INSERT INTO comp (name, creation_date, category) VALUES ('Manual Flight Cup', '2026-01-01', 'hg') RETURNING comp_id`
+      )
+      .first<{ comp_id: number }>();
+    const task = await db
+      .prepare(
+        `INSERT INTO task (comp_id, name, task_date, creation_date) VALUES (?, 'Task 1', '2026-01-02', '2026-01-01') RETURNING task_id`
+      )
+      .bind(comp!.comp_id)
+      .first<{ task_id: number }>();
+    const pilot = await db
+      .prepare(
+        `INSERT INTO comp_pilot (comp_id, registered_pilot_name, pilot_class) VALUES (?, 'Trackless Pilot', 'open') RETURNING comp_pilot_id`
+      )
+      .bind(comp!.comp_id)
+      .first<{ comp_pilot_id: number }>();
+    await db
+      .prepare(
+        `INSERT INTO task_manual_flight
+           (task_id, comp_pilot_id, last_reached_tp_index, landing_lat, landing_lon,
+            set_by_user_id, set_by_name, set_at)
+         VALUES (?, ?, 1, -36.2, 147.9, ?, 'Scorekeeper', '2026-01-02T06:00:00Z')`
+      )
+      .bind(task!.task_id, pilot!.comp_pilot_id, userId)
+      .run();
+
+    const res = await request("POST", "/api/auth/delete-account", { cookie });
+    expect(res.status).toBe(200);
+
+    expect(
+      await db.prepare('SELECT 1 FROM "user" WHERE id = ?').bind(userId).first()
+    ).toBeNull();
+    // The evidence outlives the account that recorded it, with its name.
+    const flight = await db
+      .prepare(
+        "SELECT set_by_user_id, set_by_name FROM task_manual_flight WHERE task_id = ?"
+      )
+      .bind(task!.task_id)
+      .first<{ set_by_user_id: string | null; set_by_name: string }>();
+    expect(flight).toEqual({ set_by_user_id: null, set_by_name: "Scorekeeper" });
+  });
+
+  // The list delete-account de-links is written by hand, and a migration that
+  // adds another column referencing "user" with no ON DELETE action breaks
+  // account deletion for whoever it points at — silently, until they try. So
+  // the schema is read here, and a new such column fails this test until
+  // delete-account (and this list) names it.
+  test("every non-cascading reference to user is one delete-account de-links", async () => {
+    const db = env.glidecomp_auth;
+    const tables = await db
+      .prepare("PRAGMA table_list")
+      .all<{ name: string; type: string }>();
+    const found: string[] = [];
+    for (const { name, type } of tables.results) {
+      if (type !== "table" || name.startsWith("sqlite_") || name.startsWith("_cf_")) continue;
+      const keys = await db
+        .prepare(`PRAGMA foreign_key_list("${name.replace(/"/g, '""')}")`)
+        .all<{ table: string; from: string; on_delete: string }>();
+      for (const key of keys.results) {
+        if (key.table === "user" && key.on_delete === "NO ACTION") {
+          found.push(`${name}.${key.from}`);
+        }
+      }
+    }
+    expect(found.sort()).toEqual([
+      "audit_log.actor_user_id",
+      "task_manual_flight.set_by_user_id",
+      "task_pilot_status.set_by_user_id",
+      "task_track.uploaded_by_user_id",
+    ]);
+  });
 });

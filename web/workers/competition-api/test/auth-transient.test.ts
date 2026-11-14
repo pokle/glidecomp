@@ -106,3 +106,35 @@ describe("transient auth-hop failures (issue #481)", () => {
     expect(res.status).toBe(503);
   });
 });
+
+/**
+ * The same rule for a credential over its rate limit: auth-api answered, and
+ * the answer is 429. docs/api.md promises an API client `429` with
+ * `Retry-After`. It got `401 Not authenticated` on a signed-in route — as if
+ * its key were bad — and the signed-out view on a public one.
+ */
+describe("a rate-limited API key is told so", () => {
+  const limited = (method: string, path: string) =>
+    SELF.fetch(`https://test${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", "x-api-key": "glc_limited" },
+    });
+
+  test("on a route that needs sign-in: 429 with Retry-After, not 401", async () => {
+    const res = await limited("GET", "/api/comp/pilot");
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("23");
+    expect(((await res.json()) as { error: string }).error).toBe("Rate limit exceeded");
+  });
+
+  test("on a public route: 429, not the signed-out view", async () => {
+    const compId = await createComp({ name: "Public Comp" });
+    const res = await limited("GET", `/api/comp/${compId}`);
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("23");
+
+    // No credential at all is still the ordinary public answer.
+    const anonymous = await request("GET", `/api/comp/${compId}`, { user: "none" });
+    expect(anonymous.status).toBe(200);
+  });
+});
