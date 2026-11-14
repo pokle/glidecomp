@@ -295,7 +295,11 @@ function TurnpointForm({
                 formatOptions={{ useGrouping: true }}
                 value={Number.isFinite(radius) ? radius : NaN}
                 onChange={(v) => set({ radius: Number.isFinite(v) ? v : "" })}
-                className="w-36"
+                // The whole row, like the Altitude field below it (#803). A
+                // fixed w-36 left 54 px between the steppers once a touch
+                // screen made them 44 px each, and a 4 km cylinder read
+                // "4,00" with nothing to say a digit was missing.
+                className="w-full"
               />
             </div>
           </div>

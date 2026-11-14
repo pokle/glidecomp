@@ -133,7 +133,9 @@ export function StartSettings({
               minValue={1}
               maxValue={100}
               step={1}
-              className="w-28"
+              // Wider on a touch screen, where each stepper is 44 px rather
+              // than 28 (#803): at w-28 the digits had about 2 px between them.
+              className="w-28 pointer-coarse:w-36"
               aria-label="Number of gates"
               value={genCount}
               onChange={onGenCountChange}
@@ -145,7 +147,7 @@ export function StartSettings({
               // step must stay 1: RAC snaps to minValue + k·step, so
               // step 5 with min 1 would corrupt 15 → 16.
               step={1}
-              className="w-28"
+              className="w-28 pointer-coarse:w-36"
               aria-label="Gate interval (minutes)"
               value={genInterval}
               onChange={onGenIntervalChange}

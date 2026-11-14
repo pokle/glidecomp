@@ -36,7 +36,7 @@
  * desktop-only pass would exercise them at the one width they were not
  * designed for.
  */
-import { test, expect, PHONE_ONLY, type Page } from "./fixtures/test";
+import { test, expect, PHONE_ONLY, type Locator, type Page } from "./fixtures/test";
 import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { e2eCompName } from "./fixtures/stack";
 
@@ -560,6 +560,58 @@ test("start and goal settings live on the turnpoint they belong to", async ({
 
   await page.getByRole("button", { name: /^Goal$/ }).click();
   await expect(page.getByRole("radio", { name: /^Goal line/ })).toBeChecked();
+});
+
+/**
+ * How far a number field's text runs past its own box, in px — 0 when every
+ * character shows. Measured on the input rather than asserted from classes:
+ * the box a NumberField leaves its digits depends on the width the call site
+ * gives it LESS the steppers, which are 28 px with a mouse and 44 px on a
+ * touch screen, so a class check passes on exactly the device that fails.
+ */
+async function hiddenDigits(field: Locator): Promise<number> {
+  return field.evaluate((el: HTMLInputElement) => el.scrollWidth - el.clientWidth);
+}
+
+test("a turnpoint's numbers show every digit on a phone", { tag: PHONE_ONLY }, async ({
+  page,
+}) => {
+  // Issue #803: with 44 px steppers inside a fixed w-36, a 4 km radius read
+  // "4,00" — and nothing showed a digit was missing. 320 px is the reflow
+  // floor (docs/accessibility-standard.md §3.2), set here inside the
+  // `mobile` project so the touch-sized steppers come with it.
+  await page.setViewportSize({ width: 320, height: 812 });
+  await devLogin(page, ADMIN_USER);
+  await seedRoute(page, { withSpeedSection: true });
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+
+  // BRAVO is the start, so its page carries the gate generator too.
+  await openTurnpoint(page, "BRAVO");
+  await expect(
+    page.getByRole("heading", { name: "Start Speed Section (SSS)" })
+  ).toBeVisible();
+
+  // The widest radius the field takes, which its own comment promises reads
+  // "50,000".
+  const radius = page.getByLabel(/^Custom radius of /);
+  await radius.fill("50000");
+  await radius.blur();
+  await expect(radius).toHaveValue("50,000");
+  expect(await hiddenDigits(radius), "the radius field hides digits").toBeLessThanOrEqual(0);
+
+  // The start-gate generator's two fields: the widest each accepts.
+  for (const [name, widest] of [
+    ["Number of gates", "100"],
+    ["Gate interval (minutes)", "720"],
+  ] as const) {
+    const field = page.getByLabel(name, { exact: true });
+    await field.fill(widest);
+    await field.blur();
+    await expect(field).toHaveValue(widest);
+    expect(await hiddenDigits(field), `${name} hides digits`).toBeLessThanOrEqual(0);
+  }
+
+  await expectNoSidewaysScroll(page, "the start turnpoint's page");
 });
 
 test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async ({
