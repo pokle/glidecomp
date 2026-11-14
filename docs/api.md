@@ -289,13 +289,18 @@ yet are scheduled and reported as `pending` rather than computed inline.
 | `POST` | `/api/comp/:comp_id/task/:task_id/igc/open-submit` | Anonymous submission, when the organiser has opened it |
 | `GET` | `/api/comp/:comp_id/task/:task_id/manual-flight` | Manual (track-less) flight reports for the task |
 | `GET` | `/api/comp/:comp_id/task/:task_id/manual-flight/:comp_pilot_id/history` | Every version of one pilot's report — nothing is deleted |
-| `PUT` | `/api/comp/:comp_id/task/:task_id/manual-flight/:comp_pilot_id` | Record a manual flight — **admin** |
-| `DELETE` | `/api/comp/:comp_id/task/:task_id/manual-flight/:comp_pilot_id` | Supersede it — **admin** |
-| `POST` | `/api/comp/:comp_id/task/:task_id/manual-flight/:comp_pilot_id/restore/:manual_flight_id` | Reinstate an earlier version — **admin** |
+| `PUT` | `/api/comp/:comp_id/task/:task_id/manual-flight/:comp_pilot_id` | Record a manual flight — **admin**, the pilot, or open upload |
+| `DELETE` | `/api/comp/:comp_id/task/:task_id/manual-flight/:comp_pilot_id` | Supersede it — **admin**, the pilot, or open upload |
+| `POST` | `/api/comp/:comp_id/task/:task_id/manual-flight/:comp_pilot_id/restore/:manual_flight_id` | Reinstate an earlier version — **admin**, the pilot, or open upload |
 | `GET` | `/api/comp/:comp_id/task/:task_id/pilot-status` | Who is absent, DNF or landed — these feed launch validity |
-| `PUT` | `/api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id` | Set a pilot's status — **admin** |
-| `PATCH` | `/api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id` | Amend it — **admin** |
-| `DELETE` | `/api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id` | Clear it — **admin** |
+| `PUT` | `/api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id` | Set a pilot's status — **admin**, the pilot, or open upload |
+| `PATCH` | `/api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id` | Amend it — **admin**, the pilot, or open upload |
+| `DELETE` | `/api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id` | Clear it — **admin**, the pilot, or open upload |
+
+A manual flight and a pilot's status take the same three callers: an admin of
+the competition; the pilot the row is about, signed in to the account linked
+to that registration; and, while the competition has open upload on, any pilot
+registered in it. Every change is in the competition's public activity log.
 
 ### List tracks on a task
 

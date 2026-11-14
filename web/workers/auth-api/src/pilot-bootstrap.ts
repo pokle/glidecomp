@@ -51,11 +51,13 @@ export async function bootstrapPilotForUser(
     // 2) Claim unlinked pre-registrations carrying this account's email —
     //    every comp, closed ones included (same rationale as pilot-linker:
     //    a link is a statement about identity, not a competition mutation).
+    //    Whatever its capitals, as in pilot-linker: the account's address is
+    //    stored lower-case and the organiser's copy as typed.
     const candidates = await db
       .prepare(
         `SELECT comp_pilot_id, comp_id, registered_pilot_name
          FROM comp_pilot
-         WHERE pilot_id IS NULL AND registered_pilot_email = ?`
+         WHERE pilot_id IS NULL AND registered_pilot_email = ? COLLATE NOCASE`
       )
       .bind(pilot.email)
       .all<{

@@ -406,11 +406,15 @@ app.post("/api/auth/delete-account", async (c) => {
     cursor = listed.truncated ? listed.cursor : undefined;
   } while (cursor);
 
-  // Three columns reference "user" WITHOUT ON DELETE CASCADE, so any of them
+  // Four columns reference "user" WITHOUT ON DELETE CASCADE, so any of them
   // pointing at this user would make the DELETE below fail with a FOREIGN KEY
   // constraint error. These are historical/attribution records that must
   // outlive the account (each keeps a denormalized *_name fallback), so we
-  // de-link them rather than delete them. Everything else cascades: session,
+  // de-link them rather than delete them. test/delete-account.test.ts reads
+  // the schema and fails when a migration adds a fifth that this batch does
+  // not name — which is how task_manual_flight (migration 0014) went missing
+  // from it, and an organiser who had ever recorded a manual flight could not
+  // delete their account. Everything else cascades: session,
   // account, apikey, pilot, comp_admin, user_preferences, user_track,
   // user_task, user_annotation. Run it all as one batch (a single implicit
   // transaction) so the user row and its de-links commit together.
@@ -435,6 +439,9 @@ app.post("/api/auth/delete-account", async (c) => {
       .bind(userId),
     c.env.glidecomp_auth
       .prepare("UPDATE task_pilot_status SET set_by_user_id = NULL WHERE set_by_user_id = ?")
+      .bind(userId),
+    c.env.glidecomp_auth
+      .prepare("UPDATE task_manual_flight SET set_by_user_id = NULL WHERE set_by_user_id = ?")
       .bind(userId),
     c.env.glidecomp_auth.prepare('DELETE FROM "user" WHERE id = ?').bind(userId),
   ]);
