@@ -24,6 +24,8 @@
 import { Hono } from "hono";
 import type { BareEnv, Env } from "../env";
 import { encodeId } from "../sqids";
+import { bindList, chunkForBinds } from "../lib/bind-chunks";
+import { isCompClosed, todayInZone } from "../submission-gate";
 
 /**
  * How far either side of today a competition still counts as "on".
@@ -74,13 +76,18 @@ export const openCompsRoutes = new Hono<BareEnv>().get(
   "/api/comp/open-now",
   async (c) => {
     const alphabet = c.env.SQIDS_ALPHABET;
-    const today = isoDate(new Date());
+    const now = new Date();
+    const today = isoDate(now);
     const from = shiftDays(today, -WINDOW_DAYS);
     const to = shiftDays(today, WINDOW_DAYS);
 
     // `substr(close_date, 1, 10)` because close_date is stored both as a bare
     // date and as a timestamp; the "date-only means end of day" convention the
-    // upload routes use has to hold here too.
+    // upload routes use has to hold here too. That day ends in the COMP'S zone
+    // (isCompClosed), which SQL cannot ask, so the query keeps a day's margin
+    // and the exact rule is applied to each comp below — a comp west of
+    // Greenwich is still open on the evening of its last day, when UTC has
+    // already moved on.
     const rows = await c.env.DB.prepare(
       `SELECT c.comp_id, c.name, c.category, c.timezone, c.close_date,
               t.task_id, t.name AS task_name, t.task_date,
@@ -98,7 +105,7 @@ export const openCompsRoutes = new Hono<BareEnv>().get(
                        AND t2.task_date BETWEEN ?2 AND ?3)
        ORDER BY c.comp_id, t.task_date ASC`
     )
-      .bind(today, from, to)
+      .bind(shiftDays(today, -1), from, to)
       .all<{
         comp_id: number;
         name: string;
@@ -124,6 +131,9 @@ export const openCompsRoutes = new Hono<BareEnv>().get(
       }
     >();
     for (const row of rows.results) {
+      // The same answer the upload routes give, so nothing listed here is a
+      // comp that would refuse the file.
+      if (isCompClosed(row.close_date, row.timezone, now)) continue;
       let comp = byComp.get(row.comp_id);
       if (!comp) {
         comp = {
@@ -168,17 +178,22 @@ export const openCompsRoutes = new Hono<BareEnv>().get(
       .slice(0, MAX_COMPS)
       .map(({ comp }) => comp);
 
-    // Task classes for everything we are about to return, in one query.
+    // Task classes for everything we are about to return, in one round trip.
+    // Chunked: up to MAX_COMPS × MAX_TASKS_PER_COMP task ids (400) go into the
+    // IN list, and D1 binds at most 100 parameters per statement — one busy
+    // week of competitions was enough to turn this endpoint, which the
+    // homepage's submit flow starts from, into a 500.
     const taskIds = comps.flatMap((comp) => comp.tasks.map((t) => t.task_id));
     const classes: Record<number, string[]> = {};
     if (taskIds.length > 0) {
-      const placeholders = taskIds.map(() => "?").join(",");
-      const tc = await c.env.DB.prepare(
-        `SELECT task_id, pilot_class FROM task_class WHERE task_id IN (${placeholders})`
-      )
-        .bind(...taskIds)
-        .all<{ task_id: number; pilot_class: string }>();
-      for (const row of tc.results) {
+      const batches = await c.env.DB.batch<{ task_id: number; pilot_class: string }>(
+        chunkForBinds(taskIds).map((ids) =>
+          c.env.DB.prepare(
+            `SELECT task_id, pilot_class FROM task_class WHERE task_id IN (${bindList(ids.length)})`
+          ).bind(...ids)
+        )
+      );
+      for (const row of batches.flatMap((b) => b.results)) {
         (classes[row.task_id] ??= []).push(row.pilot_class);
       }
     }
@@ -209,8 +224,14 @@ export const openCompsRoutes = new Hono<BareEnv>().get(
         // uploads after landing, so the past beats the future on a tie.
         // Derived from the dates, never from array order: the wire order is a
         // presentation decision and has already been changed once.
-        const today_task = comp.tasks.find((t) => t.task_date === today);
-        const past = comp.tasks.filter((t) => t.task_date < today);
+        //
+        // "Today" is the COMP'S day. A task's date is a local calendar day,
+        // and in the Americas the evening a pilot lands is already tomorrow
+        // in UTC — where a task created ahead for the next day was suggested
+        // in place of the one just flown.
+        const localToday = todayInZone(comp.timezone, now);
+        const today_task = comp.tasks.find((t) => t.task_date === localToday);
+        const past = comp.tasks.filter((t) => t.task_date < localToday);
         const suggested =
           today_task ??
           (past.length > 0

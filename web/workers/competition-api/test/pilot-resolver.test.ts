@@ -95,6 +95,15 @@ describe("resolvePilotId", () => {
     expect(res.matched_by).toBe("email");
   });
 
+  // An account's address is stored lower-case; an organiser's roster carries
+  // whatever the spreadsheet had.
+  test("matches an email whatever its capitals", async () => {
+    const pilotId = await seedPilot("user-1", "Alice");
+    const res = await resolvePilotId(env.DB, { email: "Pilot@Test.COM" });
+    expect(res.pilot_id).toBe(pilotId);
+    expect(res.matched_by).toBe("email");
+  });
+
   test("email match only when no ID match", async () => {
     const civlPilot = await seedPilot("user-1", "Alice", { civl_id: "C-1" });
     await seedPilot("user-2", "Bob");

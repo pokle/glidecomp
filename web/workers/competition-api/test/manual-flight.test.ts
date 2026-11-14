@@ -459,6 +459,38 @@ describe("GET manual-flight list + history", () => {
     expect(hist.manual_flights[0].active).toBe(true);
     expect(hist.manual_flights[1].active).toBe(false);
   });
+
+  // Ids are sequential in a public encoding, so a hidden comp's task and
+  // pilot ids can be written behind any visible comp's id. The history route
+  // gated the comp in the URL and then read by task and pilot alone.
+  test("history does not read a hidden comp's flights through a visible comp's id", async () => {
+    const hiddenComp = await createComp({ name: "Rehearsal", test: true });
+    const hiddenTask = await createTask(hiddenComp, { xctsk: TASK_XCTSK });
+    const hiddenPilot = await registerPilot(hiddenComp, "Hidden Pilot");
+    const put = await authRequest(
+      "PUT",
+      `/api/comp/${hiddenComp}/task/${hiddenTask}/manual-flight/${hiddenPilot}`,
+      { last_reached_tp_index: 1, landing_lat: 0, landing_lon: 0.12 }
+    );
+    expect(put.status).toBe(200);
+
+    const visibleComp = await createComp({ name: "Published", test: false });
+
+    const res = await request(
+      "GET",
+      `/api/comp/${visibleComp}/task/${hiddenTask}/manual-flight/${hiddenPilot}/history`
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { manual_flights: unknown[] };
+    expect(body.manual_flights).toEqual([]);
+
+    // Its own admin still reads it, under its own comp.
+    const own = await authRequest(
+      "GET",
+      `/api/comp/${hiddenComp}/task/${hiddenTask}/manual-flight/${hiddenPilot}/history`
+    );
+    expect(((await own.json()) as { manual_flights: unknown[] }).manual_flights).toHaveLength(1);
+  });
 });
 
 describe("a hidden test comp only takes evidence from its admins", () => {

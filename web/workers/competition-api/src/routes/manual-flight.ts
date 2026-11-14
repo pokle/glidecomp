@@ -185,12 +185,18 @@ export const manualFlightRoutes = new Hono<AuthedEnv>()
         return c.json({ error: "Not found" }, 404);
       }
 
+      // The task must be THIS comp's. The gate above answered for the comp in
+      // the URL only, and task and pilot ids are sequential in a public
+      // encoding: without the join, a visible comp's id in front of a hidden
+      // comp's task and pilot ids read out the hidden comp's manual flights —
+      // where its pilots landed, and who recorded it.
       const rows = await c.env.DB.prepare(
-        `SELECT * FROM task_manual_flight
-         WHERE task_id = ? AND comp_pilot_id = ?
-         ORDER BY task_manual_flight_id DESC`
+        `SELECT mf.* FROM task_manual_flight mf
+         JOIN task t ON t.task_id = mf.task_id
+         WHERE mf.task_id = ? AND mf.comp_pilot_id = ? AND t.comp_id = ?
+         ORDER BY mf.task_manual_flight_id DESC`
       )
-        .bind(taskId, compPilotId)
+        .bind(taskId, compPilotId, compId)
         .all<ManualFlightRow>();
 
       return c.json({

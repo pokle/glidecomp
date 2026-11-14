@@ -1,3 +1,4 @@
+import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import {
   authCookieHeader,
@@ -61,12 +62,17 @@ export function forwardAuthHeaders(headers: Headers): Headers {
  * A 4xx is a real answer and is NOT retried: `/api/auth/me` returns 429 for a
  * rate-limited API key, and retrying that would both lie about the limit and
  * push the caller further past it.
- */
-async function resolveUser(env: Env, headers: Headers): Promise<AuthUser | null> {
-  return (await resolveIdentity(env, headers)).user;
-}
-
-/**
+ *
+ * **Nor is "over its limit" the same as "anonymous".** A 429 comes back as
+ * `retryAfterSeconds` beside a null user, and the middlewares below answer it
+ * as what it is ({@link rateLimited}). They used to read the user alone, so a
+ * rate-limited API key was told 401 "Not authenticated" on a signed-in route
+ * — as if the key were bad — and was quietly served the signed-out view on a
+ * public one, where an admin's hidden comp then answered "not found". The
+ * API's documented answer is 429 with `Retry-After` (docs/api.md).
+ *
+ * All of the above is {@link resolveIdentity}, which answers with this:
+ *
  * What auth-api said about this request's credential. Beside the user:
  * `grant` when the credential is an MCP access token (the client it was
  * issued to and the scopes the organiser consented to — middleware/mcp-fence.ts
@@ -160,6 +166,12 @@ async function fetchIdentity(env: Env, headers: Headers): Promise<Identity> {
   throw lastErr;
 }
 
+/** The answer to a credential that is over its rate limit (docs/api.md). */
+function rateLimited(c: Context, retryAfterSeconds: number): Response {
+  c.header("Retry-After", String(retryAfterSeconds));
+  return c.json({ error: "Rate limit exceeded" }, 429);
+}
+
 /**
  * Middleware that verifies authentication — from the session cookie cache, or
  * via service binding to auth-api.
@@ -170,20 +182,23 @@ export const requireAuth = createMiddleware<{
   Bindings: Env;
   Variables: { user: AuthUser };
 }>(async (c, next) => {
-  let user: AuthUser | null;
+  let identity: Identity;
   try {
-    user = await resolveUser(c.env, c.req.raw.headers);
+    identity = await resolveIdentity(c.env, c.req.raw.headers);
   } catch (err) {
-    // resolveUser only throws once its retries are exhausted, so this is
+    // resolveIdentity only throws once its retries are exhausted, so this is
     // auth-api being unavailable rather than the caller being anonymous.
     // 503 says "try again", where 401 would tell a signed-in user to sign in.
     console.error("[competition-api] auth-api unreachable", err);
     return c.json({ error: "Authentication service unavailable" }, 503);
   }
-  if (!user) {
+  if (identity.retryAfterSeconds !== undefined) {
+    return rateLimited(c, identity.retryAfterSeconds);
+  }
+  if (!identity.user) {
     return c.json({ error: "Not authenticated" }, 401);
   }
-  c.set("user", user);
+  c.set("user", identity.user);
   await next();
 });
 
@@ -192,9 +207,13 @@ export const requireAuth = createMiddleware<{
  * null otherwise. Never returns 401.
  *
  * A public route stays readable when auth-api is down, so an exhausted
- * resolveUser degrades to anonymous here rather than failing the request —
- * but it is logged, because that degradation is exactly what makes an admin's
- * controls disappear without explanation (issue #481).
+ * resolveIdentity degrades to anonymous here rather than failing the request
+ * — but it is logged, because that degradation is exactly what makes an
+ * admin's controls disappear without explanation (issue #481).
+ *
+ * A credential over its rate limit is different: auth-api answered, and the
+ * answer is 429. Serving the signed-out view instead would be a wrong answer
+ * the caller cannot tell from a right one.
  */
 export const optionalAuth = createMiddleware<{
   Bindings: Env;
@@ -202,7 +221,11 @@ export const optionalAuth = createMiddleware<{
 }>(async (c, next) => {
   let user: AuthUser | null = null;
   try {
-    user = await resolveUser(c.env, c.req.raw.headers);
+    const identity = await resolveIdentity(c.env, c.req.raw.headers);
+    if (identity.retryAfterSeconds !== undefined) {
+      return rateLimited(c, identity.retryAfterSeconds);
+    }
+    user = identity.user;
   } catch (err) {
     console.error("[competition-api] auth-api unreachable, serving anonymously", err);
   }

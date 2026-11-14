@@ -28,19 +28,54 @@ import { hiddenFromCaller } from "./comp-visibility";
 import { encodeId } from "./sqids";
 import type { TrackSubmissionRejection } from "./track-upload";
 
+/** A bare calendar day, the form the settings page stores a close date in. */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Today's calendar day (YYYY-MM-DD) in `timeZone`, or in UTC when the comp
+ * has none yet (no located task) or names one this runtime does not know.
+ */
+export function todayInZone(timeZone: string | null | undefined, now: Date): string {
+  if (timeZone) {
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(now);
+    } catch {
+      // An unknown zone name: fall through to UTC rather than fail an upload.
+    }
+  }
+  return now.toISOString().slice(0, 10);
+}
+
 /**
  * Has the competition closed for submissions?
  *
- * A date-only `close_date` (e.g. "2026-12-31") means the END of that day, so a
- * pilot landing on the last afternoon is not turned away by a boundary nobody
- * told them about. Every submission route asks this question and each used to
- * answer it with its own copy of the same three lines — including the two in
- * igc.ts that were identical to each other.
+ * A date-only `close_date` (e.g. "2026-12-31") means the END of that day IN
+ * THE COMPETITION'S OWN ZONE, so a pilot landing on the last afternoon is not
+ * turned away by a boundary nobody told them about. It used to be the end of
+ * that day in UTC — which is four in the afternoon in California and six in
+ * Valle de Bravo, so west of Greenwich the last day closed while pilots were
+ * still in the air, and the comp page (`isCompClosedForWrapUp`, which reads
+ * the comp's zone) went on saying it was open.
+ *
+ * A `close_date` that carries a time is an instant and is compared as one.
+ *
+ * Every submission route asks this question and each used to answer it with
+ * its own copy of the same three lines — including the two in igc.ts that
+ * were identical to each other.
  */
-export function isCompClosed(closeDate: string | null): boolean {
+export function isCompClosed(
+  closeDate: string | null,
+  timeZone?: string | null,
+  now: Date = new Date()
+): boolean {
   if (!closeDate) return false;
-  const at = closeDate.includes("T") ? closeDate : closeDate + "T23:59:59Z";
-  return new Date() > new Date(at);
+  if (DATE_ONLY.test(closeDate)) return todayInZone(timeZone, now) > closeDate;
+  return now > new Date(closeDate.includes("T") ? closeDate : closeDate + "T23:59:59Z");
 }
 
 /**
@@ -322,6 +357,8 @@ export interface SubmissionComp {
   comp_id: number;
   name: string;
   close_date: string | null;
+  /** The comp's IANA zone, which says when its close date ends. */
+  timezone: string | null;
   test: number;
   default_pilot_class: string;
   open_registration: number;
@@ -360,7 +397,7 @@ export async function submissionComp(
 ): Promise<{ comp: SubmissionComp } | { refusal: GateRefusal }> {
   const comp = await db
     .prepare(
-      `SELECT comp_id, name, close_date, test, default_pilot_class,
+      `SELECT comp_id, name, close_date, timezone, test, default_pilot_class,
               open_registration, open_igc_upload
        FROM comp WHERE comp_id = ?`
     )
@@ -373,7 +410,7 @@ export async function submissionComp(
   }
   const refused = admit ? await admit(comp) : null;
   if (refused) return { refusal: refused };
-  if (isCompClosed(comp.close_date)) {
+  if (isCompClosed(comp.close_date, comp.timezone)) {
     return { refusal: await compClosedRefusal(db, alphabet, comp) };
   }
   return { comp };

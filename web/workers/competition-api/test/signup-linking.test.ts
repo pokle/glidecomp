@@ -155,6 +155,36 @@ describe("8g signup linking via PATCH /api/comp/pilot", () => {
     expect(preReg!.pilot_id).not.toBeNull();
   });
 
+  test("matches an email the organiser typed with capitals", async () => {
+    const compIdEncoded = await createComp();
+    const compId = sqidToNumber(compIdEncoded);
+
+    // user-2's email is admin2@test.com; the roster has it as a spreadsheet
+    // would.
+    const preRegId = await seedPreRegistration(compId, {
+      name: "Alice Smith",
+      email: "Admin2@Test.com",
+    });
+
+    await request("PATCH", "/api/comp/pilot", {
+      body: { name: "Admin Two" },
+      user: "user-2",
+    });
+
+    const preReg = await env.DB.prepare(
+      "SELECT pilot_id FROM comp_pilot WHERE comp_pilot_id = ?"
+    )
+      .bind(preRegId)
+      .first<{ pilot_id: number | null }>();
+    expect(preReg!.pilot_id).not.toBeNull();
+    const auditRow = await env.DB.prepare(
+      "SELECT description FROM audit_log WHERE comp_id = ? AND subject_id = ?"
+    )
+      .bind(compId, preRegId)
+      .first<{ description: string }>();
+    expect(auditRow!.description).toContain("matched by email");
+  });
+
   test("does NOT link on name-only match (reserved for manual review)", async () => {
     const compIdEncoded = await createComp();
     const compId = sqidToNumber(compIdEncoded);

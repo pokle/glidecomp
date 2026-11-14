@@ -1109,7 +1109,10 @@ async function resolveAdminIds(
 ): Promise<string[]> {
   const placeholders = emails.map(() => "?").join(",");
   const users = await db
-    .prepare(`SELECT id FROM "user" WHERE email IN (${placeholders})`)
+    // Whatever their capitals: an account's address is stored lower-case, and
+    // "Jo@Club.org" typed here named an account that was then left out of the
+    // list without a word.
+    .prepare(`SELECT id FROM "user" WHERE email COLLATE NOCASE IN (${placeholders})`)
     .bind(...emails)
     .all<{ id: string }>();
   return users.results.map((u) => u.id);

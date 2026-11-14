@@ -31,6 +31,7 @@ import {
   buildChildMatchExpression,
 } from "../search-terms";
 import { scheduleSearchIndexDrain, type TaskDocExtra } from "../search-index";
+import { chunkForBinds } from "../lib/bind-chunks";
 
 // ── Caps ───────────────────────────────────────────────────────────────────
 // The page shows a readable handful; nothing here is a pagination boundary a
@@ -349,20 +350,28 @@ export const searchRoutes = new Hono<PublicEnv>().get(
     }
     const pilotCountByTask = new Map<number, number>();
     if (shownTaskIds.size > 0) {
-      const ids = [...shownTaskIds];
-      const rows = await db
-        .prepare(
-          `SELECT task_id, COUNT(*) AS pilot_count FROM (
-             SELECT task_id, comp_pilot_id FROM task_track
-              WHERE task_id IN (${placeholders(ids.length)})
-             UNION
-             SELECT task_id, comp_pilot_id FROM task_manual_flight
-              WHERE task_id IN (${placeholders(ids.length)}) AND active = 1
-           ) GROUP BY task_id`
+      // Chunked: MAX_TASKS matched tasks plus MAX_TASKS_PER_PILOT for each of
+      // MAX_PILOTS matched pilots is up to 96 task ids, each bound twice, and
+      // D1 binds at most 100 parameters per statement. Every task id is in
+      // exactly one chunk, so the per-task counts need no merging.
+      const batches = await db.batch<PilotCountRow>(
+        chunkForBinds([...shownTaskIds], 2).map((ids) =>
+          db
+            .prepare(
+              `SELECT task_id, COUNT(*) AS pilot_count FROM (
+                 SELECT task_id, comp_pilot_id FROM task_track
+                  WHERE task_id IN (${placeholders(ids.length)})
+                 UNION
+                 SELECT task_id, comp_pilot_id FROM task_manual_flight
+                  WHERE task_id IN (${placeholders(ids.length)}) AND active = 1
+               ) GROUP BY task_id`
+            )
+            .bind(...ids, ...ids)
         )
-        .bind(...ids, ...ids)
-        .all<PilotCountRow>();
-      for (const row of rows.results) pilotCountByTask.set(row.task_id, row.pilot_count);
+      );
+      for (const row of batches.flatMap((b) => b.results)) {
+        pilotCountByTask.set(row.task_id, row.pilot_count);
+      }
     }
 
     // ── Assembly ──────────────────────────────────────────────────────────

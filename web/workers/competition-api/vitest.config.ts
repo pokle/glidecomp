@@ -170,6 +170,18 @@ export default defineConfig(async () => {
                 });
               }
 
+              // An API key over its rate limit: auth-api's /me answers 429
+              // with Retry-After (the apiKey plugin's limiter).
+              if (
+                pathname === "/api/auth/me" &&
+                request.headers.get("x-api-key") === "glc_limited"
+              ) {
+                return Response.json(
+                  { user: null, error: "Rate limit exceeded" },
+                  { status: 429, headers: { "Retry-After": "23" } }
+                );
+              }
+
               const fail = cookie.match(/test-auth-fail=([^;:]+):(\d+)/);
               if (fail) {
                 const [, key, count] = fail;
