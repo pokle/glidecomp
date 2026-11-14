@@ -48,6 +48,7 @@ import {
   bareCompId,
   compPilotPath,
   compPilotsCivlFillPath,
+  compPilotsCopyPath,
   compPilotsImportPath,
 } from "../lib/slug";
 import { filterPilots, queryWords } from "./pilot-search";
@@ -246,6 +247,9 @@ export function PilotsSection({
               onExport={exportCsv}
               onFillCivl={() =>
                 navigate(compPilotsCivlFillPath(compId, compName), openedHere())
+              }
+              onCopyFromComp={() =>
+                navigate(compPilotsCopyPath(compId, compName), openedHere())
               }
               onAddTestPilots={() => void addTestPilots()}
             />

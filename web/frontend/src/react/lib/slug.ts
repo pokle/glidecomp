@@ -281,6 +281,27 @@ export function compPilotsCivlFillPath(id: string, name?: string | null): string
 }
 
 /**
+ * Copying the pilots of another competition into this roster. With
+ * `fromCompId`, the review of copying that one; without, the choice of which.
+ */
+export function compPilotsCopyPath(
+  id: string,
+  name?: string | null,
+  fromCompId?: string | null
+): string {
+  const path = `${compPilotsPath(id, name)}/copy`;
+  return fromCompId ? `${path}?from=${encodeURIComponent(fromCompId)}` : path;
+}
+
+/**
+ * Starting a new competition from this one (its settings, waypoints and
+ * pilots; never its tasks). Admin-only, reached from the settings index.
+ */
+export function compCopyPath(id: string, name?: string | null): string {
+  return `${compPath(id, name)}/copy`;
+}
+
+/**
  * The admin-only competition settings pages. Without `group`, the index of
  * grouped rows; with one (e.g. "scoring"), that group's sub-page.
  */
@@ -383,6 +404,20 @@ export function taskRouteXContestPath(
   taskName: string | null | undefined
 ): string {
   return `${taskRoutePath(compId, compName, taskId, taskName)}/xcontest`;
+}
+
+/**
+ * Copying another task's saved route into this one (comp-copy): a page of
+ * the route editor like Load from XContest, which loads the chosen route
+ * into the same draft and goes back to the route.
+ */
+export function taskRouteCopyPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskRoutePath(compId, compName, taskId, taskName)}/copy`;
 }
 
 /** Adding a competition waypoint from the route's map; `search` carries the map pick. */

@@ -136,6 +136,7 @@ export function NavActionRow({
   onPress,
   label,
   description,
+  value,
   icon,
   destructive,
   isPending,
@@ -145,6 +146,8 @@ export function NavActionRow({
   onPress: () => void;
   label: string;
   description?: string;
+  /** Right-aligned muted summary, as on a NavRow. */
+  value?: React.ReactNode;
   icon?: React.ReactNode;
   destructive?: boolean;
   /**
@@ -172,7 +175,7 @@ export function NavActionRow({
           label={label}
           description={description}
           icon={icon}
-          value={isPending ? <Spinner label={pendingLabel} /> : undefined}
+          value={isPending ? <Spinner label={pendingLabel} /> : value}
           chevron={false}
         />
       </AriaButton>

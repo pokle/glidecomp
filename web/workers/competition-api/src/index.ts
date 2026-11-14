@@ -7,6 +7,8 @@ import { bodyLimit } from "hono/body-limit";
 import { MAX_BODY_BYTES } from "./igc-validation";
 import type { AuthedEnv, Env } from "./env";
 import { compRoutes } from "./routes/comp";
+import { compCopyRoutes } from "./routes/comp-copy";
+import { routeCopyRoutes } from "./routes/route-copy";
 import { lookupRoutes } from "./routes/lookup";
 import { searchRoutes } from "./routes/search";
 import { drainSearchIndex, sweepSearchIndex } from "./search-index";
@@ -139,6 +141,9 @@ const routes = app
   // Ahead of pilotRoutes: the account's own /api/comp/pilot must win over
   // the roster's /api/comp/:comp_id/pilot.
   .route("/", pilotProfileRoutes)
+  // Ahead of pilotRoutes too: the static /pilot/copy and /pilot/copy-sources
+  // leaves must win over the roster's /pilot/:comp_pilot_id.
+  .route("/", compCopyRoutes)
   .route("/", pilotRoutes)
   .route("/", pilotStatusRoutes)
   .route("/", manualFlightRoutes)
@@ -152,6 +157,7 @@ const routes = app
   .route("/", registrationRoutes)
   .route("/", compRoutes)
   .route("/", taskRoutes)
+  .route("/", routeCopyRoutes)
   .route("/", waypointsRoutes)
   .route("/", scoreRoutes)
   .route("/", analysisRoutes)
