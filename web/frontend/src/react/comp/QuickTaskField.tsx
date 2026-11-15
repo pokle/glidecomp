@@ -269,7 +269,7 @@ export function QuickTaskField({
         <p
           className={
             parsed.unmatched > 0
-              ? "text-xs text-destructive"
+              ? "text-xs text-danger"
               : "text-xs text-muted-foreground"
           }
         >

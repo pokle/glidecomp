@@ -726,7 +726,7 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
       </div>
 
       {shownErrors.length > 0 ? (
-        <ul className="list-disc pl-5 text-sm text-destructive">
+        <ul className="list-disc pl-5 text-sm text-danger">
           {shownErrors.map((e, i) => (
             <li key={i}>{e}</li>
           ))}

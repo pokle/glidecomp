@@ -70,6 +70,18 @@ differs. Know which surface you're touching:
   colour (iOS system blue, until 2026-11), every primary button's label was at
   4.02:1 in light and 3.65:1 in dark. `src/react/accent-text.test.ts` holds
   the ratios for both themes and fails on `text-primary`.
+- **Red is two colours too.** `--destructive` is the fill and the mark: an
+  invalid field's border and ring, the wash behind a destructive button or a
+  badge (`border-destructive`, `bg-destructive/10`). `--danger` is red as
+  text: a field's error, an alert, the label of a destructive button
+  (`text-danger`, or `color: var(--danger)`). Do not use the fill as text. A
+  mark needs 3:1 and the fill has it; a letter needs 4.5:1 and the fill does
+  not. When red was one colour (iOS system red, until 2026-11), every field's
+  error message was at 3.55:1 on a card in light, and the label of a
+  destructive button was at 2.80:1 on its own wash (3.60:1 in a confirm
+  dialog in dark). The same test holds red text on every surface and on every
+  wash of the fill, fails on `text-destructive`, and fails on a wash that is
+  stronger than the ones it has measured.
 - **Non-text contrast ≥ 3:1** (WCAG 1.4.11) for UI component boundaries and
   states that convey meaning: input borders, the focus ring (`--ring`),
   checkbox/radio marks, chart/track lines and legends on the analysis and
@@ -426,6 +438,30 @@ they're closed deliberately rather than rediscovered:
    `@axe-core/playwright` and an `e2e/accessibility.spec.ts` that sweeps a
    representative route per surface — a comp page (SSR'd), a static content
    page, and the analysis page — and fails on violations.
+4. **Coloured text other than the accent and red is under 4.5:1 in light**
+   (§3.1) — found when red was fixed (2026-11) and not fixed with it. Each
+   needs the split the accent and red have: a text colour beside the fill,
+   held by `accent-text.test.ts`. Ratios are on a card unless stated; dark
+   passes on every one of these.
+   - Tailwind's amber, for warnings and cautions. `text-amber-500` is 2.13:1:
+     the warnings under a start setting, a quick route and the route editor,
+     and the "Draft" and "No route" chips (1.98:1 on their own wash).
+     `text-amber-600` is 3.20:1: "(unverified)" on `/admin/users` (2.87:1 from
+     pixels, on the ground), "counted in part" on the scores, the report
+     card's cautions. The DNF chip's `text-amber-700` is 4.48:1 on its wash.
+   - The analysis page, which is light only. `text-green-600` is 3.22:1 (the
+     SSS label, a goal tick, a climb's gain) and 2.69:1 on the climb rank's
+     wash. `text-red-600` is 3.57:1 on the sink rank's wash; it is Tailwind's
+     red and not the token, so the red fix did not reach it. `text-yellow-600`
+     (the ESS label) is 2.94:1. The "Goal" and "reached" banners are 4.32:1
+     and 4.47:1.
+   - The chart labels on `/scoring/data-cleaning` are `text-chart-1`, `-2` and
+     `-3`: 4.02:1, 2.22:1 and 2.20:1. The chart tones are marks; as labels
+     they are text.
+5. **A destructive button's focus ring is under 3:1** (§3.1, §4.2) —
+   `rac/button.tsx` replaces the kit's ring with `border-destructive/40` and
+   `ring-destructive/20`. From pixels, against the page: the border is 1.68:1
+   and the ring 1.30:1 in light, and the ring is 1.74:1 in dark.
 
 Closed since this document was written, kept here as pointers rather than
 rediscovered as gaps:

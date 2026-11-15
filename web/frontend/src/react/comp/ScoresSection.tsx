@@ -364,7 +364,7 @@ function ScoreClassTable({
                 {hasPenalties ? (
                   <Cell>
                     {p.penalty_points !== 0 ? (
-                      <span className="text-destructive">
+                      <span className="text-danger">
                         {p.penalty_points < 0
                           ? `+${Math.abs(p.penalty_points)}`
                           : `-${p.penalty_points}`}

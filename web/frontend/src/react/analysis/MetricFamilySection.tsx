@@ -111,7 +111,7 @@ export function MetricFamilySection({
     >
       <div className="space-y-4 py-3">
         {failed.map((m) => (
-          <p key={m.id} role="status" className="text-sm text-destructive">
+          <p key={m.id} role="status" className="text-sm text-danger">
             {m.label} could not be computed: {m.error}
           </p>
         ))}

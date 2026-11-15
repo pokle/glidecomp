@@ -272,7 +272,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         <button type="button" class="te-upload-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground" title="Open .xctsk file">${ICON_UPLOAD} Open\u2026</button>
         <button type="button" class="te-xcontest-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground ${xcontestInputOpen ? 'bg-muted' : ''}" title="Load XContest task">${ICON_GLOBE} XContest</button>
         <button type="button" class="te-download-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground disabled:opacity-30 disabled:pointer-events-none" title="Save as .xctsk file">${ICON_DOWNLOAD} Save</button>
-        <button type="button" class="te-clear-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors text-muted-foreground hover:text-destructive" title="Clear all waypoints">${ICON_TRASH}</button>
+        <button type="button" class="te-clear-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors text-muted-foreground hover:text-danger" title="Clear all waypoints">${ICON_TRASH}</button>
       `);
       container.appendChild(toolbar);
 
@@ -432,7 +432,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
           <span title="Cumulative">${cumDist}</span>
         </div>
       </div>
-      ${readOnly ? nothing : html`<button type="button" class="te-delete-btn shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors opacity-40 hover:opacity-100" title="Delete waypoint">${ICON_X}</button>`}
+      ${readOnly ? nothing : html`<button type="button" class="te-delete-btn shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-danger transition-colors opacity-40 hover:opacity-100" title="Delete waypoint">${ICON_X}</button>`}
     `);
 
     card.appendChild(header);
@@ -795,7 +795,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
           emitTaskChanged();
         } catch (err) {
           statusEl.textContent = `${err instanceof Error ? err.message : 'Failed to load task'}`;
-          statusEl.className = 'te-xcontest-status text-[10px] text-destructive mt-1';
+          statusEl.className = 'te-xcontest-status text-[10px] text-danger mt-1';
           input.disabled = false;
           input.focus();
         }
@@ -822,8 +822,8 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
 
     btn.dataset.confirming = 'true';
     const original = [...btn.childNodes];
-    renderInto(btn, html`<span class="text-xs text-destructive font-medium">Clear?</span>
-      <span class="te-confirm-yes text-xs text-destructive underline cursor-pointer ml-1">Yes</span>
+    renderInto(btn, html`<span class="text-xs text-danger font-medium">Clear?</span>
+      <span class="te-confirm-yes text-xs text-danger underline cursor-pointer ml-1">Yes</span>
       <span class="te-confirm-no text-xs text-muted-foreground underline cursor-pointer ml-1">No</span>`);
     btn.classList.add('px-2');
 

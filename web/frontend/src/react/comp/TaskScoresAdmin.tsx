@@ -472,7 +472,7 @@ function OutcomeBadge({ outcome, evidence }: { outcome: Outcome; evidence: RowPi
     landed: "bg-primary/10 text-link",
     present: "bg-muted text-muted-foreground",
     dnf: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    absent: "bg-destructive/10 text-destructive",
+    absent: "bg-destructive/10 text-danger",
   };
   return (
     <span className="inline-flex items-center gap-2">

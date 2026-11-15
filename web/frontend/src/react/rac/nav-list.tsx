@@ -166,7 +166,7 @@ export function NavActionRow({
         isPending={isPending}
         className={cn(
           rowClass,
-          destructive && "font-medium text-destructive",
+          destructive && "font-medium text-danger",
           "data-pending:cursor-default data-pending:opacity-70",
           className
         )}

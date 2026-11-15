@@ -331,7 +331,7 @@ export function SignIn() {
         )}
 
         {error ? (
-          <p role="alert" className="mt-4 text-sm text-destructive">
+          <p role="alert" className="mt-4 text-sm text-danger">
             {error}
           </p>
         ) : null}

@@ -131,7 +131,7 @@
   }
 
   .alert-destructive {
-    @apply text-destructive bg-card;
+    @apply text-danger bg-card;
   }
 
   /* Tabs (panel tab strip; switching behavior is the page's own JS) */

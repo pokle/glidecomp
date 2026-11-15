@@ -56,7 +56,7 @@ function StoppedTaskNotice({
   if (!stopped) return null;
   return (
     <p className="mt-2 text-sm">
-      <span className="font-medium text-destructive">Task stopped</span>{" "}
+      <span className="font-medium text-danger">Task stopped</span>{" "}
       <span className="text-muted-foreground">
         — flights scored up to{" "}
         {formatInstant(new Date(stopped.stop_time_ms), timezone ?? "UTC", mounted)} (the
