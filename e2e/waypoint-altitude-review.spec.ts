@@ -67,6 +67,9 @@ async function checkAltitudes(page: Page, alt: number, alpha?: number): Promise<
   await expect(page).toHaveURL(reviewUrl, { timeout: 20_000 });
   await expect(h1(page, "Check altitudes")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  // The bar, and its title, are there before the review's rows are (#863):
+  // wait for the list itself, or a reader of it gets an empty one.
+  await expect(reviewRows(page).first()).toBeVisible({ timeout: 20_000 });
 }
 
 /** The bar's Back: from one waypoint to the review, from the review to the waypoints. */
