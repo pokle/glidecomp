@@ -84,12 +84,36 @@ export const TRUSTED_TYPES_HEADERS: Readonly<Record<string, string>> = {
   "Content-Security-Policy-Report-Only": TRUSTED_TYPES_REPORT_ONLY_POLICY,
 };
 
+/**
+ * Geolocation is allowed to this origin and to no other, because every map
+ * carries a "Find my location" button (the Geolocate control in
+ * src/analysis/mapbox-provider.ts) and a competition is run from a hill, on a
+ * phone. Before it enables itself the button asks the browser whether
+ * geolocation is "denied". Under `geolocation=()` Chrome, Edge and Chrome on
+ * Android answered yes without asking the reader, because that value denies
+ * our own pages too, so the button was dead in all three. Safari did not
+ * enforce the header, so an iPhone hid the fault (found 2026-11-15).
+ *
+ * `(self)` opens nothing to anyone else: a frame from another origin still
+ * gets no position, and the browser asks the reader before it gives one to us.
+ * What the header no longer does is stop a script that runs on this origin
+ * from asking, or, for a reader who has already allowed this site, from
+ * reading a position with no prompt. The defence against such a script is the
+ * enforced Content-Security-Policy above, and that is one more reason to keep
+ * `script-src 'self'` as it is.
+ *
+ * Microphone and camera have no use on this site and stay denied to everyone.
+ * e2e/ssr.spec.ts ("Permissions-Policy") asks a browser the button's own
+ * question against the served pages.
+ */
+const PERMISSIONS_POLICY = "geolocation=(self), microphone=(), camera=()";
+
 /** Header name → value, in the order `_headers` lists them. */
 export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+  "Permissions-Policy": PERMISSIONS_POLICY,
   "Reporting-Endpoints": 'csp="/api/csp-report"',
   "Content-Security-Policy": CONTENT_SECURITY_POLICY,
 };
