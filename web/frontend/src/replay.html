@@ -418,14 +418,14 @@
         <section class="space-y-2 border-t border-slate-700/60 pt-5">
           <div class="flex items-center gap-2">
             <h3 class="flex-1 text-xs uppercase tracking-wide text-lime-400 font-semibold">Pilots</h3>
-            <button id="toggleAll" class="min-h-6 text-xs pointer-coarse:min-h-11 pointer-coarse:px-2 text-slate-400 hover:text-slate-200">hide all</button>
+            <button id="toggleAll" class="min-h-6 min-w-6 text-xs pointer-coarse:min-h-11 pointer-coarse:px-2 text-slate-400 hover:text-slate-200">hide all</button>
           </div>
           <input id="pilotSearch" type="search" placeholder="Search pilots…" autocomplete="off"
             class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-base md:text-sm pointer-coarse:min-h-11 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-lime-400">
           <ul id="legend" class="overflow-y-auto -mx-1 text-xs" style="max-height: 38vh;"></ul>
           <div id="followBar" class="hidden rounded-md bg-slate-800/60 px-2.5 py-1.5 text-xs">
             Following <span id="followName" class="text-slate-200 font-medium"></span>
-            <button id="unfollow" class="ml-1 min-h-6 text-lime-400 hover:underline pointer-coarse:min-h-11 pointer-coarse:px-2">stop</button>
+            <button id="unfollow" class="ml-1 min-h-6 min-w-6 text-lime-400 hover:underline pointer-coarse:min-h-11 pointer-coarse:px-2">stop</button>
           </div>
         </section>
 
@@ -436,7 +436,7 @@
         <section id="thermalPanelWrap" class="hidden space-y-2 border-t border-slate-700/60 pt-5">
           <div class="flex items-center gap-2">
             <h3 class="flex-1 text-xs uppercase tracking-wide text-violet-300 font-semibold">Thermals</h3>
-            <button id="thermalToggle" class="min-h-6 text-xs pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-2 text-violet-300 hover:underline" title="Show/hide the reconstructed thermal columns">hide</button>
+            <button id="thermalToggle" class="min-h-6 min-w-6 text-xs pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-2 text-violet-300 hover:underline" title="Show/hide the reconstructed thermal columns">hide</button>
           </div>
           <select id="thermalSelect" class="w-full rounded-md bg-slate-800/60 px-2 py-1.5 text-base md:text-sm pointer-coarse:min-h-11 text-slate-200 border border-slate-700/60">
             <option value="-1">All thermals (fade with the clock)</option>
@@ -453,8 +453,8 @@
         <section id="gagglePanelWrap" class="space-y-2 border-t border-slate-700/60 pt-5">
           <div class="flex items-center gap-2">
             <h3 class="flex-1 text-xs uppercase tracking-wide text-lime-400 font-semibold">Gaggles</h3>
-            <button id="gaggleActiveOnly" class="min-h-6 text-xs pointer-coarse:min-h-11 pointer-coarse:px-2 text-slate-400 hover:text-slate-200" title="Show only gaggles active at the current time">active now</button>
-            <button id="gaggleToggle" class="min-h-6 text-xs pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-2 text-lime-400 hover:underline" title="Show/hide the gaggle overlay">hide</button>
+            <button id="gaggleActiveOnly" class="min-h-6 min-w-6 text-xs pointer-coarse:min-h-11 pointer-coarse:px-2 text-slate-400 hover:text-slate-200" title="Show only gaggles active at the current time">active now</button>
+            <button id="gaggleToggle" class="min-h-6 min-w-6 text-xs pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-2 text-lime-400 hover:underline" title="Show/hide the gaggle overlay">hide</button>
           </div>
           <ul id="gaggleList" class="overflow-y-auto -mx-1 text-xs" style="max-height: 30vh;"></ul>
           <!-- dev-only threshold sliders (unhidden in DEV) -->
