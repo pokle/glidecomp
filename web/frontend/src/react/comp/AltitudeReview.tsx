@@ -18,6 +18,11 @@
  * view a page: Back walks from one waypoint to the list and from the list to
  * the waypoints, as a browser's Back does.
  *
+ * Each page has the app's one bar (issue #863). The list's two actions — take
+ * the map's altitude for every row on it, and widen the list to every
+ * waypoint — are under its ⋯; they were a bar stuck to the foot of the
+ * screen. The way out of either page is the bar's Back and nothing else.
+ *
  * The list is a SNAPSHOT, in membership and in order, taken when the check
  * ran and kept in the waypoints draft (comp/waypoints-draft.ts), so it is the
  * same list after a visit to one waypoint and after a reload.
@@ -26,12 +31,10 @@
  * edit to the draft, so Save on the waypoints page stays the commit.
  */
 import { useState } from "react";
-import { ChevronLeftIcon } from "lucide-react";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Button, ToggleButton } from "@/react/rac/button";
+import { Button } from "@/react/rac/button";
+import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
 import { GridList, GridListItem, RowContent } from "@/react/rac/grid-list";
 import { NumberField } from "@/react/rac/field";
-import { SectionHeader } from "../components/SectionHeader";
 import { underAltitudeReview, underCompWaypoints } from "../lib/crumbs";
 import { cn } from "@/react/lib/utils";
 import { parseCoords } from "./route-editor";
@@ -50,6 +53,7 @@ import {
   type AltitudePair,
 } from "./altitude-check";
 import { pairOf, type AltitudeReviewEntry } from "./waypoints-draft";
+import { ListFilterIcon, MountainIcon } from "lucide-react";
 
 /** Metres, as the file writes them: whole numbers, and the unit spelled out. */
 const metres = (v: number) => `${Math.round(v)} m`;
@@ -87,7 +91,6 @@ export function AltitudeReviewList({
   onOpen,
   onAccept,
   onConvertFromFeet,
-  onDone,
 }: {
   /** As it goes in URLs. */
   compId: string;
@@ -104,8 +107,6 @@ export function AltitudeReviewList({
   /** Take the map's altitude for these rows. */
   onAccept: (ids: number[]) => void;
   onConvertFromFeet: () => void;
-  /** Leave the review. */
-  onDone: () => void;
 }) {
   const pairs = entries.map(pairOf);
   const summary = summariseAltitudeCheck(pairs);
@@ -113,23 +114,43 @@ export function AltitudeReviewList({
   /** Of those on screen, the ones there is a map altitude to take. */
   const acceptable = shown.filter((e) => e.mapAlt !== undefined && needsReview(pairOf(e)));
 
+  // The bulk action is a ⋯ row, not the bar's commit: it names what it does
+  // and to how many, which is a sentence, and the commit slot is for a word.
+  const actions: BarAction[] = [
+    {
+      id: "accept-all",
+      icon: MountainIcon,
+      label: `Use the map’s altitude for all ${acceptable.length}`,
+      disabled: acceptable.length === 0,
+      onAction: () => onAccept(acceptable.map((e) => e.id)),
+    },
+    ...(listedCount > 0
+      ? [
+          {
+            id: "show-all",
+            icon: ListFilterIcon,
+            label: showAll
+              ? `Show only the ${listedCount} to look at`
+              : `Show all ${entries.length} waypoints`,
+            onAction: () => onShowAll(!showAll),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={underCompWaypoints(compId, compName)} current="Check altitudes" />
-      {/* What the check found, and the way out. */}
-      <SectionHeader
-        as="h1"
-        className="mt-2"
-        title="Check altitudes"
-        action={
-          <Button variant="outline" size="sm" onPress={onDone}>
-            Done
-          </Button>
-        }
-      />
-      {/* A live region: accepting rows changes these numbers without moving
-          focus. */}
-      <p role="status" className="mt-1 text-sm text-muted-foreground">
+    <Page
+      bar={
+        <PageBar
+          title="Check altitudes"
+          trail={underCompWaypoints(compId, compName)}
+          actions={actions}
+        />
+      }
+    >
+      {/* What the check found. A live region: accepting rows changes these
+          numbers without moving focus. */}
+      <p role="status" className="text-sm text-muted-foreground">
         {summary.reviewable > 0
           ? `${summary.reviewable} of ${entries.length} waypoint${
               entries.length === 1 ? "" : "s"
@@ -237,28 +258,11 @@ export function AltitudeReviewList({
         }}
       </GridList>
 
-      {/* The bulk action and the widen toggle, kept in reach at the foot of
-          the screen while the list scrolls: nothing on this page is typed
-          into, so the keyboard is never over them. Sticky, never fixed (the
-          overlays rule in CLAUDE.md). */}
-      <div className="sticky bottom-0 z-10 mt-4 flex flex-wrap items-center gap-2 border-t border-border bg-background/95 pt-3 pb-gutter-safe backdrop-blur-sm">
-        <Button
-          isDisabled={acceptable.length === 0}
-          onPress={() => onAccept(acceptable.map((e) => e.id))}
-        >
-          Use the map’s altitude for all {acceptable.length}
-        </Button>
-        {listedCount > 0 ? (
-          <ToggleButton size="sm" isSelected={showAll} onChange={onShowAll}>
-            {showAll ? `Show only the ${listedCount} to look at` : `Show all ${entries.length} waypoints`}
-          </ToggleButton>
-        ) : null}
-        <p className="w-full text-xs text-muted-foreground">
-          Nothing is saved until you press Save. Existing tasks keep their own
-          copies and won’t change.
-        </p>
-      </div>
-    </div>
+      <p className="mt-4 text-xs text-muted-foreground">
+        Nothing is saved until you press Save. Existing tasks keep their own
+        copies and won’t change.
+      </p>
+    </Page>
   );
 }
 
@@ -268,9 +272,10 @@ export function AltitudeReviewList({
  * No map, by decision: the coordinates are editable as text instead, which is
  * what a pasted correction needs anyway.
  *
- * Back and Done both return to the review's LIST — "done with this
- * waypoint", never "done with the check" — and going back IS "leave it as it
- * is", so no third button says so. Only the list's own Done leaves the review.
+ * The bar's Back returns to the review's LIST — "done with this waypoint",
+ * never "done with the check" — and going back IS "leave it as it is", so no
+ * other button says so (there were two until #863, "All N" and Done, and
+ * both did what Back does).
  *
  * ## The comparison holds still while the coordinates are edited
  *
@@ -293,8 +298,6 @@ export function AltitudeReviewDetail({
   compName,
   entry,
   mapAlt,
-  listedCount,
-  onBack,
   onUseMapAltitude,
   onEditAltitude,
   onEditCoords,
@@ -304,9 +307,6 @@ export function AltitudeReviewDetail({
   entry: AltitudeReviewEntry;
   /** The reading the waypoint had when this page opened. */
   mapAlt: number | undefined;
-  listedCount: number;
-  /** Back to the review's list. */
-  onBack: () => void;
   onUseMapAltitude: (altitude: number) => void;
   /** Set the altitude, or clear it when undefined. */
   onEditAltitude: (altitude: number | undefined) => void;
@@ -316,30 +316,18 @@ export function AltitudeReviewDetail({
   const delta = altitudeDelta(pair);
 
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={underAltitudeReview(compId, compName)} current={entry.code || "Waypoint"} />
-      {/* BOTH of these go back to the list, and neither leaves the review.
-          Done used to close the whole review from here, which dropped the
-          reader out to the waypoints page mid-way down a list of twelve —
-          nobody expects "done with this waypoint" to mean "done with the
-          check". Leaving the review is the list's own Done. */}
-      <div className="mt-2 flex items-center gap-2">
-        <Button variant="ghost" size="sm" onPress={onBack}>
-          <ChevronLeftIcon className="size-4" aria-hidden="true" />
-          {listedCount > 0 ? `All ${listedCount}` : "Back"}
-        </Button>
-        <Button variant="outline" size="sm" className="ms-auto" onPress={onBack}>
-          Done
-        </Button>
-      </div>
-
-      <h1 className="mt-3 text-2xl font-bold">{entry.code || "Waypoint"}</h1>
+    <Page
+      bar={
+        // The trail ends at the review, so Back is the review's list.
+        <PageBar title={entry.code || "Waypoint"} trail={underAltitudeReview(compId, compName)} />
+      }
+    >
       {entry.name && entry.name !== entry.code ? (
         <p className="text-sm text-muted-foreground">{entry.name}</p>
       ) : null}
 
       {/* The comparison, side by side and both labelled — the whole point. */}
-      <div className="mt-4 flex items-start gap-4 rounded border border-border p-3">
+      <div className="mt-3 flex items-start gap-4 rounded border border-border p-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs text-muted-foreground">In the file</p>
           <p className="font-mono text-xl font-semibold">
@@ -376,7 +364,7 @@ export function AltitudeReviewDetail({
       ) : null}
 
       {mapAlt === undefined ? null : (
-        <Button className="mt-4 w-full" onPress={() => onUseMapAltitude(mapAlt)}>
+        <Button className="mt-4 h-11 w-full" onPress={() => onUseMapAltitude(mapAlt)}>
           Use the map’s altitude ({metres(mapAlt)})
         </Button>
       )}
@@ -398,7 +386,7 @@ export function AltitudeReviewDetail({
           className="font-mono"
         />
       </div>
-    </div>
+    </Page>
   );
 }
 

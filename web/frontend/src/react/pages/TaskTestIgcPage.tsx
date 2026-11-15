@@ -18,14 +18,16 @@
 import { useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { SettingsPage } from "@/react/components/SettingsPage";
 import { Loading } from "@/react/rac/progress";
 import { underTask } from "../lib/crumbs";
 import { idFromSegment, taskPath, taskTestIgcPath } from "../lib/slug";
 import { useTaskAdminPage } from "../lib/use-task-admin-page";
 import { ForgeIgcForm } from "../comp/ForgeIgcForm";
 
-const TITLE = "Create a test IGC";
+/** The bar has one line: the short name there, the sentence in its menu. */
+const TITLE = "Test IGC";
+const FULL_TITLE = "Create a test IGC";
 
 export function TaskTestIgcPage() {
   const { compId: compParam, taskId: taskParam } = useParams<{
@@ -45,20 +47,33 @@ export function TaskTestIgcPage() {
   });
 
   if (notFound) return <NotFound title="Task not found" />;
-  if (loading || !comp || !task) return <Loading>Loading…</Loading>;
+  if (loading || !comp || !task) {
+    // The bar is there before the data, so the page does not jump.
+    return (
+      <SettingsPage
+        crumbs={underTask(urlId, comp?.name, taskId, task?.name)}
+        title={TITLE}
+        fullTitle={FULL_TITLE}
+      >
+        <Loading>Loading…</Loading>
+      </SettingsPage>
+    );
+  }
 
   if (!isAdmin) return <OrganisersOnly to={taskPath(urlId, comp.name, taskId, task.name)} />;
   if (!task.xctsk) {
     // The task page offers this only once there is a route: there is nothing
     // to fly without one.
     return (
-      <div>
-        <Breadcrumbs items={underTask(urlId, comp.name, taskId, task.name)} current={TITLE} />
-        <h1 className="mt-2 text-2xl font-bold">{TITLE}</h1>
-        <p className="mt-2 text-muted-foreground">
+      <SettingsPage
+        crumbs={underTask(urlId, comp.name, taskId, task.name)}
+        title={TITLE}
+        fullTitle={FULL_TITLE}
+      >
+        <p className="text-muted-foreground">
           This task has no route yet, so there is no flight to make.
         </p>
-      </div>
+      </SettingsPage>
     );
   }
 

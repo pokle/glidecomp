@@ -114,6 +114,25 @@ SPA.
    (`entry-client.tsx` → `hydrateRoot`; `src/react/lib/initial-data.tsx` seeds
    each page's state so the first render matches).
 
+### The page bar on the server
+
+Every page renders its own bar (`rac/page-bar.tsx`, issue #863) inside
+`<main>`, and the server renders it with the page. Three things follow:
+
+- **It must render the same on both sides.** No `window` at module scope, the
+  menus closed, and the signed-in state from `useUser()`, which the SSR
+  Function seeds with `initialUser`. An organiser's ⋯ rows appear on the same
+  condition the page used for its buttons before.
+- **A closed menu puts no links in the HTML.** The trail and the ⋯ rows are in
+  menus, so the bar also renders them as real links in two visually hidden
+  navs: `<nav aria-label="Breadcrumb">` (the ancestors, then the page as
+  `aria-current`) and `<nav aria-label="Page actions">` (every ⋯ row that
+  opens a page — "Submit your track" on the competition and task pages). The
+  `BreadcrumbList` JSON-LD from `functions/comp/[[path]].ts` publishes the
+  same trail; keep the two in step. `e2e/ssr.spec.ts` reads both.
+- **The back control is a link** to the page above, so it works before
+  hydration and with JavaScript off.
+
 **Deliberately no `<link rel="canonical">`** — iOS Safari's share sheet copies it
 instead of the address bar, and it goes stale after client-side navigation. The
 `glidecomp.pages.dev` prod alias is deduped by a 301 in

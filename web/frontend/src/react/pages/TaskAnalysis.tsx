@@ -11,9 +11,9 @@
  *
  * Lives at /comp/:compId/task/:taskId/analysis — this task's chapter of the
  * comp analysis. Both the URL and the breadcrumb parent on the TASK,
- * so the H1 is "Task analysis" and the task's name sits in the subtitle. The
+ * so the H1 is "Task analysis" and the task's name sits in the standfirst. The
  * whole-comp report, which collects every chapter, is a sibling link in the
- * header.
+ * bar's ⋯ menu.
  *
  * This page is a CONTENTS LIST, not the report. It was the whole report until
  * August 2026 — basis, debrief, weather, thermals, ranking, heatmap, clusters,
@@ -47,7 +47,11 @@ import { Badge } from "@/react/rac/badge";
 import { compUrlId, taskAnalysisPath, taskAnalysisSectionPath, taskSimilarityPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { AnalysisBasis } from "../analysis/AnalysisBasis";
-import { TaskAnalysisFrame } from "../analysis/TaskAnalysisFrame";
+import {
+  SIMILAR_PILOTS_LABEL,
+  TaskAnalysisFrame,
+  isEmptySection,
+} from "../analysis/TaskAnalysisFrame";
 import { useTaskAnalysis } from "../analysis/use-task-report";
 import {
   TASK_ANALYSIS_SECTIONS,
@@ -140,10 +144,8 @@ export function TaskAnalysis() {
         // A section with nothing in it gets no box: an empty promise is worse
         // than a missing one, and the reader cannot tell which until they have
         // paid a page load to find out.
-        const empty = (slug: TaskAnalysisSectionSlug) =>
-          (slug === "style" && !styleClusters) ||
-          (slug === "weather" && !bundle.hasWeatherSection) ||
-          (slug === "thermals" && !bundle.hasThermalsSection);
+        // The same rule decides the rows of the title's menu.
+        const empty = (slug: TaskAnalysisSectionSlug) => isEmptySection(bundle, slug);
 
         // The similarity sheet is not a section of the report — its own route,
         // its own controls, a tool rather than a reading — but it belongs in
@@ -168,7 +170,7 @@ export function TaskAnalysis() {
         boxes.splice(method === -1 ? boxes.length : method, 0, {
           key: "similar",
           href: taskSimilarityPath(compId, comp?.name, taskId, task?.name) + query,
-          label: "Similar pilots",
+          label: SIMILAR_PILOTS_LABEL,
         });
 
         return (

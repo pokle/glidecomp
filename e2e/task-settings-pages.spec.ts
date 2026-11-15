@@ -16,7 +16,10 @@
  *   16px checkbox beside a label;
  * - the weather-notes round trip, and that the task page links to it rather
  *   than opening a dialog;
- * - the route editor as a real route, with its unsaved-changes guard;
+ * - the route editor as a real route, with its unsaved-changes guard, and
+ *   its actions in the page's bar (issue #863): Save live only while the
+ *   draft differs, the rest under ⋯, Reorder as a mode of the bar, and the
+ *   map at full size on a page of its own;
  * - the route editor's own pages (#812) — a turnpoint, Quick entry, Load
  *   from XContest, Add waypoint, each a sheet or a dialog until then — over
  *   one draft of the route that survives going between them, Back and a
@@ -173,9 +176,13 @@ test("the settings page is one flat form, and saving PATCHes only the task", asy
   expect(sportBox, "the sport class row has a bounding box").not.toBeNull();
   expect(sportBox!.height).toBeGreaterThanOrEqual(44);
 
-  // The destructive action is a row at the foot, kept out of the form — it is
-  // an action, not a setting, and has no business beside a Save button.
+  // The destructive action is a row at the foot of the page — it is an
+  // action, not a setting — and Save is in the bar, live only once
+  // something has changed (issue #863).
   await expect(page.getByRole("button", { name: "Delete task" })).toBeVisible();
+  const save = page.getByRole("button", { name: "Save" });
+  await expect(save).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
 
   // And NOTHING here links to the sibling editors. They are reached from the
   // sections of the task page they edit; listing them again would duplicate
@@ -186,6 +193,7 @@ test("the settings page is one flat form, and saving PATCHes only the task", asy
   // Change one thing and save. Click the ROW, for the same reason.
   await sportRow.click();
   await expect(sport).not.toBeChecked();
+  await expect(save).toBeEnabled();
 
   const [patch] = await Promise.all([
     page.waitForRequest(
@@ -217,16 +225,18 @@ test("weather notes are their own page, which the task page links to", async ({
   await devLogin(page, ADMIN_USER);
   await page.goto(`/comp/${compId}/task/${taskId}`);
 
-  // The Weather section's manage action is a LINK now, not a dialog trigger.
-  const addNotes = page.getByRole("link", { name: /^(Add|Edit) notes$/ });
-  await expect(addNotes).toBeVisible();
-  await addNotes.click();
+  // "Add notes" is a row of the task page's ⋯ menu (issue #863), and a link
+  // to the notes' own page: the Weather section itself is for reading.
+  await expect(organiserRow(page, /^(Add|Edit) notes$/)).toHaveCount(1, { timeout: 20_000 });
+  await barAction(page, /^(Add|Edit) notes$/);
 
   await expect(
     page.getByRole("heading", { name: "Weather notes", exact: true })
   ).toBeVisible();
   await expect(page).toHaveURL(/\/weather$/);
 
+  // Save is in the bar, and live only once the notes have changed.
+  await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
   const notes = "Inversion broke about 12:30.";
   await page.getByLabel("What did the day do?").fill(notes);
 
@@ -250,8 +260,10 @@ test("the route editor is a route, and guards unsaved work", async ({ page }) =>
   await devLogin(page, ADMIN_USER);
   await page.goto(`/comp/${compId}/task/${taskId}`);
 
-  // The Route section's action is a link to the editor's own URL.
-  await page.getByRole("link", { name: /^(Create|Edit) route$/ }).click();
+  // "Edit route" is a row of the task page's ⋯ menu (issue #863): a link to
+  // the editor's own URL. The Route section itself has no button.
+  await expect(organiserRow(page, /^(Create|Edit) route$/)).toHaveCount(1, { timeout: 20_000 });
+  await barAction(page, /^(Create|Edit) route$/);
   await expect(page).toHaveURL(/\/route$/);
   await expect(
     page.getByRole("heading", { name: "Route", exact: true })
@@ -269,17 +281,18 @@ test("the route editor is a route, and guards unsaved work", async ({ page }) =>
   // combobox — ChoiceList keeps RAC's RadioGroup semantics underneath.
   await expect(page.getByRole("radio", { name: /^Race to goal/ })).toBeVisible();
 
-  // Dirty the editor, then try to leave by the breadcrumb. Click the option's
+  // Dirty the editor, then try to leave by a link: the task, in the title's
+  // menu. (Not the bar's Back: the task page opened this one, so Back is the
+  // browser's Back, which keeps the draft and asks nothing.) Click the option's
   // TEXT, not the radio: ChoiceList paints the row with spans over a hidden
   // input, so the input's own box is covered (rac gotcha #13, the same reason
   // comp-settings-pages.spec.ts clicks labels).
   await page
     .getByText("Elapsed time — timed from each pilot's crossing")
     .click();
-  await page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: TASK_NAME })
-    .click();
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+  await page.getByRole("button", { name: "Route: go to another page" }).click();
+  await page.getByRole("menuitem", { name: TASK_NAME, exact: true }).click();
 
   const dialog = page.getByRole("alertdialog");
   await expect(dialog.getByText("Discard route changes?")).toBeVisible();
@@ -315,27 +328,41 @@ test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY
   expect(rowBox!.height).toBeGreaterThanOrEqual(44);
 
   // The route editor: the widest surface in the app, and the one that used to
-  // be a 100dvh modal. Reached from the task page's Route section, which is
-  // the only way in.
+  // be a 100dvh modal. Reached from "Edit route" in the task page's ⋯ menu,
+  // which is the only way in.
   await page.goto(`/comp/${compId}/task/${taskId}/route`);
   await expect(
     page.getByRole("heading", { name: "Route", exact: true })
   ).toBeVisible();
   await expectNoSidewaysScroll(page, "the route editor");
 
-  // Its Save is sticky to the bottom of the VIEWPORT — sticky in the page's
-  // flow, never fixed (the overlays rule) — so it is reachable without
-  // scrolling past the whole page.
+  // Its Save is in the page's bar (issue #863), which is sticky to the top of
+  // the page — sticky in the page's flow, never fixed (the overlays rule) —
+  // so it is in reach however far down the page has been scrolled. Nothing
+  // is stuck to the bottom of the screen any more.
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const save = page.getByRole("button", { name: "Save" });
   const saveBox = await save.boundingBox();
   const viewport = page.viewportSize()!;
   expect(saveBox, "the route editor's Save has a bounding box").not.toBeNull();
-  expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(viewport.height);
+  expect(saveBox!.y).toBeGreaterThanOrEqual(0);
+  expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(viewport.height / 2);
   expect(
-    await page
-      .getByRole("button", { name: "Save" })
-      .evaluate((el) => getComputedStyle(el.closest("form")!).position)
+    await save.evaluate((el) => getComputedStyle(el.closest("header")!).position)
   ).toBe("sticky");
+  await page.evaluate(() => window.scrollTo(0, 0));
+
+  // The map at full size (#863): the bar, then the map, on a page that does
+  // not scroll at all.
+  await page.goto(`/comp/${compId}/task/${taskId}/route/map`);
+  await expect(page.getByRole("heading", { level: 1, name: "Route map" })).toBeVisible();
+  await expectNoSidewaysScroll(page, "the route map");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollHeight <= document.documentElement.clientHeight
+    ),
+    "the route map's page does not scroll"
+  ).toBe(true);
 
   // The route editor's other pages (#812), where they were a full-screen
   // sheet and a dialog: each a page that fits the phone.
@@ -423,8 +450,35 @@ async function routeCodes(page: Page): Promise<string[]> {
 }
 
 /**
+ * Press a row of the bar's ⋯ menu (issue #863: every action is in the bar).
+ * `behind` names the row it sits behind, for the rare ones in a second menu.
+ */
+async function barAction(page: Page, name: string | RegExp, behind?: string) {
+  await page.getByRole("button", { name: "More actions" }).click();
+  if (behind) await page.getByRole("menuitem", { name: behind, exact: true }).click();
+  await page.getByRole("menuitem", { name }).click();
+}
+
+/**
+ * An organiser's row of the task page's ⋯ menu, as the bar leaves it in the
+ * markup with the menu closed: a real link in its "Page actions" list. The
+ * organiser's rows arrive once the session has resolved, so a test waits for
+ * this before it opens the menu.
+ */
+function organiserRow(page: Page, name: RegExp) {
+  return page.getByRole("navigation", { name: "Page actions" }).getByRole("link", { name });
+}
+
+/** Throw the route's draft away: "Discard changes" in ⋯, then the question. */
+async function discardRouteChanges(page: Page) {
+  await barAction(page, "Discard changes");
+  await page.getByRole("alertdialog").getByRole("button", { name: "Discard changes" }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+}
+
+/**
  * Open a turnpoint's page from its row. Scrolled into view first: on a phone
- * the sticky Save bar can sit over the row a click is aimed at.
+ * the page's sticky bar can sit over the row a click is aimed at.
  */
 async function openTurnpoint(page: Page, code: string) {
   const row = page.getByRole("row").filter({ hasText: code });
@@ -448,7 +502,8 @@ test("a turnpoint is edited on its own page, and reordered in a mode", async ({
   // an overlay: nothing traps focus or dims the route behind it.
   await openTurnpoint(page, "BRAVO");
   await expect(page).toHaveURL(/\/route\/2$/);
-  await expect(page.getByRole("heading", { name: "Edit turnpoint" })).toBeVisible();
+  // The turnpoint's code is the page's title.
+  await expect(page.getByRole("heading", { level: 1, name: "BRAVO" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   // There is no Cancel: nothing here is saved, so Done and Back both keep
   // the edits, and Delete is the only way to lose a turnpoint.
@@ -489,19 +544,26 @@ test("a turnpoint is edited on its own page, and reordered in a mode", async ({
   await page.goto(`/comp/${compId}/task/${taskId}/route/3`);
   await expect(page.getByRole("heading", { name: "Turnpoint not found" })).toBeVisible();
 
-  // Throwing the draft away on purpose: Cancel asks, then the saved route is
-  // back.
+  // Throwing the draft away on purpose: "Discard changes" in ⋯ asks, then
+  // the saved route is back, on the same page.
   await page.goto(`/comp/${compId}/task/${taskId}/route`);
-  await page.getByRole("button", { name: "Cancel" }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Discard changes" }).click();
-  await expect(page.getByRole("heading", { name: TASK_NAME })).toBeVisible();
-  await page.goto(`/comp/${compId}/task/${taskId}/route`);
-  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL"]);
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+  await discardRouteChanges(page);
+  await expect.poll(() => routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL"]);
   await expect(page.getByText("Unsaved changes")).toHaveCount(0);
+  // With nothing changed there is nothing to save, and nothing to discard.
+  await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Reorder turnpoints" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Discard changes" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
-  // Reorder is a MODE: at rest the rows carry no per-row chrome at all.
+  // Reorder is a MODE: at rest the rows carry no per-row chrome at all. The
+  // bar names the mode, and its commit button is Done where Save was.
   await expect(page.getByRole("button", { name: /^Move / })).toHaveCount(0);
-  await page.getByRole("button", { name: "Reorder", exact: true }).click();
+  await barAction(page, "Reorder turnpoints");
+  await expect(page.getByRole("heading", { level: 1, name: "Reorder" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
   await page.getByRole("button", { name: "Move CHARL up" }).click();
 
   expect(await routeCodes(page)).toEqual(["ALPHA", "CHARL", "BRAVO"]);
@@ -511,8 +573,9 @@ test("a turnpoint is edited on its own page, and reordered in a mode", async ({
   // second press would move whatever slid in underneath.
   await expect(page.getByRole("button", { name: "Move CHARL up" })).toBeFocused();
 
-  await page.getByRole("button", { name: "Done reordering" }).click();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByRole("button", { name: /^Move / })).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1, name: "Route" })).toBeVisible();
 
   // A row id follows its turnpoint through the reorder: CHARL is still 3.
   await openTurnpoint(page, "CHARL");
@@ -673,7 +736,8 @@ test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async (
   // Add turnpoint opens a page for the new one, under a row id of its own.
   await page.getByRole("button", { name: "Add turnpoint" }).click();
   await expect(page).toHaveURL(/\/route\/4$/);
-  await expect(page.getByRole("heading", { name: "Add turnpoint" })).toBeVisible();
+  // Its title until it has a code of its own.
+  await expect(page.getByRole("heading", { level: 1, name: "New turnpoint" })).toBeVisible();
   await expect(page.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
   await page.getByRole("textbox", { name: "Code" }).fill("DELTA");
   await fillCoords(page, "-36.8, 148.1");
@@ -699,7 +763,7 @@ test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async (
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page).toHaveURL(ROUTE_URL);
 
-  await page.getByRole("button", { name: "Clear turnpoints" }).click();
+  await barAction(page, "Clear turnpoints");
   await page.getByRole("alertdialog").getByRole("button", { name: "Clear" }).click();
   await page.getByRole("button", { name: "Add turnpoint" }).click();
   await expect(page.getByRole("radio", { name: "Takeoff" })).toBeChecked();
@@ -738,7 +802,7 @@ test("Quick entry rebuilds the route without losing what the line can't say", as
   await expect(page).toHaveURL(ROUTE_URL);
 
   // Quick entry is a page of its own now, not a sheet over the route.
-  await page.getByRole("button", { name: "Quick entry" }).click();
+  await barAction(page, "Quick entry");
   await expect(page).toHaveURL(/\/route\/quick$/);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const line = page.getByRole("textbox", { name: "Enter task" });
@@ -748,7 +812,9 @@ test("Quick entry rebuilds the route without losing what the line can't say", as
   await expect(line).toHaveValue(/CHARL/);
 
   await line.fill("ALPHA, BRAVO");
-  await page.getByRole("button", { name: "Use this route" }).click();
+  // Done, in the bar: it puts the line into the draft, and only Save on the
+  // route writes anything to the server.
+  await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page).toHaveURL(ROUTE_URL);
 
   expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO"]);
@@ -758,7 +824,7 @@ test("Quick entry rebuilds the route without losing what the line can't say", as
   expect(rows[0]).toContain("r. 3 km");
 
   // Leaving with the text changed asks first — the press is the commit.
-  await page.getByRole("button", { name: "Quick entry" }).click();
+  await barAction(page, "Quick entry");
   await page.getByRole("textbox", { name: "Enter task" }).fill("ALPHA");
   await page.getByRole("button", { name: "Cancel" }).click();
   const discard = page.getByRole("alertdialog");
@@ -775,7 +841,7 @@ test("Quick entry rebuilds the route without losing what the line can't say", as
   expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO"]);
 
   // And Back is the browser's: it leaves without using the line, too.
-  await page.getByRole("button", { name: "Quick entry" }).click();
+  await barAction(page, "Quick entry");
   await page.getByRole("textbox", { name: "Enter task" }).fill("BRAVO");
   await page.goBack();
   await expect(page).toHaveURL(ROUTE_URL);
@@ -810,7 +876,8 @@ test("Load from XContest is a page, and refuses a code under its field", async (
   );
 
   await page.goto(`/comp/${compId}/task/${taskId}/route`);
-  await page.getByRole("button", { name: "Load from XContest" }).click();
+  // Import and export are behind one row of ⋯.
+  await barAction(page, "Load from XContest", "Import or export");
   await expect(page).toHaveURL(/\/route\/xcontest$/);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
@@ -832,11 +899,40 @@ test("Load from XContest is a page, and refuses a code under its field", async (
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   expect(await routeCodes(page)).toEqual(["XC1", "XC2"]);
 
-  // Back to the route leaves the editor's draft where it was; Cancel there
-  // throws it away so the next test starts from the seeded route.
-  await page.getByRole("button", { name: "Cancel" }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Discard changes" }).click();
-  await expect(page.getByRole("heading", { name: TASK_NAME })).toBeVisible();
+  // Back to the route leaves the editor's draft where it was; "Discard
+  // changes" there throws it away so the next test starts from the seeded
+  // route.
+  await discardRouteChanges(page);
+  await expect.poll(() => routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL"]);
+});
+
+test("the route's map has a page of its own, with Back and no Done", async ({ page }) => {
+  // Issue #863, decision 12. What it shows is the route's draft, so there is
+  // nothing to finish: Back is the way out, and Save stays on the route.
+  await devLogin(page, ADMIN_USER);
+  await seedRoute(page);
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+  await page.getByRole("link", { name: "Map at full size" }).click();
+  await expect(page).toHaveURL(/\/route\/map$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Route map" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Done" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+  await expect(page.getByText("3 turnpoints. Tap a waypoint to add it to the route.")).toBeVisible();
+
+  // ⋯ holds the one thing to do here: arm a tap on the map.
+  await barAction(page, "New waypoint from the map");
+  await expect(page.getByText("Tap the map to place a new waypoint")).toBeVisible();
+  await barAction(page, "Stop placing a waypoint");
+  await expect(page.getByText("Tap the map to place a new waypoint")).toHaveCount(0);
+
+  // A reload keeps the page, and it is inside the editor: nothing asks.
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1, name: "Route map" })).toBeVisible();
+  await page.getByRole("link", { name: "Back to Route" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL"]);
 });
 
 test("a waypoint added from the route's map is a page, and is saved with the route", async ({
@@ -858,7 +954,7 @@ test("a waypoint added from the route's map is a page, and is saved with the rou
   await expect(page).toHaveURL(ROUTE_URL);
   expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL", "ECHO"]);
   await expect(
-    page.getByText("1 new — saved to the competition when you save the route")
+    page.getByText("1 new waypoint, saved to the competition with the route.")
   ).toBeVisible();
 
   // Nothing reached the competition yet.

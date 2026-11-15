@@ -6,6 +6,7 @@
  */
 import { RouterProvider } from "react-aria-components";
 import { useHref, useNavigate, type NavigateOptions } from "react-router-dom";
+import { isSpaRoute } from "../../spa-routes";
 
 /**
  * A RAC Link's `routerOptions` are react-router's navigate options, so a link
@@ -85,7 +86,15 @@ export function RacRouterProvider({ children }: { children: React.ReactNode }) {
         // A same-origin file (a Pages Function, another Vite entry) leaves the
         // SPA the same way — react-router has no route for it, and pushing it
         // would render the 404 page over a URL the server answers fine.
-        if (isExternalHref(to) || isServerHref(to, window.location.href)) {
+        //
+        // So does a same-origin page the server answers with no dot in it:
+        // Home, About, the scoring guides. The bar's main menu links to them
+        // from every page (issue #863).
+        if (
+          isExternalHref(to) ||
+          isServerHref(to, window.location.href) ||
+          !isSpaRoute(new URL(to, window.location.href).pathname)
+        ) {
           window.location.href = to;
         } else void navigate(to, options);
       }}

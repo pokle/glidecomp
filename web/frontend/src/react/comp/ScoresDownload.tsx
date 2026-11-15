@@ -1,9 +1,10 @@
 /**
- * "Download" menu on the competition scores page: the scores as a CSV, the
- * same file opened live in Google Sheets, the results record — a PDF of every
- * class, team and task to keep (src/results-record/) — and the data that PDF
- * carries, as a ZIP for a viewer that cannot open its attachments. Open to
- * everyone, like the page: tucked inside this menu they add no clutter, and a
+ * The competition scores page's downloads, as rows of its bar's ⋯ menu (issue
+ * #863; a "Download" menu button on the page until then): the scores as a
+ * CSV, the same file opened live in Google Sheets, the results record — a PDF
+ * of every class, team and task to keep (src/results-record/) — and the data
+ * that PDF carries, as a ZIP for a viewer that cannot open its attachments.
+ * Open to everyone, like the page: inside the menu they add no clutter, and a
  * pilot keeping their own copy of a comp is as welcome as its scorer.
  *
  * The first two point at ONE URL — `/comp/<slug>-<id>/scores.csv`, served by the SSR
@@ -20,25 +21,30 @@
  * comp's share key there (lib/slug.ts `compUrlId`), so the formula's URL is the
  * comp's private link, and the dialog says so.
  */
-import { useState } from "react";
-import { DownloadIcon, ChevronDownIcon, FileArchiveIcon, FileTextIcon, TableIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { Alert, AlertDescription } from "@/react/rac/alert";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Dialog, DialogFooter, DialogHeader, DialogTitle, Modal } from "@/react/rac/dialog";
-import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
+import type { BarAction } from "@/react/rac/page-bar";
 import { compScoresCsvPath, compScoresPdfPath, compScoresZipPath } from "../lib/slug";
 import { toast } from "../lib/toast";
+import { FileArchiveIcon, FileSpreadsheetIcon, FileTextIcon, SheetIcon } from "lucide-react";
 
-export function ScoresDownload({
+/**
+ * The four download rows for the bar's ⋯, and the Google Sheets dialog one of
+ * them opens: render `dialog` anywhere in the page.
+ */
+export function useScoresDownload({
   compId,
   compName,
   /** Hidden (`test`) comp — the formula then holds the comp's private link. */
   isTestComp = false,
 }: {
+  /** As it goes in URLs (`compUrlId`): a hidden comp's share key rides along. */
   compId: string;
-  compName: string;
+  compName: string | null | undefined;
   isTestComp?: boolean;
-}) {
+}): { actions: BarAction[]; dialog: ReactNode } {
   const [sheetsOpen, setSheetsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -57,36 +63,33 @@ export function ScoresDownload({
     }
   }
 
-  return (
-    <>
-      <MenuTrigger>
-        <Button variant="outline" size="sm">
-          <DownloadIcon aria-hidden />
-          Download
-          <ChevronDownIcon className="opacity-60" aria-hidden />
-        </Button>
-        <Menu placement="bottom end">
-          {/* `download` (no value) forces a save and takes the server's
-              Content-Disposition filename. */}
-          <MenuItem href={csvPath} download="">
-            <DownloadIcon aria-hidden />
-            CSV spreadsheet
-          </MenuItem>
-          <MenuItem onAction={() => setSheetsOpen(true)}>
-            <TableIcon aria-hidden />
-            Open in Google Sheets…
-          </MenuItem>
-          <MenuItem href={compScoresPdfPath(compId, compName)} download="">
-            <FileTextIcon aria-hidden />
-            Results record (PDF)
-          </MenuItem>
-          <MenuItem href={compScoresZipPath(compId, compName)} download="">
-            <FileArchiveIcon aria-hidden />
-            Results data (ZIP)
-          </MenuItem>
-        </Menu>
-      </MenuTrigger>
+  // `download` (no value) forces a save and takes the server's
+  // Content-Disposition filename.
+  const actions: BarAction[] = [
+    { id: "csv", icon: FileSpreadsheetIcon, label: "CSV spreadsheet", to: csvPath, download: true },
+    {
+      id: "sheets",
+      icon: SheetIcon,
+      label: "Open in Google Sheets…",
+      onAction: () => setSheetsOpen(true),
+    },
+    {
+      id: "pdf",
+      icon: FileTextIcon,
+      label: "Results record (PDF)",
+      to: compScoresPdfPath(compId, compName),
+      download: true,
+    },
+    {
+      id: "zip",
+      icon: FileArchiveIcon,
+      label: "Results data (ZIP)",
+      to: compScoresZipPath(compId, compName),
+      download: true,
+    },
+  ];
 
+  const dialog = (
       <Modal isOpen={sheetsOpen} onOpenChange={setSheetsOpen} className="sm:max-w-lg">
         <Dialog className="gap-3">
           <DialogHeader>
@@ -129,9 +132,12 @@ export function ScoresDownload({
             One row per pilot per task. Every row links back to its score.
           </p>
 
+          {/* Done · New Google Sheet · Copy formula: the main action is last
+              (issue #863), and on a phone, where the footer stacks from the
+              bottom up, on top. */}
           <DialogFooter>
-            <Button onPress={() => void copyFormula()}>
-              {copied ? "Copied!" : "Copy formula"}
+            <Button slot="close" variant="ghost">
+              Done
             </Button>
             <LinkButton
               variant="outline"
@@ -141,12 +147,13 @@ export function ScoresDownload({
             >
               New Google Sheet
             </LinkButton>
-            <Button slot="close" variant="ghost">
-              Done
+            <Button onPress={() => void copyFormula()}>
+              {copied ? "Copied!" : "Copy formula"}
             </Button>
           </DialogFooter>
         </Dialog>
       </Modal>
-    </>
   );
+
+  return { actions, dialog };
 }

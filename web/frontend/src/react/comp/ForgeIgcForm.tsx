@@ -20,12 +20,13 @@
  * it is offered, so the page says whether the file will be ACCEPTED and
  * SCORED rather than whether it looks about right.
  *
- * Create is the kit form's submit (rac/form.tsx), so a bad take-off time lands
- * under its field, and a task the engine cannot fly (a waypoint with no
- * coordinates) in the form's one fixed place for an error — never a toast.
- * What it makes is the verdict and the Download button, which appear under
- * Create and take focus, so a phone reader is shown them rather than left
- * above them.
+ * Create is the kit form's submit (rac/form.tsx), in the bar like every
+ * form's commit button (issue #863). A bad take-off time lands under its
+ * field, and a task the engine cannot fly (a waypoint with no coordinates) in
+ * the form's one fixed place for an error — never a toast. What it makes is
+ * the verdict, with Download inside it: it appears at the foot of the page in
+ * a live region (the alert), is scrolled into view and takes focus, so a
+ * phone reader is shown it rather than left above it.
  *
  * An open-distance task has no route and no goal, so the slider changes
  * meaning rather than disappearing: how far beyond the take-off cylinder the
@@ -56,18 +57,11 @@ import {
 } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { NumberField, TextField } from "@/react/rac/field";
-import {
-  Form,
-  FormErrorBanner,
-  SubmitButton,
-  refusal,
-  type SubmitResponse,
-} from "@/react/rac/form";
+import { refusal, type SubmitResponse } from "@/react/rac/form";
 import { SimpleSelect } from "@/react/rac/select";
 import { Slider } from "@/react/rac/slider";
-import { SectionHeader } from "../components/SectionHeader";
+import { SettingsForm } from "../components/SettingsForm";
 import { underTask } from "../lib/crumbs";
 import { downloadFile } from "../lib/format";
 import { slugify } from "./csv";
@@ -142,16 +136,16 @@ export function ForgeIgcForm({
     Math.min(taskKm, Math.round((range.defaultMeters / 1000) * 10) / 10)
   );
   const [verdict, setVerdict] = useState<Verdict | null>(null);
-  // Bumped by every Create, so "Create again" moves focus to the new verdict
-  // just as the first Create did.
+  // Bumped by every Create, so a second one moves focus to the new verdict
+  // just as the first did.
   const [made, setMade] = useState(0);
   const verdictRef = useRef<HTMLDivElement>(null);
 
   const zone = timezone ?? "UTC";
   const offset = zoneOffsetHours(taskDate, zone);
 
-  // What was made is shown under Create. On a phone that is below the fold,
-  // so take the reader to it.
+  // What was made is shown at the foot of the page. On a phone that is below
+  // the fold, so take the reader to it.
   useEffect(() => {
     if (made === 0 || !verdictRef.current) return;
     verdictRef.current.scrollIntoView({ block: "nearest" });
@@ -223,156 +217,151 @@ export function ForgeIgcForm({
     verdict != null && sabotage === "none" && verdict.hardFailed;
 
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs
-        items={underTask(compId, compName, taskId, taskName)}
-        current="Create a test IGC"
-      />
-      <Form
-        validate={() => ({
-          [START]: /^([01]\d|2[0-3]):[0-5]\d$/.test(startLocal) ? null : "Use HH:MM",
-        })}
-        onSubmit={async () => create()}
-        onSuccess={() => setMade((n) => n + 1)}
-        className="mt-2 flex flex-col gap-4"
-      >
-        <div className="flex flex-col gap-1">
-          <SectionHeader as="h1" title="Create a test IGC" />
-          <p className="text-sm text-muted-foreground">
-            For <strong>{taskName}</strong> on {taskDate} ({zone}, UTC
-            {offset >= 0 ? "+" : ""}
-            {offset}).
-          </p>
-        </div>
+    <SettingsForm
+      crumbs={underTask(compId, compName, taskId, taskName)}
+      // The bar has one line: the short name there, the sentence in its menu.
+      title="Test IGC"
+      fullTitle="Create a test IGC"
+      description={
+        <>
+          For <strong>{taskName}</strong> on {taskDate} ({zone}, UTC
+          {offset >= 0 ? "+" : ""}
+          {offset}).
+        </>
+      }
+      // Nothing here is kept, so there is nothing for Cancel to ask about.
+      dirty={false}
+      // Live while there is a flight to make (see the note under the slider).
+      canCommit={taskKm > 0}
+      submitLabel="Create"
+      pendingLabel="Creating"
+      validate={() => ({
+        [START]: /^([01]\d|2[0-3]):[0-5]\d$/.test(startLocal) ? null : "Use HH:MM",
+      })}
+      onSubmit={async () => create()}
+      onSuccess={() => setMade((n) => n + 1)}
+    >
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))] gap-3">
+        <TextField label="Pilot name" name="pilot" value={pilot} onChange={setPilot} />
+        <TextField label="Glider" name="glider" value={glider} onChange={setGlider} />
+        <TextField
+          label="Take off (local)"
+          name={START}
+          value={startLocal}
+          onChange={setStartLocal}
+        />
+        <NumberField
+          label="Fix interval (s)"
+          name="rate"
+          value={rate}
+          onChange={setRate}
+          minValue={1}
+          maxValue={60}
+        />
+        <NumberField
+          label="Cruise (km/h)"
+          name="speed"
+          value={speedKmh}
+          onChange={setSpeedKmh}
+          minValue={5}
+          maxValue={120}
+        />
+        <SimpleSelect
+          label="What kind of flight?"
+          value={sabotage}
+          onChange={(v) => setSabotage(v as ForgeSabotage)}
+          options={SABOTAGE}
+          className="w-full"
+        />
+      </div>
 
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))] gap-3">
-          <TextField label="Pilot name" name="pilot" value={pilot} onChange={setPilot} />
-          <TextField label="Glider" name="glider" value={glider} onChange={setGlider} />
-          <TextField
-            label="Take off (local)"
-            name={START}
-            value={startLocal}
-            onChange={setStartLocal}
-          />
-          <NumberField
-            label="Fix interval (s)"
-            name="rate"
-            value={rate}
-            onChange={setRate}
-            minValue={1}
-            maxValue={60}
-          />
-          <NumberField
-            label="Cruise (km/h)"
-            name="speed"
-            value={speedKmh}
-            onChange={setSpeedKmh}
-            minValue={5}
-            maxValue={120}
-          />
-          <SimpleSelect
-            label="What kind of flight?"
-            value={sabotage}
-            onChange={(v) => setSabotage(v as ForgeSabotage)}
-            options={SABOTAGE}
-            className="w-full"
-          />
-        </div>
+      {taskKm > 0 ? (
+        <Slider
+          label={openDistance ? "Flew" : "Landed out after"}
+          value={stopAfterKm}
+          onChange={setStopAfterKm}
+          minValue={0}
+          maxValue={taskKm}
+          step={0.1}
+          format={(v) =>
+            openDistance
+              ? v <= 0
+                ? "0.0 km — landed in the launch paddock"
+                : `${v.toFixed(1)} km beyond the launch cylinder`
+              : v >= taskKm
+                ? `${v.toFixed(1)} km — made goal`
+                : `${v.toFixed(1)} km of ${taskKm.toFixed(1)} km`
+          }
+          description={
+            openDistance
+              ? "Measured from the take-off cylinder edge — what they should score. No route, so the heading is random; at zero they never leave the cylinder."
+              : "Distance along the optimised route — what they should score. Far right makes goal; zero lands at launch."
+          }
+        />
+      ) : (
+        // A GAP task whose route is a single point has no course to fly, and
+        // a slider from zero to zero is not a control — it is a NaN.
+        <p className="text-sm text-muted-foreground">
+          This task&rsquo;s route has no distance to fly, so there is no
+          flight to make. Set a route with at least two turnpoints.
+        </p>
+      )}
 
-        {taskKm > 0 ? (
-          <Slider
-            label={openDistance ? "Flew" : "Landed out after"}
-            value={stopAfterKm}
-            onChange={setStopAfterKm}
-            minValue={0}
-            maxValue={taskKm}
-            step={0.1}
-            format={(v) =>
-              openDistance
-                ? v <= 0
-                  ? "0.0 km — landed in the launch paddock"
-                  : `${v.toFixed(1)} km beyond the launch cylinder`
-                : v >= taskKm
-                  ? `${v.toFixed(1)} km — made goal`
-                  : `${v.toFixed(1)} km of ${taskKm.toFixed(1)} km`
-            }
-            description={
-              openDistance
-                ? "Measured from the take-off cylinder edge — what they should score. No route, so the heading is random; at zero they never leave the cylinder."
-                : "Distance along the optimised route — what they should score. Far right makes goal; zero lands at launch."
-            }
-          />
-        ) : (
-          // A GAP task whose route is a single point has no course to fly, and
-          // a slider from zero to zero is not a control — it is a NaN.
-          <p className="text-sm text-muted-foreground">
-            This task&rsquo;s route has no distance to fly, so there is no
-            flight to make. Set a route with at least two turnpoints.
-          </p>
-        )}
-
-        {/* Beside Create, the button the reader just pressed. */}
-        <FormErrorBanner />
-        <div className="flex flex-wrap gap-2">
-          <SubmitButton pendingLabel="Creating">
-            {verdict ? "Create again" : "Create"}
-          </SubmitButton>
-          {verdict?.shapeOk ? (
-            <Button variant="outline" onPress={() => download(verdict)}>
-              Download .igc
-            </Button>
-          ) : null}
-        </div>
-
-        {verdict ? (
-          <Alert
-            ref={verdictRef}
-            tabIndex={-1}
-            variant={unexpectedlyWithheld ? "destructive" : undefined}
-            className="outline-none"
-          >
-            <AlertTitle>
-              {!verdict.shapeOk
-                ? "This file would be rejected on upload"
-                : unexpectedlyWithheld
-                  ? "This was meant to be clean, but it fails a hard check"
-                  : verdict.hardFailed
-                    ? "Created — and withheld from scoring, as asked"
-                    : "Created, and the engine accepts it"}
-            </AlertTitle>
-            <AlertDescription>
-              <dl className="mt-1 grid grid-cols-[repeat(auto-fit,minmax(min(7rem,100%),1fr))] gap-x-6 gap-y-1 text-sm">
-                <Fact label="Flight date" value={verdict.flightDate ?? "—"} />
-                <Fact
-                  label={openDistance ? "Open distance" : "Course flown"}
-                  value={`${(verdict.courseMeters / 1000).toFixed(1)} km`}
-                />
-                <Fact label="Airborne" value={hhmm(verdict.durationSeconds)} />
-                <Fact label="Track" value={`${verdict.trackKm.toFixed(1)} km`} />
-                <Fact
-                  label="Highest"
-                  value={verdict.maxAltitude == null ? "—" : `${Math.round(verdict.maxAltitude)} m`}
-                />
-                <Fact label="Fixes" value={verdict.fixCount.toLocaleString()} />
-                <Fact
-                  label="Size"
-                  value={`${(verdict.text.length / 1024).toFixed(0)} KB`}
-                />
-              </dl>
-              {verdict.findings.length > 0 ? (
-                <ul className="mt-2 list-inside list-disc text-sm">
-                  {verdict.findings.map((f) => (
-                    <li key={f.id}>
-                      [{f.severity}] {f.title}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-      </Form>
-    </div>
+      {verdict ? (
+        <Alert
+          ref={verdictRef}
+          tabIndex={-1}
+          variant={unexpectedlyWithheld ? "destructive" : undefined}
+          className="scroll-mt-24 outline-none"
+        >
+          <AlertTitle>
+            {!verdict.shapeOk
+              ? "This file would be rejected on upload"
+              : unexpectedlyWithheld
+                ? "This was meant to be clean, but it fails a hard check"
+                : verdict.hardFailed
+                  ? "Created — and withheld from scoring, as asked"
+                  : "Created, and the engine accepts it"}
+          </AlertTitle>
+          <AlertDescription>
+            <dl className="mt-1 grid grid-cols-[repeat(auto-fit,minmax(min(7rem,100%),1fr))] gap-x-6 gap-y-1 text-sm">
+              <Fact label="Flight date" value={verdict.flightDate ?? "—"} />
+              <Fact
+                label={openDistance ? "Open distance" : "Course flown"}
+                value={`${(verdict.courseMeters / 1000).toFixed(1)} km`}
+              />
+              <Fact label="Airborne" value={hhmm(verdict.durationSeconds)} />
+              <Fact label="Track" value={`${verdict.trackKm.toFixed(1)} km`} />
+              <Fact
+                label="Highest"
+                value={verdict.maxAltitude == null ? "—" : `${Math.round(verdict.maxAltitude)} m`}
+              />
+              <Fact label="Fixes" value={verdict.fixCount.toLocaleString()} />
+              <Fact
+                label="Size"
+                value={`${(verdict.text.length / 1024).toFixed(0)} KB`}
+              />
+            </dl>
+            {verdict.findings.length > 0 ? (
+              <ul className="mt-2 list-inside list-disc text-sm">
+                {verdict.findings.map((f) => (
+                  <li key={f.id}>
+                    [{f.severity}] {f.title}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {verdict.shapeOk ? (
+              <div className="mt-3">
+                <Button variant="outline" onPress={() => download(verdict)}>
+                  Download .igc
+                </Button>
+              </div>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+    </SettingsForm>
   );
 }
 

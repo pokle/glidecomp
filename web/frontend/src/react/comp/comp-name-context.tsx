@@ -3,7 +3,7 @@
  * build canonical `${slug}-${id}` pilot links (lib/slug.pilotPath) without
  * prop-drilling `compName` through every intermediate view.
  *
- * Provided once per scores surface — by ScoresViews (comp scores) and around
+ * Provided once per scores surface — by useScoresViews (comp scores) and around
  * the task page's scores (TaskDetail). Null when the name isn't loaded yet, in
  * which case the pilot link degrades to a bare comp segment and is canonicalised
  * on arrival by the pilot page's own useCanonicalPath hook + the server 301.

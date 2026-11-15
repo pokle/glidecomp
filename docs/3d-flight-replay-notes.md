@@ -650,10 +650,52 @@ private mode just doesn't remember it. Collapsing also closes the shortcuts
 popover, whose ⌨ toggle just went away with the panel.
 
 The same change moved the **compass and scale bar to the top right, under the
-hamburger**: they used to sit near the bottom timeline, whose height *varies*
+drawer's toggle** (then ☰, now ⋯ in the page bar): they used to sit near the bottom timeline, whose height *varies*
 with the gaggle ribbon, and it was covering them. Both are desktop-only
 (`hidden md:flex`) to save space on phones. (§5.13's compass note is about the
 orientation-preset maths, which is unaffected.)
+
+### 5.20 The page bar — the app's three slots, floating over the scene
+
+Issue #869 gave the replay the bar every other page has (#863). It took the
+places of the top-centre breadcrumb pill and the ☰ button:
+
+- **Left, the way out:** a link back to the task page (`Back to Task 1
+  (Open)`), or to Home for the sample. The installed app has no browser Back,
+  so this link is the only way back there.
+- **Centre, where you are:** "3D replay" over the trail. The title menu is a
+  native `<details>`, the same as the content pages' bar
+  (`static/src/components/SiteHeader.astro`), so it opens with no script.
+  `setupBarMenu()` adds Escape, a click outside and focus leaving. The trail
+  is built with `compPath`/`taskPath` from `react/lib/slug.ts`. The links
+  work at once under the generic names "Competition" and "Task". One public
+  comp fetch then gives them their real names.
+- **Right, what you can do:** ⋯ opens the control drawer. The drawer is
+  `z-[60]` above the bar's `z-50`, so ⋯ stays in its slot under the drawer
+  and the title does not move.
+
+The bar floats as glass pills (the owner's choice) and does not take a solid
+strip: the scene shows between the pills, and the header takes no pointer
+events. The callout's default position moved down to `top: 64px`, below the
+bar. A tap on the scene that closes the title menu does not also start
+playback (`onPickPilot` checks `barMenu.open`), because the menu closes on
+`click` and the pick fires on pointer-up first.
+
+The same change brought the chrome up to the standard's sizes (#860 §1, §5):
+
+- Every control is 44 px on a coarse pointer and at least 24 px on a mouse.
+- Text is at least 11 px. It was mostly 10 px.
+- Selects and the pilot search are 16 px on a phone, so iOS does not zoom on
+  focus.
+- The viewport no longer sets `maximum-scale`, so pinch-zoom works on the
+  page chrome. The canvases set `touch-action: none`, so the scene keeps its
+  gestures.
+- A pilot row in the list now follows on a tap anywhere in the row. Before,
+  only the name was a target.
+
+To make room for the larger "Climb" readout, it now sits under the dial
+instead of over the dial's ±4 labels. The callout is `w-56`, and the gauge
+keeps its 168 px canvas.
 
 ---
 

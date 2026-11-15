@@ -8,9 +8,15 @@
  * is RAC.
  *
  * Everyone sees a read-only "Route" section (summary, diagram and turnpoint
- * listing); admins additionally get the route editor dialog
- * (comp/RouteEditorDialog) covering turnpoints, start gates, goal, and
- * .xctsk / XContest import-export (#270).
+ * listing); admins additionally get the route editor (pages/TaskRoutePage)
+ * covering turnpoints, start gates, goal, and .xctsk / XContest
+ * import-export (#270).
+ *
+ * The page is for information, and every action is in the bar (issue #863):
+ * the task's name is the bar's title, the competition's other tasks are in
+ * the title's menu (where "← Task 2" links were), and ⋯ holds "Submit your
+ * track" first, then sharing and the other views of the task, then the
+ * organisers' tools. Nothing on the page itself is a manage button.
  */
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -19,8 +25,7 @@ import { Form } from "react-aria-components";
 import { type XCTask } from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
 import { Loading } from "@/react/rac/progress";
-import { LinkButton, buttonVariants } from "@/react/rac/button";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
 import {
   Dialog,
   DialogFooter,
@@ -49,7 +54,7 @@ import { MasterDetail } from "../components/MasterDetail";
 import { WeatherSection } from "../weather/WeatherSection";
 import { useTaskWeather } from "../weather/use-task-weather";
 import { taskWindFromWeather, type TaskWind } from "../comp/task-wind";
-import { TaskExportButtons } from "../comp/TaskExportButtons";
+import { ShareTaskDialog } from "../comp/TaskExportButtons";
 import { TaskScoresPublic } from "../comp/TaskScoresPublic";
 import { CompNameProvider } from "../comp/comp-name-context";
 import { TaskScoresAdmin } from "../comp/TaskScoresAdmin";
@@ -64,7 +69,18 @@ import {
 import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
-import { underComp, TASK_ANALYSIS_LABEL } from "../lib/crumbs";
+import {
+  ChartColumnIcon,
+  CloudUploadIcon,
+  FlaskConicalIcon,
+  MapIcon,
+  NotebookPenIcon,
+  QrCodeIcon,
+  RouteIcon,
+  SettingsIcon,
+  ShareIcon,
+} from "lucide-react";
+import { underComp, taskSiblings, TASK_ANALYSIS_LABEL } from "../lib/crumbs";
 import { compUrlId, idFromSegment, compPath, submitTrackPath, taskPath, taskAnalysisPath, taskQrPath, taskSettingsPath, taskRoutePath, taskTestIgcPath, taskWeatherPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
@@ -179,26 +195,156 @@ export function TaskDetail() {
     [weather.data]
   );
 
+  const [shareOpen, setShareOpen] = useState(false);
+
   if (notFound || !compId || !taskId) {
     return <NotFound title="Task not found" />;
   }
 
+  const isClosed = isPastCloseDate(comp?.close_date ?? null);
+  const hasRoute = !!task?.xctsk && task.xctsk.turnpoints.length > 0;
+
+  // Every action of the page, in the bar's ⋯ (issue #863: the page is for
+  // information). Three groups, with a rule between them: submitting, the
+  // ways to take the task away or look at it elsewhere, and the organisers'
+  // tools.
+  const actions: BarAction[] = [];
+  if (task) {
+    // "Submit your track" leads: the one thing a pilot comes to this page to
+    // DO. Mount-gated: whether it shows depends on who is asking (an organiser
+    // keeps it on a closed or hidden task) and on today's date, and the
+    // server renders this page for anyone, so the markup must settle after
+    // hydration rather than before. It does not depend on a session —
+    // submitting is open to anyone the comp's roster knows.
+    //
+    // A hidden comp's share link is for READING a draft: every write route
+    // refuses anyone but its admins, so no visitor is offered a row that can
+    // only fail.
+    if (
+      mounted &&
+      !isClosed &&
+      (!task.submissions_closed || isAdmin) &&
+      (!comp?.test || isAdmin)
+    ) {
+      actions.push({
+        id: "submit",
+        icon: CloudUploadIcon,
+        label: "Submit your track",
+        to: submitHref,
+      });
+    }
+
+    const share: BarAction[] = [];
+    if (task.xctsk) {
+      share.push(
+        { id: "share", label: "Share task", icon: ShareIcon, onAction: () => setShareOpen(true) },
+        {
+          id: "qr",
+          label: "QR code",
+          icon: QrCodeIcon,
+          to: taskQrPath(compUrlId(comp, compId), comp?.name, taskId, task.name),
+        },
+        // The analysis page and the replay are separate entries, not SPA
+        // routes: the router bridge loads them for real (rac/router.tsx).
+        {
+          id: "map",
+          label: "All tracks",
+          icon: MapIcon,
+          to: `/analysis.html?compId=${encodeURIComponent(compId)}&taskId=${encodeURIComponent(taskId)}`,
+        }
+      );
+    }
+    if (replayAvailable) {
+      share.push({
+        id: "replay",
+        label: "Replay the task in 3D",
+        icon: MapIcon,
+        to: `/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`,
+      });
+    }
+    // Task analysis: meaningless without a route or on an open-distance task
+    // (which has no legs or speed section to measure against). Requires comp
+    // to be LOADED — `comp?.scoring_format !== …` would fail open to a
+    // dead-end refusal page whenever the non-critical comp fetch degrades.
+    //
+    // The task analysis is a page of its own under this task; the comp
+    // analysis collects every task's, and is a sibling link from there.
+    if (task.xctsk && comp && comp.scoring_format !== "open_distance") {
+      share.push({
+        id: "analysis",
+        label: TASK_ANALYSIS_LABEL,
+        icon: ChartColumnIcon,
+        to: taskAnalysisPath(compId, comp.name, taskId, task.name),
+      });
+    }
+
+    // The organisers' tools. `useAdminView` is the right check precisely
+    // because it also takes them away while a super admin previews as a
+    // pilot. Each is a routed page (#637, #822), so each is a link.
+    const manage: BarAction[] = [];
+    if (isAdmin && comp) {
+      manage.push(
+        {
+          id: "route",
+          icon: RouteIcon,
+          label: hasRoute ? "Edit route" : "Create route",
+          to: taskRoutePath(compId, comp.name, taskId, task.name),
+        },
+        {
+          id: "settings",
+          icon: SettingsIcon,
+          label: "Task settings",
+          to: taskSettingsPath(compId, comp.name, taskId, task.name),
+        },
+        {
+          id: "notes",
+          icon: NotebookPenIcon,
+          label: task.weather_notes.trim().length > 0 ? "Edit notes" : "Add notes",
+          to: taskWeatherPath(compId, comp.name, taskId, task.name),
+        }
+      );
+      // A file to test submission and scoring with. Nothing here reaches the
+      // server — the page makes a file and offers it as a download. A route
+      // is required because there is nothing to fly without one.
+      if (task.xctsk) {
+        manage.push({
+          id: "igc",
+          icon: FlaskConicalIcon,
+          label: "Create test IGC",
+          to: taskTestIgcPath(compUrlId(comp, compId), comp.name, taskId, task.name),
+        });
+      }
+    }
+    for (const group of [share, manage]) {
+      if (group.length > 0) actions.push({ ...group[0], group: true }, ...group.slice(1));
+    }
+  }
+
+  // The bar is there before the task is, under the trail's fallback names, so
+  // the page does not jump when the task arrives. The other tasks are in the
+  // title's menu: the way from one task to the next.
+  const bar = (
+    <PageBar
+      title={task?.name ?? "Task"}
+      trail={underComp(compId, comp?.name)}
+      related={taskSiblings(compId, comp?.name, comp?.tasks, taskId)}
+      actions={actions}
+    />
+  );
+
   if (!task) {
     return (
-      <Loading>Loading task…</Loading>
+      <Page width="wide" bar={bar}>
+        <Loading>Loading task…</Loading>
+      </Page>
     );
   }
 
-  const isClosed = isPastCloseDate(comp?.close_date ?? null);
-
   return (
-    <div>
-      <Breadcrumbs items={underComp(compId, comp?.name)} current={task.name} />
-
-      {/* Header row mirrors CompDetail: title/meta left, admin Settings top right. */}
-      <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold">{task.name}</h1>
+    <Page width="wide" bar={bar}>
+      {/* What the task is: its day, its state, its classes. The name is the
+          bar's title. */}
+      <div>
           <p className="text-sm text-muted-foreground">
             <span>
               {formatTaskDate(task.task_date, {
@@ -246,122 +392,26 @@ export function TaskDetail() {
               </Tag>
             ))}
           </TagGroup>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {comp ? <TaskPrevNext comp={comp} compId={compId} task={task} taskId={taskId} /> : null}
-          {/* A link, not a dialog trigger: task settings are a routed page
-              (#637), so this is a real destination the back button walks out
-              of. */}
-          {isAdmin && comp ? (
-            <LinkButton
-              variant="outline"
-              size="sm"
-              href={taskSettingsPath(compId, comp.name, taskId, task.name)}
-            >
-              Settings
-            </LinkButton>
-          ) : null}
-        </div>
-      </div>
-      {/* The task's action row. It leads with Submit track — the one thing a
-          pilot comes to this page to DO, and previously reachable only from
-          the Results section header, which on a task with a route and weather
-          is a scroll away. It stays there too, since that is where a section's
-          own manage action belongs. Editing the route deliberately is NOT
-          here: it is a section-scoped action and the Route header carrying it
-          is the very next thing on the page.
-
-          Submit track is the page's ONE filled button; everything after it —
-          share, map, replay, analysis — is a uniform outline cluster, because
-          those are places to go rather than things to do. */}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {/* Mount-gated: whether it shows depends on who is asking (an
-            organiser keeps it on a closed or hidden task), and the server
-            renders this page for anyone, so the markup must settle after
-            hydration rather than before. It no longer depends on a session —
-            submitting is open to anyone the comp's roster knows. */}
-        {/* A hidden comp's share link is for READING a draft: every write
-            route refuses anyone but its admins, so no visitor is offered a
-            button that can only fail. */}
-        {mounted && !isClosed && (!task.submissions_closed || isAdmin) && (!comp?.test || isAdmin) ? (
-          <LinkButton size="sm" href={submitHref}>
-            Submit track
-          </LinkButton>
-        ) : null}
-        {/* A sentence, not a disabled button: a greyed-out control invites
-            tapping and explains nothing. Admins see it AND keep the button,
-            because the flag stops pilots, not the scorekeeper. */}
+        {/* A sentence, not a disabled row in ⋯: a greyed-out control invites
+            tapping and explains nothing. Admins see it AND keep "Submit your
+            track", because the flag stops pilots, not the scorekeeper. */}
         {mounted && !isClosed && task.submissions_closed ? (
-          <p className="self-center text-sm text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             This task is closed for track submissions.
             {isAdmin ? " You can still upload as an organiser." : ""}
           </p>
         ) : null}
-        {task.xctsk ? (
-          <TaskExportButtons
-            compId={compId}
-            taskId={taskId}
-            taskName={task.name}
-            qrHref={taskQrPath(compUrlId(comp, compId), comp?.name, taskId, task.name)}
-          />
-        ) : null}
-        {/* Plain anchors (not RAC Links): these leave the SPA for the vanilla
-            analysis / replay entries, so client routing must not intercept. */}
-        {task.xctsk ? (
-          <a
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-            href={`/analysis.html?compId=${encodeURIComponent(compId)}&taskId=${encodeURIComponent(taskId)}`}
-            title="Open this task on the analysis map"
-          >
-            View on map
-          </a>
-        ) : null}
-        {replayAvailable ? (
-          <a
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-            href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`}
-            title="Open the 3D flight replay for this task"
-          >
-            3D replay
-          </a>
-        ) : null}
-        {/* Task analysis: meaningless without a route or on an open-distance
-            task (which has no legs or speed section to measure against).
-            Requires comp to be LOADED — `comp?.scoring_format !== …` would
-            fail open to a dead-end refusal page whenever the non-critical comp
-            fetch degrades. Unlike the two anchors above this is an SPA route,
-            so it uses a RAC LinkButton through the RouterProvider.
-
-            The task analysis is a page of its own under this task; the comp
-            analysis collects every task's, and is a sibling link from there. */}
-        {task.xctsk && comp && comp.scoring_format !== "open_distance" ? (
-          <LinkButton
-            variant="outline"
-            size="sm"
-            href={taskAnalysisPath(compId, comp?.name, taskId, task.name)}
-          >
-            {TASK_ANALYSIS_LABEL}
-          </LinkButton>
-        ) : null}
-        {/* An organiser's tool: the people who need a file to test submission
-            and scoring with are the ones running the competition, so it is
-            gated like every other manage action on this page. `useAdminView`
-            is the right check precisely because it also makes the button
-            disappear while a super admin previews as a pilot. Nothing here
-            reaches the server — the page makes a file and offers it as a
-            download — so this widens who SEES it and nothing more. A route is
-            required because there is nothing to fly without one. A page of
-            its own (#822), so the comp id carries a hidden comp's share key. */}
-        {isAdmin && comp && task.xctsk ? (
-          <LinkButton
-            variant="outline"
-            size="sm"
-            href={taskTestIgcPath(compUrlId(comp, compId), comp.name, taskId, task.name)}
-          >
-            Create test IGC
-          </LinkButton>
-        ) : null}
       </div>
+
+      {task.xctsk ? (
+        <ShareTaskDialog
+          compId={compId}
+          taskId={taskId}
+          taskName={task.name}
+          isOpen={shareOpen}
+          onOpenChange={setShareOpen}
+        />
+      ) : null}
 
       {/* The sections below are cards; the stack owns the rhythm between them
           (SectionHeader no longer carries a margin of its own). */}
@@ -372,7 +422,6 @@ export function TaskDetail() {
         timezone={comp?.timezone ?? null}
         wind={wind}
         isAdmin={isAdmin}
-        routeHref={taskRoutePath(compId, comp?.name, taskId, task.name)}
       />
 
       {/* The day's weather — the organizer's notes plus the modelled
@@ -384,18 +433,12 @@ export function TaskDetail() {
         notes={task.weather_notes}
         isAdmin={isAdmin}
         compTimezone={comp?.timezone ?? null}
-        notesHref={taskWeatherPath(compId, comp?.name, taskId, task.name)}
       />
 
       {/* Public results: top-3 podium per class + the link to the comp's
-          scores page (the canonical scores surface), plus pilot self-service
-          (Submit track, your-submission line). The management grid below is
-          admin-only.
-
-          submissionsClosed is passed `&& !isAdmin` for the same reason the
-          page's action row keeps its button for admins: the stop is aimed at
-          pilots, and this section renders its OWN Submit action, so gating the
-          action row alone would leave a button here the server refuses. */}
+          scores page (the canonical scores surface), plus the signed-in
+          pilot's own your-submission line. Submitting is in the bar's ⋯. The
+          management grid below is admin-only. */}
       <CompNameProvider value={comp?.name ?? null}>
         <TaskScoresPublic
           compId={compId}
@@ -404,10 +447,6 @@ export function TaskDetail() {
           timezone={comp?.timezone ?? null}
           isOpenDistance={comp?.scoring_format === "open_distance"}
           isAuthenticated={user != null}
-          isClosed={isClosed}
-          // A hidden comp takes no submissions from its link's visitors.
-          submissionsClosed={(task.submissions_closed || !!comp?.test) && !isAdmin}
-          submitHref={submitHref}
           refresh={scoresRefresh + resultsRefresh}
           onReplayAvailable={setReplayAvailable}
           initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}
@@ -436,68 +475,7 @@ export function TaskDetail() {
         </CompNameProvider>
       ) : null}
       </div>
-
-    </div>
-  );
-}
-
-/**
- * Prev/next task navigation: walk the comp's tasks that share a pilot class
- * with this one (classes fly different task sequences — jumping from
- * "Task 2 (Open)" to "Task 2 (Floater)" would be disorienting), ordered by
- * date then name. Renders from loader data, so it is in the SSR HTML.
- */
-function TaskPrevNext({
-  comp,
-  compId,
-  task,
-  taskId,
-}: {
-  comp: CompDetailData;
-  compId: string;
-  task: TaskDetailData;
-  taskId: string;
-}) {
-  const classes = new Set(task.pilot_classes);
-  const seq = comp.tasks
-    .filter(
-      (t) => t.task_id === taskId || t.pilot_classes.some((c) => classes.has(c))
-    )
-    .sort((a, b) =>
-      a.task_date === b.task_date
-        ? a.name.localeCompare(b.name)
-        : a.task_date < b.task_date
-          ? -1
-          : 1
-    );
-  const i = seq.findIndex((t) => t.task_id === taskId);
-  const prev = i > 0 ? seq[i - 1] : null;
-  const next = i >= 0 && i < seq.length - 1 ? seq[i + 1] : null;
-  if (!prev && !next) return null;
-
-  return (
-    <nav aria-label="Task navigation" className="flex items-center gap-2">
-      {prev ? (
-        <LinkButton
-          variant="ghost"
-          size="sm"
-          href={taskPath(compId, comp?.name, prev.task_id, prev.name)}
-          aria-label={`Previous task: ${prev.name}`}
-        >
-          ← {prev.name}
-        </LinkButton>
-      ) : null}
-      {next ? (
-        <LinkButton
-          variant="ghost"
-          size="sm"
-          href={taskPath(compId, comp?.name, next.task_id, next.name)}
-          aria-label={`Next task: ${next.name}`}
-        >
-          {next.name} →
-        </LinkButton>
-      ) : null}
-    </nav>
+    </Page>
   );
 }
 
@@ -555,9 +533,9 @@ function TaskSummaryHeader({
 /**
  * The task's route — headed "Route", because it is the start/goal summary and
  * the diagram as well as the turnpoint listing (the component keeps its older
- * name). Read-only for everyone; admins get an Edit route button that opens
- * the full route editor dialog (turnpoints, start gates, goal, .xctsk /
- * XContest import-export).
+ * name). Read-only for everyone; organisers reach the route editor
+ * (turnpoints, start gates, goal, .xctsk / XContest import-export) from
+ * "Edit route" in the bar's ⋯.
  */
 function TurnpointsSection({
   xctsk,
@@ -565,7 +543,6 @@ function TurnpointsSection({
   timezone,
   wind,
   isAdmin,
-  routeHref,
 }: {
   xctsk: XCTask | null;
   taskDate: string;
@@ -573,9 +550,8 @@ function TurnpointsSection({
   timezone: string | null;
   /** The day's modelled wind, once the weather lands. Null until then. */
   wind: TaskWind | null;
+  /** An organiser sees the section before there is a route to show. */
   isAdmin: boolean;
-  /** The route editor's URL — a page since #637, so this is a link. */
-  routeHref: string;
 }) {
   // Which turnpoint the reader is pointing at, shared by the diagram and the
   // table so the shape and the numbers stay tied together — either one can
@@ -586,16 +562,8 @@ function TurnpointsSection({
   if (!xctsk && !isAdmin) return null;
   return (
     <Card>
-      <SectionHeader
-        title="Route"
-        action={
-          isAdmin ? (
-            <LinkButton variant="outline" size="sm" href={routeHref}>
-              {xctsk && xctsk.turnpoints.length > 0 ? "Edit route" : "Create route"}
-            </LinkButton>
-          ) : null
-        }
-      />
+      {/* No button here: "Edit route" is in the bar's ⋯ (#863). */}
+      <SectionHeader title="Route" />
       {xctsk && xctsk.turnpoints.length > 0 ? (
         <>
           <TaskSummaryHeader

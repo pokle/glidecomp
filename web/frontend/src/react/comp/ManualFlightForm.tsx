@@ -15,8 +15,10 @@
  * pasted "lat, lon" — and a malformed half shows inline as it is typed.
  * Record flight with no landing point, and every refusal the server gives,
  * lands under the field it is about — the server's `landing_lat` under
- * Latitude, `landing_lon` under Longitude — or beside the button when it is
- * about no field. Never a toast: toasts are for "recorded".
+ * Latitude, `landing_lon` under Longitude — or in the banner at the top of
+ * the column when it is about no field. Cancel and Record flight are in the
+ * bar (issue #863); Record flight is live once there is a landing point, or,
+ * for a flight already recorded, a change to it. Never a toast: toasts are for "recorded".
  *
  * Pre-scoped to one pilot (unlike SubmitTrackForm, which picks the pilot
  * inside). The made-good distance is computed live by the SAME engine helpers
@@ -39,13 +41,12 @@ import {
   distanceMadeGoodTo,
   manualOpenDistanceGeometry,
 } from "@glidecomp/engine";
-import { Button } from "@/react/rac/button";
 import { NumberField } from "@/react/rac/field";
 import { CoordsField, coordsProblems, lonFieldName } from "./fields";
-import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { ChoiceList } from "@/react/rac/choice-list";
-import { SettingsPage } from "@/react/components/SettingsPage";
+import { SettingsForm } from "@/react/components/SettingsForm";
 import { underPilot } from "../lib/crumbs";
+import { taskPath } from "../lib/slug";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { formatDistance, useUnits } from "../lib/units";
@@ -76,7 +77,6 @@ export function ManualFlightForm({
   distanceOrigin,
   openDistance,
   existing,
-  onCancel,
   onSaved,
 }: {
   compId: string;
@@ -94,8 +94,6 @@ export function ManualFlightForm({
   openDistance: boolean;
   /** Prefill for editing an existing manual flight. */
   existing?: ManualFlightEntry | null;
-  /** Leaving without saving; the caller decides where "back" is. */
-  onCancel: () => void;
   onSaved: () => void;
 }) {
   const units = useUnits();
@@ -106,20 +104,25 @@ export function ManualFlightForm({
     0,
     task.turnpoints.findIndex((tp) => tp.type === "SSS"),
   );
-  const [lastIdx, setLastIdx] = useState<number>(
-    existing ? existing.last_reached_tp_index : startIdx,
-  );
+  const initialLastIdx = existing ? existing.last_reached_tp_index : startIdx;
+  const [lastIdx, setLastIdx] = useState<number>(initialLastIdx);
   // A single "lat, lon" field — the format Google Maps copies to the clipboard,
   // and the same one the route editor uses (a map picker can fill it later).
-  const [coords, setCoords] = useState(
-    existing ? formatCoords(existing.landing_lat, existing.landing_lon) : "",
-  );
+  const initialCoords = existing
+    ? formatCoords(existing.landing_lat, existing.landing_lon)
+    : "";
+  const [coords, setCoords] = useState(initialCoords);
   // Minutes:seconds is fiddly — collect whole minutes, the common granularity.
-  const [durationMin, setDurationMin] = useState<number>(
+  const initialDurationMin =
     existing?.duration_seconds != null
       ? Math.round(existing.duration_seconds / 60)
-      : NaN,
-  );
+      : NaN;
+  const [durationMin, setDurationMin] = useState<number>(initialDurationMin);
+  // Object.is: a blank duration is NaN, and NaN !== NaN.
+  const dirty =
+    lastIdx !== initialLastIdx ||
+    coords !== initialCoords ||
+    !Object.is(durationMin, initialDurationMin);
   // GAP only: in goal when the last reached turnpoint is the goal.
   const madeGoal = !openDistance && lastIdx === goalIdx;
 
@@ -165,7 +168,7 @@ export function ManualFlightForm({
   }
 
   return (
-    <SettingsPage
+    <SettingsForm
       crumbs={underPilot(
         compId,
         compName,
@@ -174,7 +177,27 @@ export function ManualFlightForm({
         compPilotId,
         pilotName,
       )}
-      title="Record manual flight"
+      // The bar has one line: the short name there, the sentence in its menu.
+      title="Manual flight"
+      fullTitle="Record manual flight"
+      // Cancel leaves for the task, where the flight is recorded from.
+      leaveTo={taskPath(compId, compName, taskId, taskName)}
+      dirty={dirty}
+      // A first record needs a landing point; an edit needs a change.
+      canCommit={existing ? dirty : coords.trim() !== ""}
+      submitLabel="Record flight"
+      validate={() => coordsProblems("landing", coords, true)}
+      onSubmit={save}
+      onSuccess={() => {
+        toast.success(`Manual flight recorded for ${pilotName}`);
+        onSaved();
+      }}
+      // The server's names for the two halves of the Landing point.
+      fieldNames={{
+        landing_lat: "landing",
+        landing_lon: lonFieldName("landing"),
+        duration_seconds: "duration",
+      }}
       description={
         <>
           {pilotName} — for a pilot who flew but has no tracklog.{" "}
@@ -184,91 +207,67 @@ export function ManualFlightForm({
         </>
       }
     >
-      <Form
-        className="flex flex-col gap-6"
-        validate={() => coordsProblems("landing", coords, true)}
-        onSubmit={save}
-        onSuccess={() => {
-          toast.success(`Manual flight recorded for ${pilotName}`);
-          onSaved();
-        }}
-        // The server's names for the two halves of the Landing point.
-        fieldNames={{
-          landing_lat: "landing",
-          landing_lon: lonFieldName("landing"),
-          duration_seconds: "duration",
-        }}
-      >
-        {!openDistance ? (
-          // A list in flow, not a Select: this is the control gotcha #22
-          // was diagnosed on. A turnpoint list is also read in ROUTE ORDER,
-          // which a collapsed select shows one entry of.
-          <ChoiceList
-            label="Last turnpoint reached"
-            name="last_reached_tp_index"
-            description="The furthest turnpoint the pilot legally tagged, in order."
-            value={String(lastIdx)}
-            onChange={(v) => setLastIdx(Number(v))}
-            options={task.turnpoints.map((_, i) => ({
-              value: String(i),
-              label: turnpointLabel(task, i),
-            }))}
-          />
-        ) : null}
-
-        <CoordsField
-          label="Landing point"
-          name="landing"
-          value={coords}
-          onChange={setCoords}
+      {!openDistance ? (
+        // A list in flow, not a Select: this is the control gotcha #22
+        // was diagnosed on. A turnpoint list is also read in ROUTE ORDER,
+        // which a collapsed select shows one entry of.
+        <ChoiceList
+          label="Last turnpoint reached"
+          name="last_reached_tp_index"
+          description="The furthest turnpoint the pilot legally tagged, in order."
+          value={String(lastIdx)}
+          onChange={(v) => setLastIdx(Number(v))}
+          options={task.turnpoints.map((_, i) => ({
+            value: String(i),
+            label: turnpointLabel(task, i),
+          }))}
         />
+      ) : null}
 
-        {madeGoal ? (
-          <NumberField
-            label="Finish time (minutes)"
-            name="duration"
-            description="Speed-section time, for time and speed points. Optional."
-            placeholder="e.g. 92"
-            minValue={1}
-            step={1}
-            value={durationMin}
-            onChange={setDurationMin}
-          />
-        ) : null}
+      <CoordsField
+        label="Landing point"
+        name="landing"
+        value={coords}
+        onChange={setCoords}
+      />
 
-        <div
-          className="rounded-md border border-border bg-muted/40 p-3 text-sm"
-          aria-live="polite"
-        >
-          {madeGood !== null ? (
-            <>
-              <span className="font-medium">
-                {
-                  formatDistance(madeGood, { decimals: 1, prefs: units })
-                    .withUnit
-                }{" "}
-                {openDistance ? "open distance" : "made good"}
-              </span>
-              {madeGoal ? (
-                <span className="text-muted-foreground"> · in goal</span>
-              ) : null}
-            </>
-          ) : (
-            <span className="text-muted-foreground">
-              Enter a landing point to see the{" "}
-              {openDistance ? "open distance" : "made-good distance"}.
+      {madeGoal ? (
+        <NumberField
+          label="Finish time (minutes)"
+          name="duration"
+          description="Speed-section time, for time and speed points. Optional."
+          placeholder="e.g. 92"
+          minValue={1}
+          step={1}
+          value={durationMin}
+          onChange={setDurationMin}
+        />
+      ) : null}
+
+      <div
+        className="rounded-md border border-border bg-muted/40 p-3 text-sm"
+        aria-live="polite"
+      >
+        {madeGood !== null ? (
+          <>
+            <span className="font-medium">
+              {
+                formatDistance(madeGood, { decimals: 1, prefs: units })
+                  .withUnit
+              }{" "}
+              {openDistance ? "open distance" : "made good"}
             </span>
-          )}
-        </div>
-
-        <FormErrorBanner />
-        <div className="flex items-center gap-3">
-          <SubmitButton>Record flight</SubmitButton>
-          <Button variant="outline" onPress={onCancel}>
-            Cancel
-          </Button>
-        </div>
-      </Form>
-    </SettingsPage>
+            {madeGoal ? (
+              <span className="text-muted-foreground"> · in goal</span>
+            ) : null}
+          </>
+        ) : (
+          <span className="text-muted-foreground">
+            Enter a landing point to see the{" "}
+            {openDistance ? "open distance" : "made-good distance"}.
+          </span>
+        )}
+      </div>
+    </SettingsForm>
   );
 }

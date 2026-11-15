@@ -1,7 +1,7 @@
 /**
  * The pilots page (/comp/:id/pilots): a list of pilots, each opening a page
- * of its own (/comp/:id/pilots/:pilotId, or /pilots/new), under a sticky
- * search box and + — at every width. It replaced a fourteen-column Tabulator
+ * of its own (/comp/:id/pilots/:pilotId, or /pilots/new), under the page's
+ * bar (its +, its ⋯, and the search box that sticks with it) — at every width. It replaced a fourteen-column Tabulator
  * grid in a dialog, which on a phone showed about one and a half columns at a
  * time.
  *
@@ -11,8 +11,9 @@
  *
  *   - the search finds a pilot by any field, words in any order, accents
  *     ignored; and + carries the searched-for name into a new pilot;
- *   - a pilot is saved the moment Done is pressed (nothing waits for a
- *     page-level Save); Back is the browser's Back, and returns the list
+ *   - a pilot is saved the moment its Save is pressed, in the bar (Add, on a
+ *     new one; nothing waits for a list-level Save); Back is the browser's
+ *     Back, and returns the list
  *     searched, sorted and scrolled as it was left;
  *   - Remove asks before it removes;
  *   - an import shows what it will add, update and remove before it does any
@@ -158,7 +159,7 @@ async function openList(page: Page, field: Locator): Promise<void> {
  * review of that file, on the same page.
  */
 async function importFile(page: Page, name: string, csv: string | Buffer): Promise<Locator> {
-  await page.getByRole("button", { name: "Roster actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Import CSV…" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Import CSV" })).toBeVisible({
     timeout: 20_000,
@@ -174,7 +175,7 @@ async function importFile(page: Page, name: string, csv: string | Buffer): Promi
   return page.getByRole("main");
 }
 
-/** Back on the list, after a Done, a Remove or a Back. */
+/** Back on the list, after a Save, a Remove or a Back. */
 async function backOnList(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/pilots(\?|$)/, { timeout: 20_000 });
   await expect(list(page)).toBeVisible();
@@ -230,37 +231,33 @@ test("+ after a search that finds nobody adds a pilot with that name", async ({ 
   await search(page).fill("Zara New");
   await expect(list(page)).toContainText('No pilot matches "Zara New".');
 
-  await page.getByRole("button", { name: "Add a pilot named Zara New" }).click();
+  await page.getByRole("link", { name: "Add a pilot named Zara New" }).click();
   await expect(page).toHaveURL(/\/pilots\/new\?name=Zara/);
-  const sheet = await editorFor(page, "Zara New");
+  const sheet = await editorFor(page, "New pilot");
   await expect(sheet.getByRole("textbox", { name: "Name" })).toHaveValue("Zara New");
   // The option's TEXT, not the radio: the kit hides the input under its
   // label (rac gotcha #13, as task-settings-pages.spec.ts does).
   await sheet.getByText("sport", { exact: true }).click();
   await expect(sheet.getByRole("radio", { name: "sport" })).toBeChecked();
-  await sheet.getByRole("button", { name: "Done" }).click();
+  // A new pilot is added with Add, in the bar: live, because the name the
+  // search handed over is already in it.
+  await sheet.getByRole("button", { name: "Add", exact: true }).click();
   await backOnList(page);
 
-  // Saved on Done: there is no page-level Save to press. The list is back
+  // Saved on Add: there is no list-level Save to press. The list is back
   // where it was left, searching for the name it was given.
   await expect(search(page)).toHaveValue("Zara New");
   await expect.poll(() => names(page)).toEqual(["Zara New"]);
-  // And the section nav's count follows the list, rather than keeping the
-  // number the page loaded with. At a phone's width the nav folds "Pilots"
-  // into its More menu, so look there when it is not on the bar.
-  const counted = `Pilots (${ROSTER.length + 1})`;
-  if ((await page.getByRole("link", { name: counted }).count()) === 0) {
-    await page.getByRole("button", { name: "More sections" }).click();
-    await expect(page.getByRole("menuitem", { name: counted })).toBeVisible();
-    await page.keyboard.press("Escape");
-  } else {
-    await expect(page.getByRole("link", { name: counted }).first()).toBeAttached();
-  }
+  // And the page's count follows the list, rather than keeping the number
+  // the page loaded with.
+  await expect(page.getByRole("status").filter({ hasText: "of" })).toHaveText(
+    `1 of ${ROSTER.length + 1} pilots`
+  );
   const saved = (await rosterOf(compId)).find((p) => p.name === "Zara New");
   expect(saved?.pilot_class).toBe("sport");
 });
 
-test("a pilot is saved on Done, and Back is the browser's Back", async ({ page }) => {
+test("a pilot is saved on Save, and Back is the browser's Back", async ({ page }) => {
   const compId = await makeComp();
   await openPage(page, compId);
   await search(page).fill("jo ridge");
@@ -270,11 +267,11 @@ test("a pilot is saved on Done, and Back is the browser's Back", async ({ page }
   await expect(page).toHaveURL(/\/pilots\/jo-ridge-[a-z]+$/);
   let sheet = await editorFor(page, "Jo Ridge");
   await sheet.getByRole("textbox", { name: "Driver" }).fill("Sam 0400 111 222");
-  await sheet.getByRole("button", { name: "Done" }).click();
+  await sheet.getByRole("button", { name: "Save" }).click();
   await backOnList(page);
   const saved = () => rosterOf(compId).then((r) => r.find((p) => p.name === "Jo Ridge"));
   expect((await saved())?.driver_contact).toBe("Sam 0400 111 222");
-  // Done went BACK to the list, so the list is as it was left.
+  // Save went BACK to the list, so the list is as it was left.
   await expect(search(page)).toHaveValue("jo ridge");
 
   // Back leaves without saving and without asking, as on any page — and
@@ -288,9 +285,10 @@ test("a pilot is saved on Done, and Back is the browser's Back", async ({ page }
   await page.goForward();
   await editorFor(page, "Jo Ridge");
 
-  // A link away with unsaved edits does ask: "Pilots" in the trail.
+  // A link away with unsaved edits does ask: "Pilots" in the title's menu.
   await page.getByRole("main").getByRole("textbox", { name: "Driver" }).fill("Lee");
-  await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Pilots", exact: true }).click();
+  await page.getByRole("button", { name: "Jo Ridge: go to another page" }).click();
+  await page.getByRole("menuitem", { name: "Pilots", exact: true }).click();
   const ask = page.getByRole("alertdialog");
   await expect(ask).toContainText("Discard changes?");
   await ask.getByRole("button", { name: "Keep editing" }).click();
@@ -338,11 +336,11 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   await expect(page.getByRole("option", { name: "Bravo (1)" })).toBeVisible();
   await page.getByRole("option", { name: "Alpha Gliders (2)" }).click();
   await expect(team).toHaveValue("Alpha Gliders");
-  await sheet.getByRole("button", { name: "Done" }).click();
+  await sheet.getByRole("button", { name: "Save" }).click();
   await backOnList(page);
   expect(await teamOf("Di")).toBe("Alpha Gliders");
 
-  // A slip is caught: Done will not make a new team of it unasked, and
+  // A slip is caught: Save will not make a new team of it unasked, and
   // "Did you mean" puts it right.
   sheet = await open("Ed");
   team = await tapTeam(sheet);
@@ -350,7 +348,7 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   await expect(page.getByRole("option", { name: "Did you mean Alpha Gliders?" })).toBeVisible();
   await expect(page.getByRole("option", { name: "New team: Alpha Gilders" })).toBeVisible();
   await page.keyboard.press("Escape");
-  await sheet.getByRole("button", { name: "Done" }).click();
+  await sheet.getByRole("button", { name: "Save" }).click();
   await expect(sheet).toContainText("Choose a team from the list, or New team: Alpha Gilders.");
   await expect(team).toBeFocused();
   // Centring the field closed the list its focus opened; a tap brings it
@@ -359,7 +357,7 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   await page.getByRole("option", { name: "Did you mean Alpha Gliders?" }).click();
   await expect(team).toHaveValue("Alpha Gliders");
   await expect(sheet).not.toContainText("Choose a team from the list");
-  await sheet.getByRole("button", { name: "Done" }).click();
+  await sheet.getByRole("button", { name: "Save" }).click();
   await backOnList(page);
   expect(await teamOf("Ed")).toBe("Alpha Gliders");
 
@@ -369,7 +367,7 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   team = await tapTeam(sheet);
   await team.fill("Thermal Hunters");
   await page.getByRole("option", { name: "New team: Thermal Hunters" }).click();
-  await sheet.getByRole("button", { name: "Done" }).click();
+  await sheet.getByRole("button", { name: "Save" }).click();
   await backOnList(page);
   expect(await teamOf("Fay")).toBe("Thermal Hunters");
 
@@ -377,7 +375,7 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   team = await tapTeam(sheet);
   await team.fill("alpha  GLIDERS");
   await page.keyboard.press("Escape");
-  await sheet.getByRole("button", { name: "Done" }).click();
+  await sheet.getByRole("button", { name: "Save" }).click();
   await backOnList(page);
   expect(await teamOf("Cy")).toBe("Alpha Gliders");
 });
@@ -432,7 +430,7 @@ test("Sort: Team files the pilots under their teams, the teamless last", async (
   const team = sheet.getByRole("combobox", { name: "Team" });
   await openList(page, team);
   await page.getByRole("option", { name: "Bravo (1)" }).click();
-  await sheet.getByRole("button", { name: "Done" }).click();
+  await sheet.getByRole("button", { name: "Save" }).click();
   await backOnList(page);
   await expect.poll(headings).toEqual(["Alpha Gliders · 2 pilots", "Bravo · 2 pilots"]);
   await expect.poll(() => names(page)).toEqual(["Bo", "Cy", "Ada", "Zoe"]);
@@ -473,7 +471,7 @@ test("Back from a pilot returns the list scrolled, searched and sorted as it was
 test("a refusal lands under the field it is about, focused and in view", async ({ page }) => {
   // The bug, found on an iPhone: an email that already belonged to someone on
   // the roster was refused, the refusal went to the top of a body scrolled
-  // past it, and Done looked broken. The test organiser is a pilot too, on
+  // past it, and Done (as Save was called, and where it was) looked broken. The test organiser is a pilot too, on
   // this roster by their email.
   const profile = await api.patch("/api/comp/pilot", { data: { name: TEST_USER.name } });
   expect(profile.ok(), await profile.text()).toBe(true);
@@ -483,15 +481,17 @@ test("a refusal lands under the field it is about, focused and in view", async (
   ]);
   await openPage(page, compId);
 
-  await page.getByRole("button", { name: "Add pilot" }).click();
+  await page.getByRole("link", { name: "Add pilot" }).click();
   const sheet = await editorFor(page, "New pilot");
+  // Nothing to add yet: Add is not live until the pilot has a name.
+  await expect(sheet.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
   await sheet.getByRole("textbox", { name: "Name" }).fill("Moosh");
   await sheet.getByText("open", { exact: true }).click();
   const email = sheet.getByRole("textbox", { name: "Email" });
   await email.fill(TEST_USER.email);
   // Scrolled down past the email, the way the organiser was.
   await sheet.getByRole("textbox", { name: "FAI ID" }).scrollIntoViewIfNeeded();
-  await sheet.getByRole("button", { name: "Done" }).click();
+  await sheet.getByRole("button", { name: "Add", exact: true }).click();
 
   await expect(sheet).toContainText("Org Self is already registered with this email.");
   await expect(email).toHaveAttribute("aria-invalid", "true");
@@ -502,19 +502,19 @@ test("a refusal lands under the field it is about, focused and in view", async (
   await email.fill("moosh@example.com");
   await expect(email).toHaveValue("moosh@example.com");
   await expect(sheet).not.toContainText("already registered");
-  await sheet.getByRole("button", { name: "Done" }).click();
+  await sheet.getByRole("button", { name: "Add", exact: true }).click();
   await backOnList(page);
   expect((await rosterOf(compId)).some((p) => p.name === "Moosh")).toBe(true);
 });
 
-test("Add test pilots: a refusal shows under the heading, never in a toast", async ({ page }) => {
+test("Add test pilots: a refusal shows under the bar, never in a toast", async ({ page }) => {
   // A menu item has no field for a refusal to go under, so it goes in the
   // kit's one fixed place beside what was pressed (#808): the ⋯ menu hangs
-  // off the heading, so under the heading.
+  // off the bar, so first on the page under it.
   const compId = await makeComp(ROSTER.slice(0, 3));
   await openPage(page, compId);
   await page.route("**/pilot/bulk", (route) => route.abort("internetdisconnected"));
-  await page.getByRole("button", { name: "Roster actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Add test pilots" }).click();
 
   const refusal = page.getByRole("main").getByRole("alert");
@@ -528,7 +528,7 @@ test("Add test pilots: a refusal shows under the heading, never in a toast", asy
 
   // The next press clears it, and this time the pilots are added.
   await page.unroute("**/pilot/bulk");
-  await page.getByRole("button", { name: "Roster actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Add test pilots" }).click();
   await expect(rows(page).filter({ hasText: "Test Dummy 1" })).toHaveCount(1, {
     timeout: 20_000,
@@ -614,14 +614,15 @@ test("an exported roster re-imports as the same pilots", async ({ page }) => {
   const compId = await makeComp(ROSTER.slice(0, 3));
   await openPage(page, compId);
 
-  await page.getByRole("button", { name: "Roster actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   const download = page.waitForEvent("download");
   await page.getByRole("menuitem", { name: "Export CSV" }).click();
   const csv = await (await (await download).createReadStream()).toArray();
 
   const review = await importFile(page, "exported.csv", Buffer.concat(csv));
   await expect(review).toContainText("0 updated · 0 new · 0 removed");
-  await expect(review.getByRole("button", { name: "Apply" })).toHaveCount(0);
+  // Nothing to apply: Apply is in the bar, and not live.
+  await expect(review.getByRole("button", { name: "Apply" })).toBeDisabled();
 });
 
 test("the page never scrolls sideways, its targets are thumb-sized, and the search bar stays in reach", async ({
@@ -631,23 +632,25 @@ test("the page never scrolls sideways, its targets are thumb-sized, and the sear
   await openPage(page, compId);
   await expectNoSidewaysScroll(page);
 
-  await expectThumbSized(page, "the + button", await page.getByRole("button", { name: "Add pilot" }).boundingBox());
+  await expectThumbSized(page, "the + button", await page.getByRole("link", { name: "Add pilot" }).boundingBox());
   const searchBox = await page.getByRole("group").filter({ has: search(page) }).first().boundingBox();
   expect(searchBox!.height, "the search box height").toBeGreaterThanOrEqual(44);
   await expectThumbSized(page, "a pilot row", await rows(page).first().boundingBox());
 
   // Scrolled to the end of the list, search and + are still on screen, at the
-  // top: sticky in the page's flow, never fixed to the screen.
+  // top: the bar is sticky in the page's flow, never fixed to the screen.
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  const plus = await page.getByRole("button", { name: "Add pilot" }).boundingBox();
+  const plus = await page.getByRole("link", { name: "Add pilot" }).boundingBox();
   expect(plus!.y, "the + stays on screen").toBeGreaterThanOrEqual(0);
   expect(plus!.y, "the + stays near the top").toBeLessThan(200);
-  // ... and wholly below the comp's section tabs, which stick too.
-  const tabs = await page.getByRole("navigation", { name: "Sections" }).boundingBox();
+  // ... with the search box under it, in the bar's second layer.
   const scrolledSearch = await page.getByRole("group").filter({ has: search(page) }).first().boundingBox();
-  expect(scrolledSearch!.y, "the search box clears the section tabs").toBeGreaterThanOrEqual(tabs!.y + tabs!.height);
+  expect(scrolledSearch!.y, "the search box sticks under the bar's controls").toBeGreaterThanOrEqual(
+    plus!.y + plus!.height
+  );
+  expect(scrolledSearch!.y, "the search box stays near the top").toBeLessThan(200);
   expect(
-    await page.getByRole("button", { name: "Add pilot" }).evaluate((el) => {
+    await page.getByRole("link", { name: "Add pilot" }).evaluate((el) => {
       for (let n: Element | null = el; n; n = n.parentElement) {
         if (getComputedStyle(n).position === "fixed") return true;
       }
@@ -656,7 +659,7 @@ test("the page never scrolls sideways, its targets are thumb-sized, and the sear
     "nothing on this page is fixed to the screen"
   ).toBe(false);
 
-  // A row reached from the keyboard is never left under the sticky bar (WCAG
+  // A row reached from the keyboard is never left under the bar (WCAG
   // 2.4.11): walk focus back up the list from the bottom, a row at a time,
   // so each step scrolls the page just far enough to show the row, which is
   // where the bar would cover it.
@@ -671,10 +674,13 @@ test("the page never scrolls sideways, its targets are thumb-sized, and the sear
         page.evaluate(() => {
           const top = document.activeElement!.getBoundingClientRect().top;
           const bar = document.querySelector('[aria-label="Add pilot"]')!.getBoundingClientRect();
-          const tabs = document.querySelector('nav[aria-label="Sections"]')!.getBoundingClientRect();
-          return top >= bar.bottom && top >= tabs.bottom;
+          const box = document
+            .querySelector('input[type="search"]')!
+            .closest('[role="group"]')!
+            .getBoundingClientRect();
+          return top >= bar.bottom && top >= box.bottom;
         }),
-        { message: "the focused row starts below the search bar and the section tabs" }
+        { message: "the focused row starts below the bar and the search box that sticks with it" }
       )
       .toBe(true);
   }

@@ -29,7 +29,7 @@ import { cn } from "@/react/lib/utils";
 import { MinusIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 
 export const inputClass =
-  "h-9 w-full min-w-0 rounded-lg border border-input bg-card px-3 py-1 text-base transition-colors outline-none placeholder:text-muted-foreground data-focused:border-ring data-focused:ring-3 data-focused:ring-ring/50 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:bg-input/50 data-disabled:opacity-50 data-invalid:border-destructive data-invalid:ring-destructive/20 md:text-sm dark:bg-input/30";
+  "h-9 w-full min-w-0 rounded-lg border border-input bg-card px-3 py-1 text-base pointer-coarse:h-11 transition-colors outline-none placeholder:text-muted-foreground data-focused:border-ring data-focused:ring-3 data-focused:ring-ring/50 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:bg-input/50 data-disabled:opacity-50 data-invalid:border-destructive data-invalid:ring-destructive/20 md:text-sm dark:bg-input/30";
 
 export function Label({ className, ...props }: React.ComponentProps<typeof AriaLabel>) {
   return (
@@ -88,7 +88,14 @@ export function TextArea({
   return (
     <AriaTextArea
       ref={ref}
-      className={cn(inputClass, "h-auto resize-y", className as string)}
+      // `pointer-coarse:h-auto` too: the 44 px a one-line input has on a phone
+      // must not flatten a text area to one line. `min-h-20` is about three
+      // lines, so a reader always sees what they are writing in.
+      className={cn(
+        inputClass,
+        "h-auto min-h-20 resize-y pointer-coarse:h-auto",
+        className as string
+      )}
       {...props}
     />
   );
@@ -187,13 +194,13 @@ export function NumberField({
  * rather than the 20px a desktop field gets away with.
  */
 const SEARCH_GROUP = {
-  default: "h-9 rounded-lg bg-card px-3 dark:bg-input/30",
+  default: "h-9 rounded-lg bg-card px-3 pointer-coarse:h-11 dark:bg-input/30",
   floating:
     "h-12 rounded-full bg-card/95 px-4 shadow-lg backdrop-blur-sm dark:bg-card/95",
 } as const;
 const SEARCH_CLEAR = {
-  default: "size-5 rounded",
-  floating: "-mr-2 size-10 rounded-full",
+  default: "touch-target size-5 rounded",
+  floating: "-mr-2 size-11 rounded-full",
 } as const;
 
 /** Search input with the built-in clear (Esc / ✕) behaviour. */
@@ -240,7 +247,8 @@ export function SearchField({
           autoCorrect="off"
           spellCheck={false}
           className={cn(
-            "w-full min-w-0 bg-transparent py-1 text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden",
+            // h-full: the input fills the pill, so a tap anywhere in it lands in the field.
+            "h-full w-full min-w-0 bg-transparent py-1 text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden",
             variant === "default" && "md:text-sm"
           )}
         />

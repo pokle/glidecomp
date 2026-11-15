@@ -20,7 +20,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { SettingsPage } from "@/react/components/SettingsPage";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
@@ -139,18 +139,23 @@ export function ManualFlightPage() {
     return <NotFound title="Task not found" />;
   }
 
-  if (!comp || !task || !auxLoaded || loading) {
-    return <Loading>Loading…</Loading>;
-  }
-
   const crumbs = underPilot(
     compId,
-    comp.name,
+    comp?.name,
     taskId,
-    task.name,
+    task?.name,
     compPilotId,
     pilot?.name
   );
+
+  if (!comp || !task || !auxLoaded || loading) {
+    // The bar is there before the data, so the page does not jump.
+    return (
+      <SettingsPage crumbs={crumbs} title="Manual flight" fullTitle="Record manual flight">
+        <Loading>Loading…</Loading>
+      </SettingsPage>
+    );
+  }
 
   if (!isAdmin) return <OrganisersOnly to={taskPath(compUrlId(comp, compId), comp.name, taskId, task.name)} />;
 
@@ -158,14 +163,12 @@ export function ManualFlightPage() {
   // to record against — the same condition that hid the grid's button.
   if (!task.xctsk) {
     return (
-      <div>
-        <Breadcrumbs items={crumbs} current="Record manual flight" />
-        <h1 className="mt-2 text-2xl font-bold">Record manual flight</h1>
-        <p className="mt-2 text-muted-foreground">
+      <SettingsPage crumbs={crumbs} title="Manual flight" fullTitle="Record manual flight">
+        <p className="text-muted-foreground">
           This task has no route yet. A manual flight is measured along the
           course, so there is nothing to measure against until one is set.
         </p>
-      </div>
+      </SettingsPage>
     );
   }
 
@@ -184,7 +187,6 @@ export function ManualFlightPage() {
       distanceOrigin={comp.gap_params?.distanceOrigin ?? "takeoff"}
       openDistance={comp.scoring_format === "open_distance"}
       existing={existing}
-      onCancel={backToTask}
       onSaved={backToTask}
     />
   );

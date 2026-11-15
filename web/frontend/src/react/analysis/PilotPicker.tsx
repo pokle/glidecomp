@@ -112,7 +112,7 @@ export function PilotPicker({ pilots }: { pilots: PickerPilot[] }) {
   }, [pilots, query, settled]);
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex min-w-0 items-center gap-1.5">
       {/* Same diamond the scatter draws on the pinned pilot — a legend, not
           a second control. aria-hidden: the combobox already names the
           action. */}
@@ -120,7 +120,9 @@ export function PilotPicker({ pilots }: { pilots: PickerPilot[] }) {
       <ComboBox
         aria-label="Highlight a pilot"
         placeholder="Highlight a pilot…"
-        className="w-56"
+        // May give way beside the class select on a phone: both are on the
+        // one line that sticks under the bar.
+        className="w-56 min-w-0"
         items={matches}
         inputValue={query}
         onInputChange={setQuery}

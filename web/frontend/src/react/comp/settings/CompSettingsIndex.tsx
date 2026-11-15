@@ -17,7 +17,7 @@ import { SettingsPage } from "@/react/components/SettingsPage";
 import { api } from "@/comp/api";
 import { ActionErrorBanner, useAction } from "@/react/rac/form";
 import { useConfirm } from "@/react/lib/confirm";
-import { underComp } from "@/react/lib/crumbs";
+import { compPages, underComp } from "@/react/lib/crumbs";
 import { compCopyPath, compSettingsPath } from "@/react/lib/slug";
 import type { CompDetailData } from "../types";
 import { GeneralSettings } from "./GeneralSettings";
@@ -33,11 +33,31 @@ export const SETTINGS_GROUPS = [
 ] as const;
 export type SettingsGroup = (typeof SETTINGS_GROUPS)[number];
 
+/** Each group's name: its row here, and its own page's title. */
+export const SETTINGS_GROUP_TITLES: Record<SettingsGroup, string> = {
+  general: "General",
+  access: "Access",
+  classes: "Pilot classes",
+  scoring: "Scoring",
+};
+
 export interface SettingsGroupProps {
   compId: string;
   comp: CompDetailData;
   /** Called after a successful save; the caller refreshes and goes up. */
   onSaved: () => void;
+}
+
+/**
+ * Whether a group's Save is live. Only when there is something to commit
+ * (issue #863): a change — or, on a competition whose settings nobody has
+ * saved yet, the review itself. The server counts any settings save as
+ * "settings reviewed" for the setup guide (competition-api routes/comp.ts),
+ * and a new competition starts from sound defaults, so an organiser who
+ * reads a page and agrees with it must still be able to say so.
+ */
+export function canSaveSettings(comp: CompDetailData, dirty: boolean): boolean {
+  return dirty || !comp.settings_reviewed;
 }
 
 /** One sub-page component per group, dispatched by the route param. */
@@ -88,22 +108,26 @@ export function CompSettingsIndex({
     compSettingsPath(compId, comp.name, group);
 
   return (
-    <SettingsPage crumbs={underComp(compId, comp.name)} title="Settings">
+    <SettingsPage
+      crumbs={underComp(compId, comp.name)}
+      title="Settings"
+      related={compPages(compId, comp, true, "Settings")}
+    >
       <NavList>
-        <NavRow to={groupPath("general")} label="General" value={comp.name} />
+        <NavRow to={groupPath("general")} label={SETTINGS_GROUP_TITLES.general} value={comp.name} />
         <NavRow
           to={groupPath("access")}
-          label="Access"
+          label={SETTINGS_GROUP_TITLES.access}
           value={accessSummary(comp)}
         />
         <NavRow
           to={groupPath("classes")}
-          label="Pilot classes"
+          label={SETTINGS_GROUP_TITLES.classes}
           value={comp.pilot_classes.join(", ")}
         />
         <NavRow
           to={groupPath("scoring")}
-          label="Scoring"
+          label={SETTINGS_GROUP_TITLES.scoring}
           value={scoringSummary(comp)}
         />
       </NavList>

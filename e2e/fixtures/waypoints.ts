@@ -91,13 +91,36 @@ export const reviewWaypointUrl = /\/comp\/[^/]+\/waypoints\/altitudes\/\d+$/;
  */
 export async function onEditorList(page: Page, rows: number): Promise<void> {
   await expect(page).toHaveURL(listUrl, { timeout: 20_000 });
-  await expect(page.getByRole("button", { name: "Upload file" })).toBeVisible({ timeout: 20_000 });
+  // Save is the organiser's, and is in the bar only once the waypoints are in.
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible({
+    timeout: 20_000,
+  });
   if (rows === 0) {
     // An empty GridList renders its empty state as a row of its own.
     await expect(page.getByText(/^No waypoints yet\./)).toBeVisible({ timeout: 20_000 });
   } else {
     await expect(editorRows(page)).toHaveCount(rows, { timeout: 20_000 });
   }
+}
+
+/**
+ * Choose a row of the page bar's ⋯ menu (issue #863: every action of a page
+ * is in its bar). A row with a second menu behind it opens that menu.
+ */
+export async function barAction(page: Page, name: string | RegExp): Promise<void> {
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name, exact: true }).click();
+}
+
+/** The rows of the bar's ⋯ menu, by their labels; the menu is left closed. */
+export async function barActionLabels(page: Page): Promise<string[]> {
+  await page.getByRole("button", { name: "More actions" }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  const labels = (await menu.getByRole("menuitem").allInnerTexts()).map((t) => t.trim());
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  return labels;
 }
 
 /** The first row of the editor's list, once it is there. */

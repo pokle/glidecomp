@@ -43,34 +43,53 @@
  * of its own (pages/CompWaypointsMapPage.tsx) — enough room to walk a valley
  * dropping points one after another.
  *
- * Nothing is saved until Save, which is why Save is in a bar that sticks to
- * the foot of the screen (the end of the work, always in reach). Leaving the
- * editor by a link with edits outstanding asks first; Back and a reload keep
- * the draft for later.
+ * **Every action is in the page's bar** (issue #863; rac/page-bar.tsx), and
+ * the page is the waypoints. For an organiser the bar holds Save — live only
+ * while the draft differs from what is saved — and, under ⋯, Add waypoint,
+ * Add from map, Upload file, Check altitudes, the device rows and, while
+ * there are changes, Discard changes. A visitor's ⋯ has the device rows
+ * alone. The filter is the bar's second layer, so it stays in reach down a
+ * long list. Save was in a bar stuck to the foot of the screen until 2026-11;
+ * nothing sticks to the bottom now.
+ *
+ * The form is the bar and the refusal under it, and nothing else. The filter
+ * is inside the bar, so it is inside the form, and Enter in it must not be
+ * Save: the field takes Enter for itself (`onSubmit`).
+ *
+ * Nothing is saved until Save. Leaving the editor by a link with edits
+ * outstanding asks first; Back and a reload keep the draft for later.
  */
 import { lazy, Suspense, useCallback, useRef, useState } from "react";
+import { cn } from "@/react/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useInView } from "../lib/use-in-view";
 import { NotFound } from "@/react/components/NotFound";
-import { FileTrigger } from "react-aria-components";
-import { Maximize2Icon } from "lucide-react";
+import {
+  ImportIcon,
+  MapPinPlusIcon,
+  MapPinXIcon,
+  Maximize2Icon,
+  MountainIcon,
+  PlusIcon,
+  Undo2Icon,
+} from "lucide-react";
 import { cleanWaypointCodes, describeCodeChanges, parseWaypointFile } from "@glidecomp/engine";
 import type { MapWaypoint } from "../../analysis/map-provider";
-import { Button, LinkButton, ToggleButton } from "@/react/rac/button";
+import { Button, LinkButton } from "@/react/rac/button";
 import { Alert, AlertDescription } from "@/react/rac/alert";
 import {
   DetailFoldButton,
   MasterDetail,
   useDetailFold,
 } from "@/react/components/MasterDetail";
-import { Loading } from "@/react/rac/progress";
+import { Loading, Spinner } from "@/react/rac/progress";
+import { Page, PageBar, commitClass, type BarAction } from "@/react/rac/page-bar";
 import { SearchField } from "@/react/rac/field";
 import { Form, FormErrorBanner, SubmitButton, refusal } from "@/react/rac/form";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { underComp } from "../lib/crumbs";
+import { compPages, underComp } from "../lib/crumbs";
 import {
   compAltitudeReviewPath,
   compPath,
@@ -83,8 +102,7 @@ import { useCanonicalPath } from "../lib/use-canonical-path";
 import { parseCoords } from "../comp/route-editor";
 import { newWaypointSearch } from "../comp/AddWaypointForm";
 import { WaypointList } from "../comp/WaypointList";
-import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
-import { CompSectionNav } from "../comp/CompSectionNav";
+import { useWaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import {
   WAYPOINTS_DISCARD,
   useAltitudeCheck,
@@ -113,13 +131,45 @@ const RouteMap = lazy(() => import("../comp/RouteMap"));
  */
 const MAP_LABEL = "map";
 
+/**
+ * Where the map pane sticks, over MasterDetail's own offsets, which are for a
+ * bar with no second layer. The bar with the filter under it is 60 px, the
+ * 48 px field and its 8 px, and the notch: 7.5rem clears it and its shadow.
+ * Stacked, the pane sticks there; on a short screen the bar does not stick,
+ * so the pane sticks at the top (the arbitrary variant sorts last, so it
+ * wins). Side by side, the same, with a little air.
+ * The bleed is the page's 1rem gutter at every width: MasterDetail's `page`
+ * bleed is 1.5rem from `sm`, which would hang 8 px off each side of the
+ * screen and scroll the page sideways.
+ */
+const PANE_WRAP = cn(
+  // Whole class strings, because Tailwind scans for them.
+  "top-[calc(7.5rem+env(safe-area-inset-top,0px))] max-sm:top-[calc(7.5rem+env(safe-area-inset-top,0px))]",
+  "[@media(max-height:500px)]:top-0",
+  "@5xl:top-[calc(8rem+env(safe-area-inset-top,0px))]",
+  "sm:-mx-4 sm:px-4"
+);
+
+/**
+ * Focus must not stop behind the bar or the pinned map (WCAG 2.4.11). A row
+ * of the list is a `role="row"`, which MasterDetail's own clearances do not
+ * name, and its buttons are cleared there for a bar with no filter — hence
+ * the `!`. Stacked with the map showing: the bar, then the pane's 19rem
+ * (`sm`: 23rem) cap and its padding. Folded, or side by side: the bar alone.
+ * Whole class strings, because Tailwind scans for them.
+ */
+const CLEAR_OPEN =
+  "[&_[role=row]]:scroll-mt-[28rem] [&_button]:scroll-mt-[28rem]! sm:[&_[role=row]]:scroll-mt-[32rem] sm:[&_button]:scroll-mt-[32rem]!";
+const CLEAR_FOLDED = "[&_[role=row]]:scroll-mt-36 [&_button]:scroll-mt-36!";
+const CLEAR_WIDE = "@5xl:[&_[role=row]]:scroll-mt-36 @5xl:[&_button]:scroll-mt-36!";
+
 export function CompWaypoints() {
   const editor = useWaypointsEditor();
   const { comp, compId, urlId, compName, isAdmin, draft, dirty } = editor;
   const navigate = useNavigate();
   const confirm = useConfirm();
   // The map's fold, owned here rather than by MasterDetail so its toggle can
-  // ride the toolbar above instead of taking a row of its own (see the row).
+  // ride the line above the list instead of taking a row of its own.
   const mapFold = useDetailFold(MAP_LABEL);
 
   // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
@@ -138,6 +188,8 @@ export function CompWaypoints() {
   const focusSeq = useRef(0);
   // The records the save in flight is sending: the new baseline once it lands.
   const saving = useRef<ReturnType<typeof validRecords>>([]);
+  // "Upload file" is a row of ⋯, and a menu row cannot be a file input.
+  const fileInput = useRef<HTMLInputElement>(null);
 
   // The filter box, which narrows a long list. Nothing re-orders the list:
   // the file's own order is the order, for a visitor as for an organiser.
@@ -150,8 +202,24 @@ export function CompWaypoints() {
     if (c) setFocus({ lat: c.lat, lon: c.lon, key: ++focusSeq.current });
   }, []);
 
+  // The pilot's download + QR (issue #312 stage 2) — for everyone, and keyed
+  // off the SAVED set rather than the editor's rows: a comp with nothing
+  // published has nothing to put on a device.
+  const hostedUrl = useCallback(
+    (fmt: string, swap: boolean) => `/api/comp/${compId}/waypoints/${fmt}${swap ? "?swap=1" : ""}`,
+    [compId]
+  );
+  const device = useWaypointDeviceExport({
+    records: editor.loading ? [] : editor.saved,
+    baseName: compName,
+    noun: "waypoint",
+    hostedUrl,
+  });
+
   if (editor.notFound) return <NotFound title="Competition not found" />;
 
+  /** The waypoints are here, and an organiser may edit them. */
+  const editing = isAdmin && !editor.loading && !editor.loadError;
   const invalidCount = rows.filter((r) => fromRow(r) === null).length;
   const query = filter.trim().toLowerCase();
   const visibleRows = query ? rows.filter((r) => matchesFilter(r, query)) : rows;
@@ -229,74 +297,164 @@ export function CompWaypoints() {
     navigate(compPath(urlId, compName));
   }
 
+  /** Arm the map for one tap, with the map on screen to take it. */
+  function toggleAddFromMap() {
+    if (!addMode && mapFold.collapsed) mapFold.onToggle();
+    setAddMode(!addMode);
+  }
+
   const mapFallback = (
     <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
       Loading map…
     </div>
   );
 
-  /**
-   * The map's fold toggle. Rides the END of the device-export row rather than
-   * sitting beside it: an expanded QR makes that block tall and wide, and a
-   * sibling would be pushed under the QR, floating above the map as though it
-   * belonged to something else.
-   */
-  const mapFoldButton = (
-    <DetailFoldButton fold={mapFold} detailLabel={MAP_LABEL} className="ms-auto" />
-  );
-
   const bareId = editor.bareId;
 
+  // ⋯: the editing actions (an organiser's, once the waypoints are here),
+  // then the device rows (everyone's), then the way to throw the draft away
+  // — only while there is one to throw away.
+  const actions: BarAction[] = [
+    ...(editing
+      ? [
+          {
+            id: "add",
+            icon: PlusIcon,
+            label: "Add waypoint",
+            to: compWaypointsNewPath(urlId, compName),
+          },
+          {
+            id: "add-from-map",
+            icon: addMode ? MapPinXIcon : MapPinPlusIcon,
+            label: addMode ? "Stop adding from map" : "Add from map",
+            onAction: toggleAddFromMap,
+          },
+          {
+            id: "upload",
+            icon: ImportIcon,
+            label: "Upload file",
+            onAction: () => fileInput.current?.click(),
+          },
+          // ONE altitude action, and it reports nothing until it is pressed.
+          // There used to be a "Fill altitudes from map" beside it — an
+          // action that answered blanks without asking — and a status line
+          // saying whether any blanks were left. The check does the fill's
+          // job better (it shows what it would write before writing it), and
+          // the status line was a verdict on a set nobody had asked about.
+          {
+            id: "check-altitudes",
+            icon: MountainIcon,
+            label: "Check altitudes",
+            disabled: rows.length === 0 || altitudeCheck.checking,
+            onAction: () => void checkAltitudes(),
+          },
+        ]
+      : []),
+    ...device.actions.map((a, i) => (i === 0 && editing ? { ...a, group: true } : a)),
+    ...(editing && dirty
+      ? [
+          {
+            id: "discard",
+            icon: Undo2Icon,
+            label: "Discard changes",
+            destructive: true,
+            group: true,
+            onAction: () => void discard(),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-      <Breadcrumbs items={underComp(urlId, compName)} current="Waypoints" />
-      {/* The heading keeps the row to itself. Four buttons beside an h1 is the
-          app's convention for a section with ONE manage action; here they
-          wrapped under the title on a phone and read as page chrome, so the
-          editing toolbar sits with the list it edits and Save sits at the
-          bottom of the page — where the work ends. */}
-      <h1 className="mt-1 text-2xl font-bold">Waypoints</h1>
-
-      <CompSectionNav
-        compId={urlId}
-        compName={compName}
-        taskCount={comp?.tasks?.length}
-        waypointCount={comp ? (comp.waypoint_count ?? editor.saved.length) : undefined}
-        pilotCount={comp?.pilot_count}
-        scoringFormat={comp?.scoring_format}
-        isAdmin={isAdmin}
-      />
-
-      {/* ONE row of buttons above the list. On the left, the pilot's
-          download + QR (issue #312 stage 2) — visible to everyone, and keyed
-          off the SAVED set rather than the editor's rows: a comp with nothing
-          published has nothing to put on a device, and the scorer setting one
-          up for the first time has one job, upload a file or add points from
-          the map. On the right, the map's own fold toggle, which MasterDetail
-          would otherwise give a whole row to for one right-aligned button.
-
-          `@container` because DetailFoldButton hides itself side by side with
-          the same `@5xl:` query MasterDetail splits on, and a container query
-          with no container ancestor never matches. */}
-      {!editor.loading ? (
-        <div className="@container mb-4 mt-4">
-          {editor.saved.length > 0 ? (
-            <WaypointDeviceExport
-              records={editor.saved}
-              baseName={compName}
-              noun="waypoint"
-              hostedUrl={(fmt, swap) =>
-                `/api/comp/${compId}/waypoints/${fmt}${swap ? "?swap=1" : ""}`
-              }
-              trailing={mapFoldButton}
-            />
-          ) : (
-            // Nothing published yet, so no device buttons to share the row
-            // with — the toggle keeps the right-hand end it would have had.
-            <div className="flex">{mapFoldButton}</div>
-          )}
-        </div>
+    <Page
+      width="wide"
+      bar={
+        // The form is the bar and the refusal under it (see the note at the
+        // top). `contents`, so the bar still sticks to the page and not to
+        // the form. It is there for a visitor too, with nothing to submit, so
+        // the bar is not built again when an organiser's session resolves.
+        <Form
+          className="contents"
+          onSubmit={async () => {
+            if (!editing) return undefined;
+            if (draft.rows.some((r) => fromRow(r) === null)) {
+              return refusal("Every waypoint needs valid coordinates before saving");
+            }
+            // Backstop for codes typed by hand: clean here rather than fight
+            // the field keystroke by keystroke, and show the result in the
+            // list, so what is saved is what is on screen.
+            const { draft: cleaned, changes } = cleanCodes(draft);
+            if (changes.length > 0) {
+              editor.update(() => cleaned);
+              const note = describeCodeChanges(changes);
+              if (note) toast.warning(note);
+            }
+            const waypoints = validRecords(cleaned.rows);
+            saving.current = waypoints;
+            return api.api.comp[":comp_id"].waypoints.$put({
+              param: { comp_id: compId },
+              json: { waypoints },
+            });
+          }}
+          onPendingChange={editor.setSaving}
+          onSuccess={(res) => {
+            // Nothing was sent (a visitor's form has nothing to send).
+            if (!res) return;
+            const waypoints = saving.current;
+            editor.markSaved(waypoints);
+            toast.success(`Saved ${waypoints.length} waypoint${waypoints.length === 1 ? "" : "s"}`);
+          }}
+        >
+          <PageBar
+            title="Waypoints"
+            trail={underComp(urlId, compName)}
+            related={compPages(urlId, comp, isAdmin, "Waypoints")}
+            actions={actions}
+            status={altitudeCheck.checking ? <Spinner label="Checking altitudes" /> : undefined}
+            commit={
+              // Live only while the draft differs from what is saved.
+              editing ? (
+                <SubmitButton className={commitClass} isDisabled={!dirty} pendingLabel="Saving">
+                  Save
+                </SubmitButton>
+              ) : undefined
+            }
+            below={
+              // Narrows a long set, for an organiser and a visitor alike.
+              // Nothing re-orders: the file's own order is the order.
+              <SearchField
+                variant="floating"
+                aria-label="Filter waypoints"
+                placeholder="Filter by code, name or coordinates…"
+                value={filter}
+                onChange={setFilter}
+                // Enter is the field's own, and does nothing: without this it
+                // would submit the form the bar is in, and that is Save.
+                onSubmit={() => {}}
+              />
+            }
+          />
+          <FormErrorBanner className="mx-auto w-full max-w-6xl px-gutter-safe pt-3" />
+        </Form>
+      }
+    >
+      {editing ? (
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".wpt,.cup,.csv,.txt,.gpx,.kml"
+          aria-label="Upload a waypoint file"
+          className="hidden"
+          onChange={(e) => {
+            void loadFile(e.target.files?.[0] ?? null);
+            // So that choosing the same file again is a change.
+            e.target.value = "";
+          }}
+        />
       ) : null}
+
+      {/* The QR, when ⋯ asks for it: information, so it is on the page. */}
+      {device.panel}
 
       {isAdmin ? (
         <DraftNotices
@@ -319,216 +477,131 @@ export function CompWaypoints() {
       {editor.loading ? (
         <Loading className="text-sm">Loading waypoints…</Loading>
       ) : editor.loadError ? null : (
-        <MasterDetail
-          detailLabel={MAP_LABEL}
-          fold={mapFold}
-          detailAriaLabel="Waypoint map"
-          bleed="page"
-          defaultMasterShare={0.5}
-          // A map wants the whole line, not the chart pane's 35rem cap.
-          paneWidthClassName="w-full"
-          detail={
-            <div>
-              {/* Explicit heights: Mapbox renders nothing into an unsized
-                  container. Stacked they fit under the pane's caps with the
-                  control row; side by side the taller map is the point. */}
-              <div ref={mapRef} className="h-56 sm:h-72 @5xl:h-[520px]">
-                {!mapInView ? (
-                  mapFallback
+        <>
+          {/* One line of state above the list, with the map's fold at its
+              end: what the filter left, and whether there is anything to
+              save. Both are live regions, so they are here before they have
+              anything to say.
+
+              `@container` because DetailFoldButton hides itself side by side
+              with the same `@5xl:` query MasterDetail splits on, and a
+              container query with no container ancestor never matches. */}
+          <div className="@container mb-2">
+            <div className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              {isAdmin ? <span role="status">{dirty ? "Unsaved changes" : ""}</span> : null}
+              <span aria-live="polite">
+                {query ? `${visibleRows.length} of ${rows.length} match` : ""}
+              </span>
+              <DetailFoldButton fold={mapFold} detailLabel={MAP_LABEL} className="ms-auto" />
+            </div>
+          </div>
+          <MasterDetail
+            detailLabel={MAP_LABEL}
+            fold={mapFold}
+            detailAriaLabel="Waypoint map"
+            bleed="page"
+            defaultMasterShare={0.5}
+            // A map wants the whole line, not the chart pane's 35rem cap.
+            paneWidthClassName="w-full"
+            paneWrapClassName={PANE_WRAP}
+            // Side by side the column starts lower than MasterDetail assumes.
+            paneClassName="@5xl:max-h-[calc(100vh-9.5rem)]"
+            detail={
+              <div>
+                {/* Explicit heights: Mapbox renders nothing into an unsized
+                    container. Stacked they fit under the pane's caps with the
+                    control row; side by side the taller map is the point. */}
+                <div ref={mapRef} className="h-56 sm:h-72 @5xl:h-[520px]">
+                  {!mapInView ? (
+                    mapFallback
+                  ) : (
+                    <Suspense fallback={mapFallback}>
+                      <RouteMap
+                        task={null}
+                        waypoints={mapWaypoints}
+                        addMode={addMode}
+                        fitNonce={fitNonce}
+                        focus={focus}
+                        placeSearch={isAdmin}
+                        // Where the full-size map was left, if it was: one view
+                        // across both pages (see waypointCameras).
+                        initialCamera={waypointCameras.get(bareId) ?? null}
+                        onCameraChange={(camera) => waypointCameras.set(bareId, camera)}
+                        onWaypointPick={() => {}}
+                        onMapPick={(lat, lon, details) => {
+                          setAddMode(false);
+                          navigate(
+                            compWaypointsNewPath(urlId, compName, newWaypointSearch(lat, lon, details)),
+                            fromHere
+                          );
+                        }}
+                      />
+                    </Suspense>
+                  )}
+                </div>
+                {isAdmin ? (
+                  <div className="flex flex-wrap items-center gap-2 p-2">
+                    {/* Add from map is a row of ⋯; armed, the map says so
+                        here, beside it, with the way to stop. */}
+                    {addMode ? (
+                      <>
+                        <span role="status" className="text-sm font-medium">
+                          Tap the map to place…
+                        </span>
+                        <Button variant="outline" size="sm" onPress={() => setAddMode(false)}>
+                          Stop
+                        </Button>
+                      </>
+                    ) : null}
+                    {/* Stacked on a phone the pane is capped at ~19rem, which
+                        leaves the map a few centimetres to place a point in.
+                        At full size it gets the whole screen, and Add from map
+                        goes with it. A link beside the map it enlarges, not a
+                        row of ⋯: its place says what it is. */}
+                    <LinkButton
+                      variant="outline"
+                      size="sm"
+                      // Contains the visible label (WCAG 2.5.3) while saying
+                      // WHAT is maximised for anyone reading the link alone.
+                      aria-label="Maximise map"
+                      href={compWaypointsMapPath(urlId, compName)}
+                      routerOptions={fromHere}
+                    >
+                      <Maximize2Icon className="size-4" aria-hidden="true" />
+                      Maximise
+                    </LinkButton>
+                    <span className="text-xs text-muted-foreground">
+                      {rows.length} waypoint{rows.length === 1 ? "" : "s"}
+                      {invalidCount > 0 ? ` · ${invalidCount} need valid coordinates` : ""}
+                    </span>
+                  </div>
                 ) : (
-                  <Suspense fallback={mapFallback}>
-                    <RouteMap
-                      task={null}
-                      waypoints={mapWaypoints}
-                      addMode={addMode}
-                      fitNonce={fitNonce}
-                      focus={focus}
-                      placeSearch={isAdmin}
-                      // Where the full-size map was left, if it was: one view
-                      // across both pages (see waypointCameras).
-                      initialCamera={waypointCameras.get(bareId) ?? null}
-                      onCameraChange={(camera) => waypointCameras.set(bareId, camera)}
-                      onWaypointPick={() => {}}
-                      onMapPick={(lat, lon, details) => {
-                        setAddMode(false);
-                        navigate(
-                          compWaypointsNewPath(urlId, compName, newWaypointSearch(lat, lon, details)),
-                          fromHere
-                        );
-                      }}
-                    />
-                  </Suspense>
+                  <p className="p-2 text-xs text-muted-foreground">{rows.length} waypoints</p>
                 )}
               </div>
-              {isAdmin ? (
-                <div className="flex flex-wrap items-center gap-2 p-2">
-                  <ToggleButton size="sm" isSelected={addMode} onChange={setAddMode}>
-                    {addMode ? "Tap the map to place…" : "Add from map"}
-                  </ToggleButton>
-                  {/* Stacked on a phone the pane is capped at ~19rem, which
-                      leaves the map a few centimetres to place a point in.
-                      At full size it gets the whole screen, and Add from map
-                      goes with it. */}
-                  <LinkButton
-                    variant="outline"
-                    size="sm"
-                    // Contains the visible label (WCAG 2.5.3) while saying
-                    // WHAT is maximised for anyone reading the link alone.
-                    aria-label="Maximise map"
-                    href={compWaypointsMapPath(urlId, compName)}
-                    routerOptions={fromHere}
-                  >
-                    <Maximize2Icon className="size-4" aria-hidden="true" />
-                    Maximise
-                  </LinkButton>
-                  <span className="text-xs text-muted-foreground">
-                    {rows.length} waypoint{rows.length === 1 ? "" : "s"}
-                    {invalidCount > 0 ? ` · ${invalidCount} need valid coordinates` : ""}
-                  </span>
-                </div>
-              ) : (
-                <p className="p-2 text-xs text-muted-foreground">{rows.length} waypoints</p>
-              )}
-            </div>
-          }
-          master={
-            <div>
-              {/* The editing actions, at the head of the thing they edit. */}
-              {isAdmin ? (
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <FileTrigger
-                    acceptedFileTypes={[".wpt", ".cup", ".csv", ".txt", ".gpx", ".kml"]}
-                    onSelect={(files) => void loadFile(files?.[0] ?? null)}
-                  >
-                    <Button variant="outline" size="sm">
-                      Upload file
-                    </Button>
-                  </FileTrigger>
-                  <LinkButton
-                    variant="outline"
-                    size="sm"
-                    href={compWaypointsNewPath(urlId, compName)}
-                    routerOptions={fromHere}
-                  >
-                    Add waypoint
-                  </LinkButton>
-                  {/* ONE altitude action, and it reports nothing until it is
-                      pressed. There used to be a "Fill altitudes from map"
-                      beside it — an action that answered blanks without
-                      asking — and a status line saying whether any blanks were
-                      left. The check does the fill's job better (it shows what
-                      it would write before writing it), and the status line
-                      was a verdict on a set nobody had asked about yet. */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    isDisabled={rows.length === 0}
-                    isPending={altitudeCheck.checking}
-                    pendingLabel="Checking altitudes"
-                    onPress={() => void checkAltitudes()}
-                  >
-                    Check altitudes
-                  </Button>
-                </div>
-              ) : null}
-              {/* Filter box — narrows a long set, for an admin and a visitor
-                  alike. Nothing re-orders: the file's own order is the order. */}
-              {rows.length > 0 ? (
-                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <SearchField
-                    aria-label="Filter waypoints"
-                    placeholder="Filter by code, name or coordinates…"
-                    value={filter}
-                    onChange={setFilter}
-                    className="min-w-40 flex-1 sm:max-w-xs"
-                  />
-                  {query ? (
-                    <span className="text-xs text-muted-foreground" aria-live="polite">
-                      {visibleRows.length} of {rows.length} match
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-              {/* One list, at every width, for everyone. An admin's rows open
-                  the waypoint's page; a visitor's do not, and that is the only
-                  difference (see WaypointList). */}
-              <WaypointList
-                rows={visibleRows}
-                emptyMessage={
-                  rows.length > 0 && query ? `No waypoints match “${filter.trim()}”.` : undefined
-                }
-                onOpen={
-                  isAdmin
-                    ? (id) => navigate(compWaypointPath(urlId, compName, id), fromHere)
-                    : undefined
-                }
-                onLocate={locate}
-              />
-            </div>
-          }
-        />
+            }
+            master={
+              // One list, at every width, for everyone. An admin's rows open
+              // the waypoint's page; a visitor's do not, and that is the only
+              // difference (see WaypointList).
+              <div className={cn(mapFold.collapsed ? CLEAR_FOLDED : CLEAR_OPEN, CLEAR_WIDE)}>
+                <WaypointList
+                  rows={visibleRows}
+                  emptyMessage={
+                    rows.length > 0 && query ? `No waypoints match “${filter.trim()}”.` : undefined
+                  }
+                  onOpen={
+                    isAdmin
+                      ? (id) => navigate(compWaypointPath(urlId, compName, id), fromHere)
+                      : undefined
+                  }
+                  onLocate={locate}
+                />
+              </div>
+            }
+          />
+        </>
       )}
-
-      {/* Save, at the end of the work rather than up beside the title — and
-          sticky to the BOTTOM OF THE SCREEN while the list is on it: the list
-          and the map are both taller than a phone, so a Save an admin has to
-          scroll past them to reach is a Save they will not find. Sticky, not
-          fixed: a fixed bar has to be moved around the keyboard by hand (the
-          overlays rule in CLAUDE.md).
-
-          A kit form, so a refused save says why beside the button rather than
-          in a toast. */}
-      {isAdmin && !editor.loading && !editor.loadError ? (
-        <Form
-          className="sticky bottom-0 z-20 mt-6 border-t border-border bg-background/95 pt-3 pb-gutter-safe backdrop-blur-sm print:hidden"
-          onSubmit={async () => {
-            if (draft.rows.some((r) => fromRow(r) === null)) {
-              return refusal("Every waypoint needs valid coordinates before saving");
-            }
-            // Backstop for codes typed by hand: clean here rather than fight
-            // the field keystroke by keystroke, and show the result in the
-            // list, so what is saved is what is on screen.
-            const { draft: cleaned, changes } = cleanCodes(draft);
-            if (changes.length > 0) {
-              editor.update(() => cleaned);
-              const note = describeCodeChanges(changes);
-              if (note) toast.warning(note);
-            }
-            const waypoints = validRecords(cleaned.rows);
-            saving.current = waypoints;
-            return api.api.comp[":comp_id"].waypoints.$put({
-              param: { comp_id: compId },
-              json: { waypoints },
-            });
-          }}
-          onPendingChange={editor.setSaving}
-          onSuccess={() => {
-            const waypoints = saving.current;
-            editor.markSaved(waypoints);
-            toast.success(`Saved ${waypoints.length} waypoint${waypoints.length === 1 ? "" : "s"}`);
-          }}
-        >
-          <FormErrorBanner className="mb-3" />
-          {/* Save first, hint beside it — the /settings save-form order, and
-              it leaves the bottom-RIGHT corner to the floating Preview-as
-              pill, which would otherwise sit on top of the button. */}
-          <div className="flex flex-wrap items-center gap-3">
-            <SubmitButton isDisabled={!dirty}>Save</SubmitButton>
-            {/* Back and a reload keep the draft (comp/waypoints-draft.ts), so
-                this is the way to throw it away on purpose. */}
-            {dirty ? (
-              <Button variant="outline" onPress={() => void discard()}>
-                Discard changes
-              </Button>
-            ) : null}
-            {/* The hint doubles as the explanation for what Save will do;
-                role=status so the state change is announced. */}
-            <span role="status" className="text-sm text-muted-foreground">
-              {dirty ? "Unsaved changes" : ""}
-            </span>
-          </div>
-        </Form>
-      ) : null}
-    </main>
+    </Page>
   );
 }

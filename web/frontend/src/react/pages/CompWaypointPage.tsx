@@ -16,8 +16,9 @@
  * sheet held a draft of its own and applied it on the way out, because the
  * page behind it repainted its map on every change. This page has no map, and
  * a page's way out is the browser's Back, which a draft held here would lose.)
- * Done checks the coordinates first — it is a kit form — and returns to the
- * list, at the scroll it was left at.
+ * Done, in the page's bar (#863), checks the coordinates first — it is a kit
+ * form — and returns to the list, at the scroll it was left at. The bar's
+ * Back returns there too, without the check.
  *
  * Metric throughout: this is the waypoint FILE edited in place, so altitude
  * and radius are both the file's own metres and the labels say so (see the
@@ -27,11 +28,10 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { Trash2Icon } from "lucide-react";
 import { NotFound } from "@/react/components/NotFound";
-import { SectionHeader } from "../components/SectionHeader";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
 import { NumberField, TextField } from "@/react/rac/field";
 import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
+import { Page, PageBar, commitClass } from "@/react/rac/page-bar";
 import { underCompWaypoints } from "../lib/crumbs";
 import { compWaypointPath, compWaypointsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -54,7 +54,8 @@ export function CompWaypointPage() {
   const row = found ?? leaving;
   useCanonicalPath(row && compName ? compWaypointPath(urlId, compName, id) : null);
 
-  const gate = waypointsEditorGate(editor);
+  const trail = underCompWaypoints(urlId, compName);
+  const gate = waypointsEditorGate(editor, { title: row?.code || "Waypoint", trail });
   if (gate) return gate;
   // A row removed since the link was made, or never in this file.
   if (!row) return <NotFound title="Waypoint not found" />;
@@ -67,23 +68,28 @@ export function CompWaypointPage() {
   const radiusNumber = Number(row.radius);
 
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={underCompWaypoints(urlId, compName)} current={row.code || "Waypoint"} />
-      <Form
-        validate={() => coordsProblems("coords", row.coords, true)}
-        // Nothing to send: every change is in the draft already.
-        onSuccess={back}
+    <Form
+      // `contents`, so the bar sticks to the page and not to the form.
+      className="contents"
+      validate={() => coordsProblems("coords", row.coords, true)}
+      // Nothing to send: every change is in the draft already.
+      onSuccess={back}
+    >
+      <Page
+        bar={
+          // Back (to the list) on the left, Done on the right. Every change
+          // is in the draft already, so both keep it; Done is drawn as the
+          // commit because it is the end of the form, and it checks the
+          // coordinates on the way out.
+          <PageBar
+            title={row.code || "Waypoint"}
+            trail={trail}
+            commit={<SubmitButton className={commitClass}>Done</SubmitButton>}
+          />
+        }
       >
-        {/* Done where the sheet had it, top right: in reach without scrolling
-            past the whole form. */}
-        <SectionHeader
-          as="h1"
-          className="mt-2"
-          title={row.code || "Waypoint"}
-          action={<SubmitButton>Done</SubmitButton>}
-        />
-        <FormErrorBanner className="mt-3" />
-        <div className="mt-4 flex flex-col gap-4">
+        <FormErrorBanner className="mb-4" />
+        <div className="flex flex-col gap-4">
           <TextField
             label="Code"
             name="code"
@@ -157,7 +163,7 @@ export function CompWaypointPage() {
             Nothing is saved until you press Save on the waypoints page.
           </p>
         </div>
-      </Form>
-    </div>
+      </Page>
+    </Form>
   );
 }

@@ -96,6 +96,8 @@ test.describe("sharing a track to the installed app", () => {
     await expect(page.getByText("ilinov_19362_121220.igc")).toBeVisible();
     await expect(page.getByRole("button", { name: "Change file…" })).toBeVisible();
     await expect(page.getByText("Ilin Ilinov")).toBeVisible();
+    // A file to send, so Submit in the bar is live.
+    await expect(page.getByRole("button", { name: "Submit", exact: true })).toBeEnabled();
 
     // The share lives in the worker's cache, not in the page's memory, so a
     // reload (or Back from a page opened from this one) finds it again.
@@ -177,7 +179,7 @@ test.describe("sharing a track to the installed app", () => {
 
       await page.getByText("Shared Today", { exact: true }).click();
       await page.getByRole("textbox", { name: "Email address" }).fill(PILOT_EMAIL);
-      await page.getByRole("button", { name: "Submit track" }).click();
+      await page.getByRole("button", { name: "Submit", exact: true }).click();
       await expect(page.getByText(/Track (submitted|replaced) for Sharon Share/)).toBeVisible({
         timeout: 15_000,
       });

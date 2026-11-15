@@ -1148,33 +1148,6 @@ export function createMapBoxProvider(
         trackScrubMarker = null;
       }
 
-      // Custom panel toggle control (top-right, added first so it's topmost)
-      let panelToggleCallback: (() => void) | null = null;
-      let panelToggleBtn: HTMLElement | null = null;
-      class PanelToggleControl implements mapboxgl.IControl {
-        private container: HTMLElement | null = null;
-        onAdd(): HTMLElement {
-          this.container = document.createElement('div');
-          this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
-          const btn = document.createElement('button');
-          panelToggleBtn = btn;
-          btn.type = 'button';
-          btn.title = 'Toggle analysis panel';
-          btn.setAttribute('aria-label', 'Toggle analysis panel');
-          btn.style.cssText = 'display:flex;align-items:center;gap:6px;height:36px;padding:0 10px;border:none;cursor:pointer;background:transparent;color:#333;font-size:13px;font-weight:500;white-space:nowrap;';
-          // Bar-chart icon + label (label hidden on mobile via media query class)
-          renderInto(btn, html`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg><span class="mapctl-label">Analysis</span>`);
-          btn.addEventListener('click', () => panelToggleCallback?.());
-          this.container.appendChild(btn);
-          return this.container;
-        }
-        onRemove(): void {
-          this.container?.remove();
-          this.container = null;
-          panelToggleBtn = null;
-        }
-      }
-      if (appControls) map.addControl(new PanelToggleControl(), 'top-right');
 
       // Navigation controls (top-right, below panel toggle)
       map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }));
@@ -1204,9 +1177,6 @@ export function createMapBoxProvider(
       // unavailable).
       if (appControls) createCompass();
 
-      // Custom menu button control (top-left, added first so it's topmost)
-      let menuButtonCallback: (() => void) | null = null;
-      let menuButtonContainer: HTMLElement | null = null;
       // Interaction mode — controls which click/hover handlers are active
       type MapInteractionMode = import('./map-provider').MapInteractionMode;
       let interactionMode: MapInteractionMode = 'view';
@@ -1225,31 +1195,6 @@ export function createMapBoxProvider(
         }
         map.getCanvas().style.cursor = '';
       }
-      class MenuButtonControl implements mapboxgl.IControl {
-        private container: HTMLElement | null = null;
-        onAdd(): HTMLElement {
-          this.container = document.createElement('div');
-          this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
-          menuButtonContainer = this.container;
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.title = 'Menu (\u2318K)';
-          btn.setAttribute('aria-label', 'Menu (\u2318K)');
-          btn.style.cssText = 'display:flex;align-items:center;gap:6px;height:36px;padding:0 10px;border:none;cursor:pointer;background:transparent;color:#333;font-size:13px;font-weight:500;white-space:nowrap;';
-          const isMac = /Mac|iPhone|iPad/.test(navigator.platform ?? '');
-          const kbdHint = isMac ? '\u2318K' : 'Ctrl+K';
-          renderInto(btn, html`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg><span class="mapctl-label">Menu</span><kbd class="mapctl-label" style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(0,0,0,0.08);color:#333;opacity:0.6;font-family:inherit;">${kbdHint}</kbd>`);
-          btn.addEventListener('click', () => menuButtonCallback?.());
-          this.container.appendChild(btn);
-          return this.container;
-        }
-        onRemove(): void {
-          this.container?.remove();
-          this.container = null;
-          menuButtonContainer = null;
-        }
-      }
-      if (appControls) map.addControl(new MenuButtonControl(), 'top-left');
 
       // Style selector control (top-left, below menu button)
       class MapBoxStyleControl implements mapboxgl.IControl {
@@ -1306,7 +1251,8 @@ export function createMapBoxProvider(
         create(): void {
           if (this.el) return;
           this.el = document.createElement('div');
-          this.el.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:10;display:flex;gap:0;border-radius:6px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.3);';
+          // Under the page bar (analysis.html #page-bar), not behind its title.
+          this.el.style.cssText = 'position:absolute;top:calc(4rem + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:10;display:flex;gap:0;border-radius:6px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.3);';
 
           for (const preset of CAMERA_PRESETS) {
             const btn = document.createElement('button');
@@ -1997,7 +1943,7 @@ export function createMapBoxProvider(
           for (let val = firstTick; val <= maxAlt; val += niceStep) {
             const pct = ((val - minAlt) / altRange) * 100;
             const label = document.createElement('div');
-            label.style.cssText = `position:absolute;right:2px;bottom:${pct}%;transform:translateY(50%);font-size:9px;line-height:1;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:1px;white-space:nowrap;`;
+            label.style.cssText = `position:absolute;right:2px;bottom:${pct}%;transform:translateY(50%);font-size:11px;line-height:1;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:1px;white-space:nowrap;`;
             const fv = formatAltitude(val);
             renderInto(label, html`<span>${fv.formatted}</span><span style="width:4px;height:1px;background:rgba(255,255,255,0.4);display:inline-block;flex-shrink:0;"></span>`);
             yAxis.appendChild(label);
@@ -2027,7 +1973,7 @@ export function createMapBoxProvider(
               if (tickMs < startMs) continue;
               const pct = ((tickMs - startMs) / durationMs) * 100;
               const label = document.createElement('div');
-              label.style.cssText = `position:absolute;left:${pct}%;top:0;transform:translateX(-50%);font-size:9px;line-height:1;color:rgba(255,255,255,0.7);display:flex;flex-direction:column;align-items:center;`;
+              label.style.cssText = `position:absolute;left:${pct}%;top:0;transform:translateX(-50%);font-size:11px;line-height:1;color:rgba(255,255,255,0.7);display:flex;flex-direction:column;align-items:center;`;
               const d = new Date(tickMs);
               const h = d.getHours().toString().padStart(2, '0');
               const m = d.getMinutes().toString().padStart(2, '0');
@@ -3068,38 +3014,6 @@ export function createMapBoxProvider(
 
         hideTrackPointHUD() {
           sharedHideTrackPointHUD(hudElement);
-        },
-
-        onMenuButtonClick(callback: () => void) {
-          menuButtonCallback = callback;
-        },
-
-        onPanelToggleClick(callback: () => void) {
-          panelToggleCallback = callback;
-        },
-
-        highlightPanelToggle() {
-          // Animate the ctrl-group container so the whole button shape throbs
-          const target = panelToggleBtn?.parentElement ?? panelToggleBtn;
-          if (target) {
-            target.classList.remove('pulse-attention');
-            void target.offsetWidth;
-            target.classList.add('pulse-attention');
-            target.addEventListener('animationend', () => {
-              target.classList.remove('pulse-attention');
-            }, { once: true });
-          }
-        },
-
-        highlightMenuButton() {
-          if (menuButtonContainer) {
-            menuButtonContainer.classList.remove('pulse-attention');
-            void menuButtonContainer.offsetWidth;
-            menuButtonContainer.classList.add('pulse-attention');
-            menuButtonContainer.addEventListener('animationend', () => {
-              menuButtonContainer?.classList.remove('pulse-attention');
-            }, { once: true });
-          }
         },
 
         onMapClick(callback: (lat: number, lon: number, details?: MapPickDetails) => void) {

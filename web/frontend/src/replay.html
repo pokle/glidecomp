@@ -4,7 +4,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GlideComp — 3D Flight Replay</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <meta name="theme-color" content="#0a0f1a">
@@ -47,8 +47,8 @@
     .panel { background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(8px); border: 1px solid rgba(148, 163, 184, 0.18); }
     /* key caps in the shortcuts popover */
     kbd {
-      display: inline-grid; place-items: center; min-width: 1.4rem; height: 1.25rem;
-      padding: 0 0.3rem; border-radius: 0.25rem; font: 600 10px/1 ui-monospace, monospace;
+      display: inline-grid; place-items: center; min-width: 1.6rem; height: 1.5rem;
+      padding: 0 0.3rem; border-radius: 0.25rem; font: 600 12px/1 ui-monospace, monospace;
       background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.4);
       border-bottom-width: 2px;
     }
@@ -129,50 +129,52 @@
     </svg>
 
     <!-- draggable pilot metrics callout (shown while following a pilot) -->
-    <div id="callout" class="absolute z-30 hidden w-48 rounded-lg panel text-xs shadow-xl select-none touch-none cursor-grab"
-      style="left: 12px; top: 12px;">
+    <div id="callout" class="absolute z-30 hidden w-56 rounded-lg panel text-xs shadow-xl select-none touch-none cursor-grab"
+      style="left: 12px; top: 64px;">
       <div class="flex items-center gap-2 pl-3 pr-1.5 pt-2">
         <span id="calloutRank"
-          class="shrink-0 grid place-items-center min-w-5 h-5 px-1 rounded-full text-[11px] font-bold text-slate-900 leading-none"></span>
+          class="shrink-0 grid place-items-center min-w-5 h-5 px-1 rounded-full text-xs font-bold text-slate-900 leading-none"></span>
         <span id="calloutName" class="flex-1 truncate font-medium"></span>
         <button id="calloutClose" aria-label="Stop following"
-          class="shrink-0 grid place-items-center w-6 h-6 rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 leading-none cursor-pointer">✕</button>
+          class="touch-target shrink-0 grid place-items-center w-6 h-6 rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 leading-none cursor-pointer">✕</button>
       </div>
-      <div id="calloutStatus" class="px-3 text-[10px] text-slate-400 leading-tight"></div>
+      <div id="calloutStatus" class="px-3 text-xs text-slate-400 leading-tight"></div>
       <!-- vario gauge: static dial + phosphor-trail needle (painted by main.ts).
            The needle shows near-instantaneous climb and is allowed to flicker;
            the fading glow marks where it has been over the last few seconds. -->
-      <div class="relative mx-3 mt-1 h-[72px]">
+      <div class="relative mx-auto mt-1 h-[72px] w-[168px]">
         <canvas id="gaugeScale" width="168" height="72" class="absolute inset-0 h-full w-full"></canvas>
         <canvas id="gaugeTrail" width="168" height="72" class="absolute inset-0 h-full w-full"></canvas>
-        <div class="absolute inset-x-0 bottom-0 text-center leading-none">
-          <span class="text-[9px] uppercase tracking-wider text-slate-400">Climb</span>
-          <span id="coClimb" class="ml-1 text-[13px] tabular-nums">—</span>
-          <span id="coClimbAvg" class="ml-0.5 text-[8px] text-slate-500"></span>
-        </div>
+      </div>
+      <!-- Under the dial, not over it: at a readable size the readout is
+           wider than the gap between the dial's -4 and +4. -->
+      <div class="-mt-3 text-center leading-none">
+        <span class="text-[11px] uppercase tracking-wide text-slate-400">Climb</span>
+        <span id="coClimb" class="ml-1 text-[15px] tabular-nums">—</span>
+        <span id="coClimbAvg" class="ml-0.5 text-[11px] text-slate-500"></span>
       </div>
       <div class="grid grid-cols-3 gap-x-3 px-3 pb-2.5 pt-1.5">
         <div>
-          <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Altitude</div>
-          <div id="coAlt" class="text-[12px] tabular-nums leading-tight mt-0.5 whitespace-nowrap">—</div>
+          <div class="text-xs uppercase tracking-wide text-slate-400 leading-none">Altitude</div>
+          <div id="coAlt" class="text-[13px] tabular-nums leading-tight mt-0.5 whitespace-nowrap">—</div>
           <!-- height above ground from the Mapbox terrain DEM — only the
                terrain backdrop has ground data, so this hides elsewhere.
                The figure inherits the value ink; grey is for labels. -->
-          <div id="coAgl" class="text-[10px] tabular-nums leading-tight whitespace-nowrap hidden"><span id="coAglVal"></span> <span class="text-[9px] uppercase tracking-wider text-slate-400">AGL</span></div>
+          <div id="coAgl" class="text-xs tabular-nums leading-tight whitespace-nowrap hidden"><span id="coAglVal"></span> <span class="text-xs uppercase tracking-wide text-slate-400">AGL</span></div>
         </div>
         <div>
-          <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Speed</div>
-          <div id="coSpeed" class="text-[12px] tabular-nums leading-tight mt-0.5 whitespace-nowrap">—</div>
+          <div class="text-xs uppercase tracking-wide text-slate-400 leading-none">Speed</div>
+          <div id="coSpeed" class="text-[13px] tabular-nums leading-tight mt-0.5 whitespace-nowrap">—</div>
         </div>
         <div>
-          <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Glide</div>
-          <div id="coGlide" class="text-[12px] tabular-nums leading-tight mt-0.5 whitespace-nowrap">—</div>
+          <div class="text-xs uppercase tracking-wide text-slate-400 leading-none">Glide</div>
+          <div id="coGlide" class="text-[13px] tabular-nums leading-tight mt-0.5 whitespace-nowrap">—</div>
         </div>
         <!-- glide (L/D over ground) needed to reach the next turnpoint; hidden
              when the bundle has no task/turnpoint data to compute it from -->
         <div id="coReqRow" class="col-span-3 mt-1.5 hidden">
-          <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Req. glide</div>
-          <div id="coReq" class="text-[12px] tabular-nums leading-tight mt-0.5 truncate">—</div>
+          <div class="text-xs uppercase tracking-wide text-slate-400 leading-none">Req. glide</div>
+          <div id="coReq" class="text-[13px] tabular-nums leading-tight mt-0.5 truncate">—</div>
         </div>
       </div>
     </div>
@@ -182,83 +184,142 @@
       class="pointer-events-none absolute z-30 hidden rounded-md panel px-2.5 py-1.5 text-xs shadow-lg">
     </div>
 
-    <!-- single hamburger button — opens the control drawer -->
-    <button id="menuToggle" aria-label="Open controls" aria-expanded="false" aria-controls="menuPanel"
-      class="absolute right-3 top-3 z-50 grid place-items-center w-12 h-12 rounded-full panel text-xl leading-none shadow-xl hover:bg-slate-700/50 transition-colors">☰</button>
+    <!-- The page bar (#869): the app's three slots (react/rac/page-bar.tsx,
+         and its plain-markup twin static/src/components/SiteHeader.astro),
+         drawn as floating pills so the scene shows between them.
+           leading   Back to the task (the page above), or Home for the sample
+           centre    "3D replay" over a menu of where this page is
+           trailing  ⋯, which opens the control drawer
+         The links are filled by main.ts (setupPageBar) from ?comp=&task=; the
+         markup is the sample's, so the bar works before any fetch. The header
+         takes no pointer events, so the scene stays reachable between pills. -->
+    <header id="pageBar"
+      class="pointer-events-none absolute inset-x-0 top-0 z-50 flex items-center gap-2 px-3 py-2"
+      style="padding-top: max(0.5rem, env(safe-area-inset-top)); padding-left: max(0.75rem, env(safe-area-inset-left)); padding-right: max(0.75rem, env(safe-area-inset-right));">
+      <a id="barBack" href="/" aria-label="Back to Home"
+        class="pointer-events-auto grid size-11 shrink-0 place-items-center rounded-full panel shadow-xl hover:bg-slate-700/50 transition-colors focus-visible:outline-2 focus-visible:outline-lime-400">
+        <!-- lucide chevron-left -->
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+      </a>
 
-    <!-- Way back into the app for shared/direct links (IA v2 #277): real
-         breadcrumb links, centered top so the tool's own controls keep the
-         corners. main.ts appends "› comp › task" once it knows the names. -->
-    <nav id="crumbs" aria-label="Breadcrumb"
-      class="absolute left-1/2 top-3 z-40 flex h-9 max-w-[calc(100vw-140px)] items-center gap-1.5 panel rounded-full px-4 text-sm text-slate-200 whitespace-nowrap shadow-xl">
-      <a href="/" class="shrink-0 font-semibold hover:underline underline-offset-4">GlideComp</a>
+      <details id="barMenu" class="pointer-events-auto relative mx-auto min-w-0 max-w-md flex-1">
+        <summary id="barTitle" aria-label="3D replay: go to another page"
+          class="flex h-11 cursor-pointer select-none list-none flex-col justify-center rounded-full panel px-4 text-center shadow-xl [&::-webkit-details-marker]:hidden focus-visible:outline-2 focus-visible:outline-lime-400">
+          <!-- Spans, not paragraphs: a <summary> holds phrasing content. -->
+          <span class="block truncate text-[0.9375rem] leading-5 font-semibold">3D replay</span>
+          <span aria-hidden="true" class="flex min-w-0 items-center justify-center gap-0.5 text-xs leading-4 text-slate-400">
+            <span id="barTrail" class="truncate">Home</span>
+            <!-- lucide chevron-down -->
+            <svg class="shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+          </span>
+        </summary>
+        <nav aria-label="Pages"
+          class="absolute left-1/2 top-full z-50 mt-1 max-h-[calc(100dvh-5rem)] w-max min-w-64 max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl panel p-1 text-left shadow-xl">
+          <p class="px-3 pt-2 pb-1 text-xs font-medium text-slate-400">You are here</p>
+          <!-- the trail's rows (main.ts), then this page -->
+          <ul id="barHere">
+            <li><a href="/" class="bar-row" style="padding-left: 12px;">Home</a></li>
+            <li id="barCurrent">
+              <span aria-current="page" class="bar-row font-semibold" style="padding-left: 26px;">
+                <span class="min-w-0 flex-1">3D replay</span>
+                <!-- lucide check -->
+                <svg aria-hidden="true" class="shrink-0 text-lime-400" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+              </span>
+            </li>
+          </ul>
+          <div class="-mx-1 my-1 h-px bg-slate-700/60"></div>
+          <p class="px-3 pt-2 pb-1 text-xs font-medium text-slate-400">Elsewhere</p>
+          <ul>
+            <li id="barElsewhereComps"><a href="/comp" class="bar-row">Competitions</a></li>
+            <li><a href="/u/me" class="bar-row">My Flights</a></li>
+            <li><a href="/submit" class="bar-row">Submit track</a></li>
+          </ul>
+        </nav>
+      </details>
+
+      <!-- ⋯ opens the control drawer (setupPanels in main.ts) -->
+      <button id="menuToggle" aria-label="Open controls" aria-expanded="false" aria-controls="menuPanel"
+        class="pointer-events-auto grid size-11 shrink-0 place-items-center rounded-full panel shadow-xl hover:bg-slate-700/50 transition-colors focus-visible:outline-2 focus-visible:outline-lime-400">
+        <!-- lucide ellipsis -->
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></svg>
+      </button>
+    </header>
+
+    <!-- The page's one <h1>, and the trail as real links with the menu closed
+         (accessibility standard §4.3). Out of the Tab order: the menu is the
+         way to them by keyboard. main.ts fills both from ?comp=&task=. -->
+    <h1 id="pageTitle" class="sr-only">3D replay</h1>
+    <nav aria-label="Breadcrumb" class="sr-only">
+      <ol id="crumbs">
+        <li><a href="/" tabindex="-1">Home</a></li>
+        <li><span aria-current="page">3D replay</span></li>
+      </ol>
     </nav>
-    <style>
-      /* centered without fighting Tailwind's translate utilities in this static chrome */
-      #crumbs { transform: translateX(-50%); }
-      #crumbs a { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-    </style>
 
     <!-- the one scrolling control panel: View · Pilots · Gaggles -->
-    <aside id="menuPanel" aria-label="Controls"
-      class="fixed right-0 top-0 z-40 h-full w-80 max-w-[90vw] panel overflow-y-auto overscroll-contain shadow-2xl flex flex-col">
+    <aside id="menuPanel" aria-label="Controls" inert
+      class="fixed right-0 top-0 z-[60] h-full w-80 max-w-[90vw] panel overflow-y-auto overscroll-contain shadow-2xl flex flex-col">
 
       <!-- panel header -->
       <div class="sticky top-0 z-10 flex items-center gap-2 px-4 py-3 border-b border-slate-700/60 bg-slate-900/80 backdrop-blur">
         <span class="flex-1 text-sm font-semibold">Controls</span>
         <button id="menuClose" aria-label="Close controls"
-          class="grid place-items-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 text-lg leading-none transition-colors">✕</button>
+          class="grid place-items-center size-7 pointer-coarse:size-11 rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 text-lg leading-none transition-colors">✕</button>
       </div>
 
       <div class="px-4 py-4 space-y-6">
 
         <!-- ===== View ===== -->
         <section class="space-y-3">
-          <h3 class="text-[11px] uppercase tracking-wide text-lime-400 font-semibold">View</h3>
+          <h3 class="text-xs uppercase tracking-wide text-lime-400 font-semibold">View</h3>
           <div>
-            <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Theme</label>
+            <label class="block text-xs uppercase tracking-wide text-slate-400 mb-1">Theme</label>
             <div class="grid grid-cols-3 gap-1">
               <button id="thDark"
-                class="rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">Dark</button>
+                class="rounded-md border border-slate-600 px-2 py-1 text-sm pointer-coarse:min-h-11 transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">Dark</button>
               <button id="thLight"
-                class="rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">Light</button>
+                class="rounded-md border border-slate-600 px-2 py-1 text-sm pointer-coarse:min-h-11 transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">Light</button>
               <button id="thAuto"
-                class="rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-lime-500 text-slate-900"
+                class="rounded-md border border-slate-600 px-2 py-1 text-sm pointer-coarse:min-h-11 transition-colors bg-lime-500 text-slate-900"
                 title="Follow the system colour scheme">Auto</button>
             </div>
           </div>
           <div>
-            <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Backdrop</label>
+            <label class="block text-xs uppercase tracking-wide text-slate-400 mb-1">Backdrop</label>
             <div class="grid grid-cols-2 gap-1">
               <button id="bdAbstract"
-                class="bd-btn rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-lime-500 text-slate-900">Abstract</button>
+                class="bd-btn rounded-md border border-slate-600 px-2 py-1 text-sm pointer-coarse:min-h-11 transition-colors bg-lime-500 text-slate-900">Abstract</button>
               <button id="bdTerrain"
-                class="bd-btn rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">Map</button>
+                class="bd-btn rounded-md border border-slate-600 px-2 py-1 text-sm pointer-coarse:min-h-11 transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">Map</button>
             </div>
           </div>
           <div id="mapStyleRow" class="hidden space-y-3">
             <div>
-              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Map style</label>
+              <label class="block text-xs uppercase tracking-wide text-slate-400 mb-1">Map style</label>
               <select id="mapStyle"
-                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400"></select>
+                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-base md:text-sm pointer-coarse:min-h-11 focus:outline-none focus:ring-1 focus:ring-lime-400"></select>
             </div>
             <div>
-              <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+              <label class="flex justify-between text-xs uppercase tracking-wide text-slate-400 mb-1">
                 <span>Desaturate</span><span id="mapDesaturateVal" class="text-slate-300 normal-case">0%</span>
               </label>
-              <input id="mapDesaturate" type="range" min="0" max="1" step="0.05" value="0" class="w-full">
+              <input id="mapDesaturate" type="range" min="0" max="1" step="0.05" value="0" class="h-6 w-full pointer-coarse:h-11">
             </div>
             <div>
-              <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+              <label class="flex justify-between text-xs uppercase tracking-wide text-slate-400 mb-1">
                 <span>Fade to white</span><span id="mapFadeWhiteVal" class="text-slate-300 normal-case">0%</span>
               </label>
-              <input id="mapFadeWhite" type="range" min="0" max="1" step="0.05" value="0" class="w-full">
+              <input id="mapFadeWhite" type="range" min="0" max="1" step="0.05" value="0" class="h-6 w-full pointer-coarse:h-11">
             </div>
           </div>
           <div>
-            <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Colour by</label>
+            <label class="block text-xs uppercase tracking-wide text-slate-400 mb-1">Colour by</label>
             <select id="colorMode"
-              class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+              class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-base md:text-sm pointer-coarse:min-h-11 focus:outline-none focus:ring-1 focus:ring-lime-400">
               <option value="pilot">Pilot</option>
               <option value="altitude">Altitude</option>
               <option value="vario" selected>Vertical speed</option>
@@ -268,83 +329,83 @@
             <!-- colour scale legend (shown for altitude / vertical speed) -->
             <div id="colorLegend" class="hidden mt-1.5">
               <div id="legendBar" class="h-1.5 rounded-sm"></div>
-              <div class="flex justify-between text-[10px] text-slate-400 mt-0.5 leading-none">
+              <div class="flex justify-between text-xs text-slate-400 mt-0.5 leading-none">
                 <span id="legendLo"></span><span id="legendMid" class="text-slate-500"></span><span id="legendHi"></span>
               </div>
             </div>
           </div>
-          <label class="flex items-center gap-2 text-xs cursor-pointer">
+          <label class="flex min-h-6 items-center gap-2 text-sm cursor-pointer pointer-coarse:min-h-11">
             <input id="rankBadges" type="checkbox" checked class="accent-lime-500">
             <span>Rank badges on pilots</span>
           </label>
           <div>
-            <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+            <label class="flex justify-between text-xs uppercase tracking-wide text-slate-400 mb-1">
               <span>Vertical ×</span><span id="vscaleVal" class="text-slate-300 normal-case">3.0×</span>
             </label>
-            <input id="vscale" type="range" min="1" max="6" step="0.5" value="3" class="w-full">
+            <input id="vscale" type="range" min="1" max="6" step="0.5" value="3" class="h-6 w-full pointer-coarse:h-11">
           </div>
           <div>
-            <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+            <label class="flex justify-between text-xs uppercase tracking-wide text-slate-400 mb-1">
               <span>Trail</span><span id="tailVal" class="text-slate-300 normal-case">10 min</span>
             </label>
-            <input id="tail" type="range" min="1" max="31" step="1" value="10" class="w-full">
+            <input id="tail" type="range" min="1" max="31" step="1" value="10" class="h-6 w-full pointer-coarse:h-11">
           </div>
           <div>
-            <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+            <label class="flex justify-between text-xs uppercase tracking-wide text-slate-400 mb-1">
               <span>Width</span><span id="widthVal" class="text-slate-300 normal-case">3 px</span>
             </label>
-            <input id="width" type="range" min="1" max="10" step="1" value="3" class="w-full">
+            <input id="width" type="range" min="1" max="10" step="1" value="3" class="h-6 w-full pointer-coarse:h-11">
           </div>
           <div class="flex gap-2 pt-0.5">
             <button id="resetView"
-              class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
+              class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-sm pointer-coarse:min-h-11 transition-colors"
               title="Frame the whole task">Reset</button>
             <button id="topView"
-              class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
+              class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-sm pointer-coarse:min-h-11 transition-colors"
               title="Look straight down (north up)">Top</button>
             <button id="sideView"
-              class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
+              class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-sm pointer-coarse:min-h-11 transition-colors"
               title="Side / profile view">Side</button>
             <button id="fullscreen"
-              class="rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
+              class="rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-sm pointer-coarse:min-h-11 pointer-coarse:min-w-11 transition-colors"
               title="Toggle fullscreen">⛶</button>
           </div>
         </section>
 
         <!-- ===== Units (shared with the analysis page via glidecomp:preferences) ===== -->
         <section class="space-y-2 border-t border-slate-700/60 pt-5">
-          <h3 class="text-[11px] uppercase tracking-wide text-lime-400 font-semibold">Units</h3>
+          <h3 class="text-xs uppercase tracking-wide text-lime-400 font-semibold">Units</h3>
           <div class="grid grid-cols-2 gap-x-3 gap-y-2">
             <div>
-              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1" for="unitSpeed">Speed</label>
+              <label class="block text-xs uppercase tracking-wide text-slate-400 mb-1" for="unitSpeed">Speed</label>
               <select id="unitSpeed"
-                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-base md:text-sm pointer-coarse:min-h-11 focus:outline-none focus:ring-1 focus:ring-lime-400">
                 <option value="km/h">km/h</option>
                 <option value="mph">mph</option>
                 <option value="knots">kts</option>
               </select>
             </div>
             <div>
-              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1" for="unitAltitude">Altitude</label>
+              <label class="block text-xs uppercase tracking-wide text-slate-400 mb-1" for="unitAltitude">Altitude</label>
               <select id="unitAltitude"
-                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-base md:text-sm pointer-coarse:min-h-11 focus:outline-none focus:ring-1 focus:ring-lime-400">
                 <option value="m">m</option>
                 <option value="ft">ft</option>
               </select>
             </div>
             <div>
-              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1" for="unitClimb">Climb</label>
+              <label class="block text-xs uppercase tracking-wide text-slate-400 mb-1" for="unitClimb">Climb</label>
               <select id="unitClimb"
-                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-base md:text-sm pointer-coarse:min-h-11 focus:outline-none focus:ring-1 focus:ring-lime-400">
                 <option value="m/s">m/s</option>
                 <option value="ft/min">fpm</option>
                 <option value="knots">kts</option>
               </select>
             </div>
             <div>
-              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1" for="unitDistance">Distance</label>
+              <label class="block text-xs uppercase tracking-wide text-slate-400 mb-1" for="unitDistance">Distance</label>
               <select id="unitDistance"
-                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-base md:text-sm pointer-coarse:min-h-11 focus:outline-none focus:ring-1 focus:ring-lime-400">
                 <option value="km">km</option>
                 <option value="mi">mi</option>
                 <option value="nmi">NM</option>
@@ -356,15 +417,15 @@
         <!-- ===== Pilots ===== -->
         <section class="space-y-2 border-t border-slate-700/60 pt-5">
           <div class="flex items-center gap-2">
-            <h3 class="flex-1 text-[11px] uppercase tracking-wide text-lime-400 font-semibold">Pilots</h3>
-            <button id="toggleAll" class="text-[11px] text-slate-400 hover:text-slate-200">hide all</button>
+            <h3 class="flex-1 text-xs uppercase tracking-wide text-lime-400 font-semibold">Pilots</h3>
+            <button id="toggleAll" class="min-h-6 min-w-6 text-xs pointer-coarse:min-h-11 pointer-coarse:px-2 text-slate-400 hover:text-slate-200">hide all</button>
           </div>
           <input id="pilotSearch" type="search" placeholder="Search pilots…" autocomplete="off"
-            class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-lime-400">
+            class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-base md:text-sm pointer-coarse:min-h-11 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-lime-400">
           <ul id="legend" class="overflow-y-auto -mx-1 text-xs" style="max-height: 38vh;"></ul>
-          <div id="followBar" class="hidden rounded-md bg-slate-800/60 px-2.5 py-1.5 text-[11px]">
+          <div id="followBar" class="hidden rounded-md bg-slate-800/60 px-2.5 py-1.5 text-xs">
             Following <span id="followName" class="text-slate-200 font-medium"></span>
-            <button id="unfollow" class="ml-1 text-lime-400 hover:underline">stop</button>
+            <button id="unfollow" class="ml-1 min-h-6 min-w-6 text-lime-400 hover:underline pointer-coarse:min-h-11 pointer-coarse:px-2">stop</button>
           </div>
         </section>
 
@@ -374,13 +435,13 @@
              thermal-less tasks never show it). -->
         <section id="thermalPanelWrap" class="hidden space-y-2 border-t border-slate-700/60 pt-5">
           <div class="flex items-center gap-2">
-            <h3 class="flex-1 text-[11px] uppercase tracking-wide text-violet-300 font-semibold">Thermals</h3>
-            <button id="thermalToggle" class="text-[11px] text-violet-300 hover:underline" title="Show/hide the reconstructed thermal columns">hide</button>
+            <h3 class="flex-1 text-xs uppercase tracking-wide text-violet-300 font-semibold">Thermals</h3>
+            <button id="thermalToggle" class="min-h-6 min-w-6 text-xs pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-2 text-violet-300 hover:underline" title="Show/hide the reconstructed thermal columns">hide</button>
           </div>
-          <select id="thermalSelect" class="w-full rounded-md bg-slate-800/60 px-2 py-1.5 text-xs text-slate-200 border border-slate-700/60">
+          <select id="thermalSelect" class="w-full rounded-md bg-slate-800/60 px-2 py-1.5 text-base md:text-sm pointer-coarse:min-h-11 text-slate-200 border border-slate-700/60">
             <option value="-1">All thermals (fade with the clock)</option>
           </select>
-          <p class="text-[10px] leading-snug text-slate-400">
+          <p class="text-xs leading-snug text-slate-400">
             Ring stacks are the day's thermals, reconstructed from every pilot's
             track: one ring per 100 m band at the measured core and working
             radius, so a leaning stack is a leaning thermal. Diamonds are
@@ -391,30 +452,30 @@
 
         <section id="gagglePanelWrap" class="space-y-2 border-t border-slate-700/60 pt-5">
           <div class="flex items-center gap-2">
-            <h3 class="flex-1 text-[11px] uppercase tracking-wide text-lime-400 font-semibold">Gaggles</h3>
-            <button id="gaggleActiveOnly" class="text-[11px] text-slate-400 hover:text-slate-200" title="Show only gaggles active at the current time">active now</button>
-            <button id="gaggleToggle" class="text-[11px] text-lime-400 hover:underline" title="Show/hide the gaggle overlay">hide</button>
+            <h3 class="flex-1 text-xs uppercase tracking-wide text-lime-400 font-semibold">Gaggles</h3>
+            <button id="gaggleActiveOnly" class="min-h-6 min-w-6 text-xs pointer-coarse:min-h-11 pointer-coarse:px-2 text-slate-400 hover:text-slate-200" title="Show only gaggles active at the current time">active now</button>
+            <button id="gaggleToggle" class="min-h-6 min-w-6 text-xs pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-2 text-lime-400 hover:underline" title="Show/hide the gaggle overlay">hide</button>
           </div>
           <ul id="gaggleList" class="overflow-y-auto -mx-1 text-xs" style="max-height: 30vh;"></ul>
           <!-- dev-only threshold sliders (unhidden in DEV) -->
           <div id="gaggleDev" class="hidden space-y-2 rounded-md bg-slate-800/40 px-2.5 py-2">
             <div>
-              <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
+              <label class="flex justify-between text-xs uppercase tracking-wide text-slate-400">
                 <span>Radius</span><span id="ggRadiusVal" class="text-slate-300 normal-case">400 m</span>
               </label>
-              <input id="ggRadius" type="range" min="100" max="1000" step="50" value="400" class="w-full">
+              <input id="ggRadius" type="range" min="100" max="1000" step="50" value="400" class="h-6 w-full pointer-coarse:h-11">
             </div>
             <div>
-              <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
+              <label class="flex justify-between text-xs uppercase tracking-wide text-slate-400">
                 <span>Vert band</span><span id="ggBandVal" class="text-slate-300 normal-case">300 m</span>
               </label>
-              <input id="ggBand" type="range" min="100" max="800" step="50" value="300" class="w-full">
+              <input id="ggBand" type="range" min="100" max="800" step="50" value="300" class="h-6 w-full pointer-coarse:h-11">
             </div>
             <div>
-              <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
+              <label class="flex justify-between text-xs uppercase tracking-wide text-slate-400">
                 <span>Min pilots</span><span id="ggMinVal" class="text-slate-300 normal-case">2</span>
               </label>
-              <input id="ggMin" type="range" min="2" max="6" step="1" value="2" class="w-full">
+              <input id="ggMin" type="range" min="2" max="6" step="1" value="2" class="h-6 w-full pointer-coarse:h-11">
             </div>
           </div>
         </section>
@@ -438,7 +499,7 @@
       </button>
       <div class="rounded-md panel px-2 py-1.5">
         <div id="scaleBar" class="h-1.5 bg-slate-200 rounded-sm" style="width: 80px;"></div>
-        <div id="scaleLabel" class="mt-1 text-[10px] text-slate-300 text-center">—</div>
+        <div id="scaleLabel" class="mt-1 text-xs text-slate-300 text-center">—</div>
       </div>
     </div>
 
@@ -449,12 +510,12 @@
            edge — outside the controls row so phones don't overflow — and stays
            put when collapsed as the way to reopen. -->
       <button id="timelineCollapse" aria-label="Hide playback controls" aria-expanded="true" aria-controls="timeline"
-        class="absolute bottom-full right-0 mb-2 grid place-items-center w-8 h-8 rounded-md panel text-slate-300 hover:bg-slate-700/40 text-base leading-none transition-colors shadow-lg"
+        class="absolute bottom-full right-0 mb-2 grid place-items-center size-8 pointer-coarse:size-11 rounded-md panel text-slate-300 hover:bg-slate-700/40 text-base leading-none transition-colors shadow-lg"
         title="Hide playback controls">▾</button>
       <!-- keyboard shortcuts popover (toggled by the ⌨ button; main.ts wires it) -->
       <div id="kbdPanel" aria-label="Keyboard shortcuts"
         class="tl-chrome absolute bottom-full right-0 mb-2 hidden w-72 rounded-lg panel px-4 py-3 text-xs shadow-xl">
-        <div class="mb-2 text-[11px] uppercase tracking-wide text-lime-400 font-semibold">Keyboard shortcuts</div>
+        <div class="mb-2 text-xs uppercase tracking-wide text-lime-400 font-semibold">Keyboard shortcuts</div>
         <dl class="space-y-1.5 text-slate-300">
           <div class="flex items-center justify-between gap-4">
             <dt>Play / pause</dt>
@@ -482,21 +543,24 @@
           </div>
         </dl>
       </div>
-      <!-- gaggle ribbon, inset to line up with the scrubber track (desktop only) -->
-      <div class="tl-chrome mb-2 hidden md:block" style="margin-left: 144px; margin-right: 76px;">
+      <!-- gaggle ribbon, inset to line up with the scrubber track (desktop only):
+           left, play (44) + gap + clock (80) + gap; right, gap + speed select +
+           gap + shortcuts (32). Re-measure both when a control in that row
+           changes size. -->
+      <div class="tl-chrome mb-2 hidden md:block" style="margin-left: 148px; margin-right: 130px;">
         <div id="gaggleRibbon" class="relative"></div>
       </div>
       <div class="flex items-center gap-3">
         <button id="playPause"
-          class="tl-chrome shrink-0 rounded-full bg-lime-500 hover:bg-lime-400 text-slate-900 w-10 h-10 grid place-items-center font-bold transition-colors"
+          class="tl-chrome shrink-0 rounded-full bg-lime-500 hover:bg-lime-400 text-slate-900 size-11 grid place-items-center font-bold transition-colors"
           aria-label="Play/pause">▶</button>
         <div class="tl-chrome shrink-0 w-20 text-center">
           <div id="clock" class="text-sm font-mono tabular-nums leading-none">00:00:00</div>
-          <div id="clockZone" class="text-[10px] text-slate-500 leading-none mt-0.5">local</div>
+          <div id="clockZone" class="text-xs text-slate-500 leading-none mt-0.5">local</div>
         </div>
-        <input id="scrubber" type="range" min="0" max="1000" step="1" value="0" class="flex-1" aria-label="Timeline">
+        <input id="scrubber" type="range" min="0" max="1000" step="1" value="0" class="h-6 min-w-0 flex-1 pointer-coarse:h-11" aria-label="Timeline">
         <select id="speed"
-          class="tl-chrome shrink-0 rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+          class="tl-chrome shrink-0 rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-base md:text-sm pointer-coarse:min-h-11 focus:outline-none focus:ring-1 focus:ring-lime-400">
           <option value="1">1×</option>
           <option value="4">4×</option>
           <option value="16" selected>16×</option>
@@ -505,7 +569,7 @@
         </select>
         <!-- shortcuts only matter with a physical keyboard — hidden on phones -->
         <button id="kbdToggle" aria-label="Keyboard shortcuts" aria-expanded="false" aria-controls="kbdPanel"
-          class="tl-chrome hidden md:grid shrink-0 place-items-center w-8 h-8 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 text-base leading-none transition-colors"
+          class="tl-chrome hidden md:grid shrink-0 place-items-center size-8 pointer-coarse:size-11 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 text-base leading-none transition-colors"
           title="Keyboard shortcuts">&#x2328;&#xFE0E;</button>
       </div>
     </div>

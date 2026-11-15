@@ -9,12 +9,12 @@
  * readings, and the list's membership and order — is in the draft, and
  * survives going into a waypoint and back, and a reload.
  *
- * Leaving:
- *   - from one waypoint, Back, Done and "All N" all return to the review's
- *     LIST, never out of the review;
- *   - from the list, Done closes the review (its readings go with it) and
- *     returns to the waypoints; Back returns to them and leaves the review
- *     open, for Forward to find.
+ * Leaving is the bar's Back, and nothing else (issue #863 — each page had a
+ * Done that did the same thing, and one waypoint had "All N" as well):
+ *   - from one waypoint, it returns to the review's LIST, never out of the
+ *     review;
+ *   - from the list, it returns to the waypoints and leaves the review open,
+ *     for Forward to find. The next Check altitudes replaces it.
  * Each is a real Back when the page was opened from the one it returns to,
  * so that page comes back as it was left; otherwise this page is replaced
  * with it.
@@ -25,11 +25,10 @@
  */
 import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
-import { SectionHeader } from "../components/SectionHeader";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
-import { underCompWaypoints } from "../lib/crumbs";
-import { compAltitudeReviewPath, compWaypointsPath } from "../lib/slug";
+import { Page, PageBar } from "@/react/rac/page-bar";
+import { underAltitudeReview, underCompWaypoints } from "../lib/crumbs";
+import { compAltitudeReviewPath } from "../lib/slug";
 import { toast } from "../lib/toast";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import {
@@ -47,7 +46,6 @@ import { waypointsEditorGate } from "../comp/WaypointsEditorGate";
 import {
   acceptMapAltitudes,
   convertFromFeet,
-  endReview,
   reviewEntry,
   updateRow,
   type AltitudeReviewEntry,
@@ -75,7 +73,11 @@ export function CompAltitudeReviewPage() {
     compName ? compAltitudeReviewPath(urlId, compName, id ?? undefined) : null
   );
 
-  const gate = waypointsEditorGate(editor);
+  const trail = underCompWaypoints(urlId, compName);
+  const gate = waypointsEditorGate(editor, {
+    title: id === null ? "Check altitudes" : "Waypoint",
+    trail: id === null ? trail : underAltitudeReview(urlId, compName),
+  });
   if (gate) return gate;
 
   const reviewPath = compAltitudeReviewPath(urlId, compName);
@@ -85,11 +87,11 @@ export function CompAltitudeReviewPage() {
     // One waypoint of a review that is not there: the list says what to do.
     if (id !== null) return <Navigate replace to={reviewPath} />;
     return (
-      <div className="max-w-2xl">
-        <Breadcrumbs items={underCompWaypoints(urlId, compName)} current="Check altitudes" />
-        <SectionHeader as="h1" className="mt-2" title="Check altitudes" />
+      <Page bar={<PageBar title="Check altitudes" trail={trail} />}>
+        {/* On the page, not in the bar: with no review open it is all the
+            page has, and where the review will appear. */}
         <Button
-          className="mt-4"
+          className="h-11 px-5"
           isDisabled={draft.rows.length === 0}
           isPending={check.checking}
           pendingLabel="Checking altitudes"
@@ -97,7 +99,7 @@ export function CompAltitudeReviewPage() {
         >
           Check altitudes
         </Button>
-      </div>
+      </Page>
     );
   }
 
@@ -113,7 +115,6 @@ export function CompAltitudeReviewPage() {
         key={id}
         editor={editor}
         entry={entry}
-        listedCount={review.listed.length}
         onBack={() => editor.leave(reviewPath)}
       />
     );
@@ -167,12 +168,6 @@ export function CompAltitudeReviewPage() {
           );
         }
       }}
-      onDone={() => {
-        // Closed on the way out — in storage only, so this page stays as it
-        // is until it has gone rather than flash its "no review" state.
-        editor.updateOnLeave(endReview);
-        editor.leave(compWaypointsPath(urlId, compName));
-      }}
     />
   );
 }
@@ -180,12 +175,11 @@ export function CompAltitudeReviewPage() {
 function ReviewWaypoint({
   editor,
   entry,
-  listedCount,
   onBack,
 }: {
   editor: WaypointsEditor;
   entry: AltitudeReviewEntry;
-  listedCount: number;
+  /** Back to the review's list, once the map's altitude has been taken. */
   onBack: () => void;
 }) {
   // The reading as this page opened: see AltitudeReviewDetail.
@@ -198,8 +192,6 @@ function ReviewWaypoint({
       compName={editor.compName}
       entry={entry}
       mapAlt={mapAlt}
-      listedCount={listedCount}
-      onBack={onBack}
       onUseMapAltitude={(altitude) => {
         set({ altitude: String(Math.round(altitude)) });
         tookToast(1);

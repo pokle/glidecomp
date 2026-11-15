@@ -143,6 +143,9 @@ const TaskRouteQuickPage = lazy(() =>
 const TaskRouteXContestPage = lazy(() =>
   import("./pages/TaskRouteXContestPage").then((m) => ({ default: m.TaskRouteXContestPage }))
 );
+const TaskRouteMapPage = lazy(() =>
+  import("./pages/TaskRouteMapPage").then((m) => ({ default: m.TaskRouteMapPage }))
+);
 const TaskRouteAddWaypointPage = lazy(() =>
   import("./pages/TaskRouteAddWaypointPage").then((m) => ({
     default: m.TaskRouteAddWaypointPage,
@@ -181,18 +184,18 @@ const Scores = lazy(() =>
 const Settings = lazy(() =>
   import("./pages/Settings").then((m) => ({ default: m.Settings }))
 );
+// Account settings are an index and a page per group (#863): one chunk.
+const SettingsGroupPage = lazy(() =>
+  import("./pages/Settings").then((m) => ({ default: m.SettingsGroupPage }))
+);
+const NewApiKeyPage = lazy(() =>
+  import("./pages/Settings").then((m) => ({ default: m.NewApiKeyPage }))
+);
 const AdminUsers = lazy(() =>
   import("./pages/AdminUsers").then((m) => ({ default: m.AdminUsers }))
 );
 const AdminCache = lazy(() =>
   import("./pages/AdminCache").then((m) => ({ default: m.AdminCache }))
-);
-// The page-bar prototype (issue #860): sample pages for trying one navigation
-// bar on every kind of page, reached only by typing the address. One lazy
-// chunk, outside the Shell, calling no API. See proto/ProtoApp.tsx, which
-// also says what to delete when the recommendation is settled.
-const ProtoApp = lazy(() =>
-  import("./proto/ProtoApp").then((m) => ({ default: m.ProtoApp }))
 );
 
 /** App-wide context providers. SSR-safe (no portals rendered here).
@@ -275,9 +278,6 @@ export function AppRoutes() {
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/signin" element={<SignIn />} />
           <Route path="/oauth/consent" element={<OAuthConsent />} />
-          {/* Not linked from anywhere, and not under the Shell: its bar is a
-              candidate to replace the Shell's header. */}
-          <Route path="/proto/*" element={<ProtoApp />} />
           <Route element={<Shell />}>
             <Route path="/u/:username" element={<Dashboard />} />
             {/* Inside Shell: /submit is a destination with somewhere to go
@@ -383,6 +383,10 @@ export function AppRoutes() {
               element={<TaskRouteAddWaypointPage />}
             />
             <Route
+              path="/comp/:compId/task/:taskId/route/map"
+              element={<TaskRouteMapPage />}
+            />
+            <Route
               path="/comp/:compId/task/:taskId/route/copy"
               element={<TaskRouteCopyPage />}
             />
@@ -473,6 +477,9 @@ export function AppRoutes() {
             {/* "My Profile" merged into Settings; keep the old path working. */}
             <Route path="/profile" element={<Navigate to="/settings" replace />} />
             <Route path="/settings" element={<Settings />} />
+            {/* One page per group, and the form that makes an API key. */}
+            <Route path="/settings/:group" element={<SettingsGroupPage />} />
+            <Route path="/settings/api-keys/new" element={<NewApiKeyPage />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/cache" element={<AdminCache />} />
             <Route path="*" element={<NotFound />} />

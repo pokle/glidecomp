@@ -117,14 +117,15 @@ row body opens **that waypoint's page** — the two altitudes side by side, a
 sentence saying which of them to doubt, the accept, and both the altitude and
 the coordinates editable in place.
 
-Inside a waypoint, **Back, Done and "All N" all return to the review's LIST**.
-Done used to close the whole review from there, which dropped the reader out to
-the waypoints page half way down a list of twelve: "done with this waypoint" is
-not "done with the check". Only the list's own Done leaves the review, and going
-back IS "leave it as it is", so no third button says so. The browser's Back
-walks the same way, one page per press: the waypoint, the review, the
-waypoints. Back from the review leaves it open, for Forward to find; Done
-closes it, and its readings go with it.
+Inside a waypoint, **the bar's Back returns to the review's LIST**, and it is
+the only way out the page has (issue #863: no Done where Back does the same
+thing; until then the page also had Done and "All N", which did the same).
+Going back IS "leave it as it is", so no button says so. The review's list has
+Back alone too, and its two actions are rows of ⋯: "Use the map's altitude for
+all N", and showing all the waypoints or only the ones to look at. The
+browser's Back walks the same way, one page per press: the waypoint, the
+review, the waypoints. Back from the review leaves it open in the draft, for
+Forward to find; the next Check altitudes replaces it.
 
 There is deliberately **no map on a waypoint's page**: editing the coordinates
 as text is what a pasted correction needs anyway.
@@ -196,7 +197,7 @@ What all of them edit is the waypoint FILE, saved as a set — so the file is a
 `comp/use-waypoints-editor.ts`, [drafts.md](drafts.md)). Each page reads it when
 it mounts and writes every change straight back, so a waypoint's page edits
 live: Done and Back both keep the edit, and so does a reload. Nothing is saved
-until Save on the list, and "Discard changes" beside it throws the draft away.
+until Save in the list's bar, and "Discard changes" in its ⋯ throws the draft away.
 A waypoint is addressed by the draft's own row id rather than its code, because
 the code is one of the fields its page edits and a waypoint added a minute ago
 exists only in the draft; with no draft the rows are numbered 1..N in file

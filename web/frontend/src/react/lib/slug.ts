@@ -407,6 +407,16 @@ export function taskRouteCopyPath(
   return `${taskRoutePath(compId, compName, taskId, taskName)}/copy`;
 }
 
+/** The route's map at the size of the screen. */
+export function taskRouteMapPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskRoutePath(compId, compName, taskId, taskName)}/map`;
+}
+
 /** Adding a competition waypoint from the route's map; `search` carries the map pick. */
 export function taskRouteAddWaypointPath(
   compId: string,

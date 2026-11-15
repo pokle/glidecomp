@@ -19,17 +19,16 @@
  * position on the ground and their elevation.
  *
  * The page opens showing the route in the draft, so it edits a route as well
- * as enters one. "Use this route" writes the result into the route's draft
- * (comp/route-draft.ts) and goes back; leaving any other way — Cancel, Back —
- * leaves the route exactly as it was. The line itself is not kept: it is a
+ * as enters one. Done, in the bar (#863; it was "Use this route"), writes the
+ * result into the route's draft (comp/route-draft.ts) and goes back; leaving
+ * any other way — Cancel, Back — leaves the route exactly as it was. Done and
+ * not Save: only Save on the route page writes to the server. The line itself is not kept: it is a
  * view of the route, made again from the draft each time the page opens.
  */
 import { useMemo, useState } from "react";
-import { SectionHeader } from "../components/SectionHeader";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Button } from "@/react/rac/button";
 import { Explain } from "@/react/rac/explain";
 import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
+import { Page, PageBar, commitClass } from "@/react/rac/page-bar";
 import { useConfirm } from "../lib/confirm";
 import { underTaskRoute } from "../lib/crumbs";
 import { taskRouteQuickPath } from "../lib/slug";
@@ -49,7 +48,10 @@ export function TaskRouteQuickPage() {
       ? taskRouteQuickPath(urlId, compName, taskId, taskName)
       : null
   );
-  const gate = routeEditorGate(editor);
+  const gate = routeEditorGate(editor, {
+    title: "Quick entry",
+    trail: underTaskRoute(urlId, compName, taskId, taskName),
+  });
   if (gate) return gate;
   // Mounted once the draft is known, so the line it opens with is the route
   // the draft holds.
@@ -119,33 +121,30 @@ function QuickEntryForm({ editor }: { editor: RouteEditorState }) {
   }
 
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs
-        items={underTaskRoute(urlId, compName, taskId, taskName)}
-        current="Quick entry"
-      />
-      <Form
-        // Nothing to send: the route joins the draft, saved with the route.
-        onSuccess={() => {
-          editor.update((d) => applyQuickEntry(d, parsed, { openDistance }));
-          editor.leave();
-        }}
+    <Form
+      className="contents"
+      // Nothing to send: the route joins the draft, saved with the route.
+      onSuccess={() => {
+        editor.update((d) => applyQuickEntry(d, parsed, { openDistance }));
+        editor.leave();
+      }}
+    >
+      <Page
+        className="flex flex-col gap-3"
+        bar={
+          <PageBar
+            title="Quick entry"
+            trail={underTaskRoute(urlId, compName, taskId, taskName)}
+            cancel={() => void cancel()}
+            commit={
+              <SubmitButton className={commitClass} isDisabled={parsed.picks.length === 0}>
+                Done
+              </SubmitButton>
+            }
+          />
+        }
       >
-        <SectionHeader
-          as="h1"
-          className="mt-2"
-          title="Quick entry"
-          action={
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onPress={() => void cancel()}>
-                Cancel
-              </Button>
-              <SubmitButton isDisabled={parsed.picks.length === 0}>Use this route</SubmitButton>
-            </div>
-          }
-        />
-        <FormErrorBanner className="mt-3" />
-        <div className="mt-4 flex flex-col gap-3">
+        <FormErrorBanner />
           <p className="text-sm text-muted-foreground">
             Type waypoints in order, each with a radius — e.g.{" "}
             <span className="font-medium">ell 400m mitta 5k</span>.{" "}
@@ -189,8 +188,7 @@ function QuickEntryForm({ editor }: { editor: RouteEditorState }) {
             Only sets the order, radii, types and the start — coordinates,
             altitudes and names are unchanged.
           </p>
-        </div>
-      </Form>
-    </div>
+      </Page>
+    </Form>
   );
 }

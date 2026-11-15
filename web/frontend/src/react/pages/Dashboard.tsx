@@ -3,13 +3,14 @@
  * Local IGC/XCTSK library backed by the same IndexedDB storage module the
  * (vanilla, imperative-map) analysis page uses.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
+import { Tabs, TabList, Tab, TabPanel, TabsContent } from "@/react/rac/tabs";
 import { ProportionMeter } from "@/react/rac/meter";
 import { Button, buttonVariants } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
-import { FileTrigger } from "react-aria-components";
+import { Page, PageBar } from "@/react/rac/page-bar";
+import { Loading } from "@/react/rac/progress";
 import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { parseIGC, parseXCTask } from "@glidecomp/engine";
 import {
@@ -40,6 +41,7 @@ export function Dashboard() {
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<"tracks" | "tasks">("tracks");
   const [dragOver, setDragOver] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const refreshLists = useCallback(async () => {
     const [nextTracks, nextTasks] = await Promise.all([storage.listTracks(), storage.listTasks()]);
@@ -141,57 +143,87 @@ export function Dashboard() {
   }, [ready, handleFiles]);
 
   if (!user && previewingSignedOut) {
+    // Signed out, a top-level page's bar has Sign in where its main action
+    // is, so the page only says why.
     return (
-      <section className="mx-auto max-w-md rounded-xl border px-6 py-10 text-center">
-        <h1 className="text-xl font-bold">Sign in to see your flights</h1>
-        <p className="mt-2 text-muted-foreground">
-          Your IGC track logs and tasks live in your account.
-        </p>
-        <Button className="mt-4" onPress={() => goToSignIn(window.location.pathname)}>
-          Sign in
-        </Button>
-      </section>
+      <Page bar={<PageBar title="My Flights" />}>
+        <Card>
+          <h2 className="font-medium">Sign in to see your flights</h2>
+          <p className="text-muted-foreground">
+            Your IGC track logs and tasks live in your account.
+          </p>
+        </Card>
+      </Page>
     );
   }
 
-  if (!ready) return <p role="status">Loading…</p>;
+  // The bar before the library, so the page does not jump when it loads.
+  if (!ready) {
+    return (
+      <Page bar={<PageBar title="My Flights" />}>
+        <Loading>Loading…</Loading>
+      </Page>
+    );
+  }
+
+  // What + adds follows the tab: a track log, or a task.
+  const adding =
+    tab === "tracks"
+      ? { accept: ".igc", label: "Add .igc track log" }
+      : { accept: ".xctsk", label: "Add .xctsk task" };
 
   return (
-    // A stack of panels, like every other page. Before this the three sections
-    // were unbounded regions floating on the page background, which read as
-    // "clean" while the background was white and as "unfinished" once it was
-    // not — the tint is what made the missing panels visible.
-    <div className="flex flex-col gap-6">
-      <NearQuotaWarning tracks={tracks} tasks={tasks} />
+    // The tabs are the bar's second layer, so they stay in reach while the
+    // lists scroll; their panels are in the Personal flights card below.
+    <Tabs
+      selectedKey={tab}
+      onSelectionChange={(key) => setTab(key as "tracks" | "tasks")}
+      className="gap-0"
+    >
+      <Page
+        bar={
+          <PageBar
+            title="My Flights"
+            add={{ label: adding.label, onAction: () => fileInput.current?.click() }}
+            below={
+              <TabList aria-label="Personal flights" className="h-[3.1875rem]">
+                <Tab id="tracks" className="px-5 text-base">
+                  Tracks {tracks.length > 0 ? `(${tracks.length})` : ""}
+                </Tab>
+                <Tab id="tasks" className="px-5 text-base">
+                  Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}
+                </Tab>
+              </TabList>
+            }
+          />
+        }
+        // A stack of panels, like every other page.
+        className="flex flex-col gap-6"
+      >
+        <TabsContent>
+        {/* The file picker + opens. Cleared after each pick, so choosing the
+            same file twice still fires. */}
+        <input
+          ref={fileInput}
+          type="file"
+          hidden
+          multiple
+          accept={adding.accept}
+          onChange={(e) => {
+            const picked = [...(e.target.files ?? [])];
+            e.target.value = "";
+            if (picked.length) void handleFiles(picked);
+          }}
+        />
 
-      <CompetitionFlightsSection />
+        <NearQuotaWarning tracks={tracks} tasks={tasks} />
 
-      <Card>
-        {/* The local library gets its own heading so it reads as a sibling of
-            the Competition flights section above. */}
-        <h2 className="text-lg font-bold">Personal flights</h2>
+        <CompetitionFlightsSection />
 
-        <Tabs
-          selectedKey={tab}
-          onSelectionChange={(key) => setTab(key as "tracks" | "tasks")}
-        >
-          {/* The add-files action rides the tab row, right-aligned like the
-              section actions on the comp/task pages. */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <TabList aria-label="Personal flights">
-              <Tab id="tracks">
-                Tracks {tracks.length > 0 ? `(${tracks.length})` : ""}
-              </Tab>
-              <Tab id="tasks">Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}</Tab>
-            </TabList>
-            <div className="ml-auto">
-              {tab === "tracks" ? (
-                <AddFilesButton accept=".igc" label="Add .igc track log" onFiles={handleFiles} />
-              ) : (
-                <AddFilesButton accept=".xctsk" label="Add .xctsk task" onFiles={handleFiles} />
-              )}
-            </div>
-          </div>
+        <Card>
+          {/* The local library gets its own heading so it reads as a sibling of
+              the Competition flights section above. */}
+          <h2 className="text-lg font-bold">Personal flights</h2>
 
           <TabPanel id="tracks">
             {tracks.length === 0 ? (
@@ -355,10 +387,9 @@ export function Dashboard() {
               Or drag and drop .xctsk files anywhere.
             </p>
           </TabPanel>
-        </Tabs>
-      </Card>
+        </Card>
 
-      <StorageSection tracks={tracks} tasks={tasks} />
+        <StorageSection tracks={tracks} tasks={tasks} />
 
       {dragOver ? (
         <div
@@ -369,7 +400,9 @@ export function Dashboard() {
           <p className="text-sm font-normal text-muted-foreground">.igc and .xctsk files</p>
         </div>
       ) : null}
-    </div>
+        </TabsContent>
+      </Page>
+    </Tabs>
   );
 }
 
@@ -500,30 +533,6 @@ function CompetitionFlightsSection() {
   );
 }
 
-/** "Add …" button on the tab row; the drag-and-drop hint lives below each list. */
-function AddFilesButton({
-  accept,
-  label,
-  onFiles,
-}: {
-  accept: string;
-  label: string;
-  onFiles: (files: FileList) => Promise<void>;
-}) {
-  // FileTrigger owns the hidden input and the click plumbing (and resets it
-  // between picks, so choosing the same file twice still fires).
-  return (
-    <FileTrigger
-      acceptedFileTypes={[accept]}
-      allowsMultiple
-      onSelect={async (files) => {
-        if (files?.length) await onFiles(files);
-      }}
-    >
-      <Button>{label}</Button>
-    </FileTrigger>
-  );
-}
 
 function storageFraction(tracks: StoredTrack[], tasks: StoredTask[]) {
   const usedBytes = tracks.reduce((sum, t) => sum + (t.fileSize ?? t.content?.length ?? 0), 0);

@@ -9,14 +9,17 @@
  */
 import { useState } from "react";
 import { TextField as AriaTextField } from "react-aria-components";
-import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
 import { api } from "@/comp/api";
 import { underCompSettings } from "@/react/lib/crumbs";
 import { SearchableChoiceList } from "@/react/rac/choice-list";
 import { Description, FieldError, Label, TextArea } from "@/react/rac/field";
 import { CategoryField, NameField } from "../fields";
-import type { SettingsGroupProps } from "./CompSettingsIndex";
+import {
+  SETTINGS_GROUP_TITLES,
+  canSaveSettings,
+  type SettingsGroupProps,
+} from "./CompSettingsIndex";
 
 /**
  * Timezone dropdown options: "auto" plus every zone the runtime knows.
@@ -56,62 +59,64 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
     notes.trim() !== savedNotes.trim();
 
   return (
-    <SettingsPage crumbs={underCompSettings(compId, comp.name)} title="General">
-      <SettingsForm
-        dirty={dirty}
-        validate={() => ({ name: !name.trim() && "Enter a competition name" })}
-        onSubmit={() =>
-          api.api.comp[":comp_id"].$patch({
-            param: { comp_id: compId },
-            json: {
-              name: name.trim(),
-              category,
-              timezone: timezone === "auto" ? null : timezone,
-              organiser_notes: notes.trim(),
-            },
-          })
-        }
-        onSuccess={onSaved}
+    <SettingsForm
+      crumbs={underCompSettings(compId, comp.name)}
+      title={SETTINGS_GROUP_TITLES.general}
+      fullTitle={`${SETTINGS_GROUP_TITLES.general} settings`}
+      dirty={dirty}
+      canCommit={canSaveSettings(comp, dirty)}
+      validate={() => ({ name: !name.trim() && "Enter a competition name" })}
+      onSubmit={() =>
+        api.api.comp[":comp_id"].$patch({
+          param: { comp_id: compId },
+          json: {
+            name: name.trim(),
+            category,
+            timezone: timezone === "auto" ? null : timezone,
+            organiser_notes: notes.trim(),
+          },
+        })
+      }
+      onSuccess={onSaved}
+    >
+      {/* Named as the API names them, so a refusal lands under its field.
+          The timezone row has no input to carry a name: a refusal about it
+          is shown in the banner at the top. */}
+      <NameField value={name} onChange={setName} />
+
+      <CategoryField value={category} onChange={setCategory} />
+
+      <SearchableChoiceList
+        label="Timezone"
+        value={timezone}
+        onChange={setTimezone}
+        options={timezoneOptions(comp.timezone)}
+        searchLabel="Search timezones"
+        searchPlaceholder="Type to search, e.g. Melbourne"
+        description="The zone times are shown in. Auto uses the task location. Doesn't affect scoring."
+      />
+
+      <AriaTextField
+        name="organiser_notes"
+        value={notes}
+        onChange={setNotes}
+        maxLength={MAX_ORGANISER_NOTES}
+        className="flex flex-col gap-2"
       >
-        {/* Named as the API names them, so a refusal lands under its field.
-            The timezone row has no input to carry a name: a refusal about it
-            is shown beside Save. */}
-        <NameField value={name} onChange={setName} />
-
-        <CategoryField value={category} onChange={setCategory} />
-
-        <SearchableChoiceList
-          label="Timezone"
-          value={timezone}
-          onChange={setTimezone}
-          options={timezoneOptions(comp.timezone)}
-          searchLabel="Search timezones"
-          searchPlaceholder="Type to search, e.g. Melbourne"
-          description="The zone times are shown in. Auto uses the task location. Doesn't affect scoring."
+        <Label>Notes for every pilot</Label>
+        <TextArea
+          rows={6}
+          placeholder={
+            "e.g. Briefing 9:30 at the launch shelter.\n" +
+            "Retrieve leaves from the pub at 6."
+          }
         />
-
-        <AriaTextField
-          name="organiser_notes"
-          value={notes}
-          onChange={setNotes}
-          maxLength={MAX_ORGANISER_NOTES}
-          className="flex flex-col gap-2"
-        >
-          <Label>Notes for every pilot</Label>
-          <TextArea
-            rows={6}
-            placeholder={
-              "e.g. Briefing 9:30 at the launch shelter.\n" +
-              "Retrieve leaves from the pub at 6."
-            }
-          />
-          <Description>
-            Shown under the organisers on the competition's page. Plain text.
-            Up to 4,000 characters.
-          </Description>
-          <FieldError />
-        </AriaTextField>
-      </SettingsForm>
-    </SettingsPage>
+        <Description>
+          Shown under the organisers on the competition's page. Plain text.
+          Up to 4,000 characters.
+        </Description>
+        <FieldError />
+      </AriaTextField>
+    </SettingsForm>
   );
 }

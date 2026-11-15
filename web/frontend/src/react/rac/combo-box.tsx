@@ -118,6 +118,7 @@ export function ComboBox<T extends object>({
         className={cn(
           "flex w-full min-w-0 items-center gap-1.5 rounded-lg border border-input bg-card transition-colors",
           variant === "field" ? "h-9 px-3" : "h-8 px-2.5",
+          "pointer-coarse:h-11",
           "data-focus-within:border-ring data-focus-within:ring-3 data-focus-within:ring-ring/50 dark:bg-input/30"
         )}
       >
@@ -194,7 +195,7 @@ export function ComboBoxItem({
   return (
     <AriaListBoxItem
       className={cn(
-        "flex w-full cursor-default items-baseline gap-2 rounded px-1.5 py-1 text-left text-sm outline-none select-none",
+        "flex w-full cursor-default items-baseline gap-2 rounded px-1.5 py-1 text-left text-sm outline-none select-none pointer-coarse:min-h-11 pointer-coarse:items-center pointer-coarse:px-3 pointer-coarse:text-base",
         "data-hovered:bg-accent data-focused:bg-accent data-focused:text-accent-foreground",
         className
       )}

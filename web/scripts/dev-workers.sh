@@ -118,6 +118,25 @@ fi
 # `date` or `sed` for every line would fork once per request.
 log_lines() {
   local line plain now frac esc=$'\e'
+  # macOS ships bash 3.2, which has neither EPOCHREALTIME nor printf's %()T:
+  # there the loop below died on its first line and took wrangler with it. One
+  # perl process does the same work, so it still forks once and not per line.
+  if [ "${BASH_VERSINFO[0]}" -lt 5 ]; then
+    perl -MPOSIX=strftime -MTime::HiRes=time -e '
+      $| = 1;
+      open(my $log, ">>", $ARGV[0]) or die "dev-workers: $ARGV[0]: $!";
+      select($log); $| = 1; select(STDOUT);
+      while (my $line = <STDIN>) {
+        chomp $line;
+        (my $plain = $line) =~ s/\e\[[0-9;]*m//g;
+        print "$line\n" unless $plain =~ /^\[dev-router\] \xe2\x86\x92 /;
+        my $t = time;
+        printf $log "%s.%03dZ %s\n",
+          strftime("%Y-%m-%dT%H:%M:%S", gmtime(int($t))), ($t - int($t)) * 1000, $plain;
+      }
+    ' "$session_log"
+    return
+  fi
   shopt -s extglob
   export TZ=UTC
   exec 3>>"$session_log"

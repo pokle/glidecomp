@@ -9,34 +9,36 @@
  * functions/comp/[[path]].ts); the views themselves live in
  * comp/CompScoresSection so this page and the comp summary share one
  * implementation.
+ *
+ * The page is the scores; what a reader can DO with them is in the bar (issue
+ * #863): the downloads and, for an organiser, "Recompute scores" under ⋯, and
+ * the view tabs in the bar's second layer, where they stay in reach down a
+ * long table.
  */
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
-import { Button } from "@/react/rac/button";
 import { ActionErrorBanner } from "@/react/rac/form";
-import { Loading } from "@/react/rac/progress";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
+import { Loading, Spinner } from "@/react/rac/progress";
 import { Card } from "@/react/rac/card";
+import { Tabs, TabsContent } from "@/react/rac/tabs";
 import { api } from "../../comp/api";
 import { useAdminView } from "../lib/user";
-import { underComp } from "../lib/crumbs";
+import { compPages, underComp } from "../lib/crumbs";
 import { compUrlId, idFromSegment, compPath, compScoresPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import {
   ScoresEmptyState,
-  ScoresViews,
   useCompScores,
+  useScoresViews,
 } from "../comp/CompScoresSection";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
-import { ScoresDownload } from "../comp/ScoresDownload";
-import {
-  CompSectionNav,
-  compSectionNavProps,
-} from "../comp/CompSectionNav";
+import { useScoresDownload } from "../comp/ScoresDownload";
 import type { CompDetailData } from "../comp/types";
 import { useInitialData } from "../lib/initial-data";
 import type { CompScoresLoaderData } from "../loaders";
+import { RefreshCwIcon } from "lucide-react";
 
 export function CompScoresPage() {
   const { compId: compParam } = useParams<{ compId: string }>();
@@ -65,105 +67,123 @@ export function CompScoresPage() {
   );
 
   const isAdmin = useAdminView(!!comp?.is_admin);
+  // As it goes in URLs: a hidden comp's share key rides along.
+  const urlId = compUrlId(comp, compId);
+
+  const download = useScoresDownload({
+    compId: urlId,
+    compName: comp?.name,
+    isTestComp: comp?.test,
+  });
+
+  // There is something to download, or to recompute, once a class has scores.
+  const hasScores = !!comp && state.kind === "ready" && state.scores.class_scores.length > 0;
+  const views = useScoresViews({
+    scores: hasScores ? state.scores : null,
+    compId,
+    compName: comp?.name ?? null,
+    timezone: comp?.timezone ?? null,
+    tasks: comp?.tasks ?? [],
+    defaultTaskId: null,
+    deepLinkTaskId: searchParams.get("task"),
+  });
 
   if (notFound || !compId) {
     return <NotFound title="Competition not found" />;
   }
 
-  if (!comp) {
-    return (
-      <Loading>Loading scores…</Loading>
-    );
+  const actions: BarAction[] = [];
+  if (hasScores) {
+    actions.push(...download.actions);
+    if (isAdmin) {
+      actions.push({
+        id: "recompute",
+        icon: RefreshCwIcon,
+        label: "Recompute scores",
+        group: true,
+        // One recompute at a time: the bar's spinner says it is under way.
+        disabled: rescoring.pending,
+        onAction: () => void rescore(),
+      });
+    }
   }
 
+  // The Tabs wraps the page, so the tab strip can be the bar's second layer
+  // and the panels the page's content. It is there (and empty) before the
+  // scores are, so the bar is never remounted.
   return (
-    <div>
-      <Breadcrumbs items={underComp(compId, comp.name)} current="Scores" />
+    <Tabs {...views.tabsProps} className="gap-0">
+      <Page
+        width="wide"
+        bar={
+          <PageBar
+            title="Scores"
+            trail={underComp(urlId, comp?.name)}
+            related={compPages(urlId, comp, isAdmin, "Scores")}
+            status={rescoring.pending ? <Spinner label="Recomputing scores" /> : undefined}
+            actions={actions}
+            below={views.tabList ?? undefined}
+          />
+        }
+      >
+        <TabsContent>
+        <ActionErrorBanner action={rescoring} className="mb-3" />
+        {download.dialog}
 
-      <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold">Scores</h1>
-          <p className="text-sm text-muted-foreground">{comp.name}</p>
-        </div>
-        {state.kind === "ready" && state.scores.class_scores.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <ScoresDownload
-              compId={compUrlId(comp, compId)}
-              compName={comp.name}
-              isTestComp={comp.test}
-            />
-            {isAdmin ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onPress={() => void rescore()}
-                isPending={rescoring.pending}
-                pendingLabel="Re-scoring"
-              >
-                Recompute scores
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-      <ActionErrorBanner action={rescoring} className="mt-3" />
-
-      <CompSectionNav {...compSectionNavProps(compId, comp, isAdmin)} />
-
-      {/* One card holds the whole scores apparatus: when it was computed, the
-          view switcher, the table, and the caption under it. A card owns its
-          controls and its caption — tabs that filter a table and a footnote
-          that explains it belong INSIDE the panel they act on, not floating
-          beside it. Only the hero above stays on the page ground, which is
-          what the comp and task pages do too. */}
-      <Card className="mt-6">
-        {state.kind === "loading" ? (
+        {!comp ? (
           <Loading>Loading scores…</Loading>
-        ) : state.kind === "unavailable" ? (
-          <ScoresEmptyState isAdmin={isAdmin} tasksHref={`${compPath(compId, comp.name)}#tasks`} />
         ) : (
-          <>
-            <ScoreFreshness
-              computedAt={state.scores.computed_at}
-              stale={state.scores.stale}
-              timezone={comp.timezone}
-              etag={state.etag}
-              pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
-            />
-            {state.scores.class_scores.length === 0 ? (
+          /* One card holds the whole scores apparatus: when it was computed,
+             the table, and the caption under it. The view switcher that led
+             it is the bar's second layer now. The scroll margin keeps a link
+             or a column header reached by keyboard out from under the bar and
+             the tabs that stick with it (WCAG 2.4.11, Focus Not Obscured). */
+          <Card className="[&_a]:scroll-mt-32 [&_button]:scroll-mt-32 [&_th]:scroll-mt-32">
+            {state.kind === "loading" ? (
+              <Loading>Loading scores…</Loading>
+            ) : state.kind === "unavailable" ? (
               <ScoresEmptyState
                 isAdmin={isAdmin}
-                tasksHref={`${compPath(compId, comp.name)}#tasks`}
+                tasksHref={`${compPath(urlId, comp.name)}#tasks`}
               />
             ) : (
               <>
-                <ScoresViews
-                  scores={state.scores}
-                  compId={compId}
-                  compName={comp.name}
+                <ScoreFreshness
+                  computedAt={state.scores.computed_at}
+                  stale={state.scores.stale}
                   timezone={comp.timezone}
-                  tasks={comp.tasks}
-                  defaultTaskId={null}
-                  deepLinkTaskId={searchParams.get("task")}
+                  etag={state.etag}
+                  pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
                 />
-                <p className="text-sm text-muted-foreground">
-                  {/* "Click any score for a step-by-step explanation" was
-                      here too — the tables ScoresViews renders each already
-                      say it directly under themselves. */}
-                  Questions about a score?{" "}
-                  <Link
-                    to={`${compPath(compId, comp.name)}#admins`}
-                    className="underline underline-offset-4"
-                  >
-                    Ask the organisers
-                  </Link>
-                  .
-                </p>
+                {state.scores.class_scores.length === 0 ? (
+                  <ScoresEmptyState
+                    isAdmin={isAdmin}
+                    tasksHref={`${compPath(urlId, comp.name)}#tasks`}
+                  />
+                ) : (
+                  <>
+                    {views.panels}
+                    <p className="text-sm text-muted-foreground">
+                      {/* "Click any score for a step-by-step explanation" was
+                          here too — the tables each already say it directly
+                          under themselves. */}
+                      Questions about a score?{" "}
+                      <Link
+                        to={`${compPath(urlId, comp.name)}#admins`}
+                        className="underline underline-offset-4"
+                      >
+                        Ask the organisers
+                      </Link>
+                      .
+                    </p>
+                  </>
+                )}
               </>
             )}
-          </>
+          </Card>
         )}
-      </Card>
-    </div>
+        </TabsContent>
+      </Page>
+    </Tabs>
   );
 }

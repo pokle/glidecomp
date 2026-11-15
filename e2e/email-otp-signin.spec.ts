@@ -51,7 +51,11 @@ async function expectSignedIn(
     expect(user?.email).toBe(email);
   }).toPass({ timeout: 10_000 });
   await page.reload({ waitUntil: "networkidle" });
-  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
+  // Signed in: the main menu, a top-level page's leading control, holds the
+  // account and Sign out.
+  await page.getByRole("button", { name: "Main menu" }).click();
+  await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
+  await page.keyboard.press("Escape");
 }
 
 /**
@@ -124,7 +128,11 @@ test("sign in with an emailed code (manual entry)", async ({ page }) => {
 
   // And a return visit sails past onboarding.
   await page.goto("/comp");
-  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
+  // Signed in: the main menu, a top-level page's leading control, holds the
+  // account and Sign out.
+  await page.getByRole("button", { name: "Main menu" }).click();
+  await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
+  await page.keyboard.press("Escape");
   expect(new URL(page.url()).pathname).toBe("/comp");
   // Signed out again, the sign-in page remembers how they came in.
   await page.context().clearCookies();

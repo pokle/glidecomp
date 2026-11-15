@@ -8,10 +8,9 @@
  * (comp/settings/CompSettingsIndex.tsx): a task has five settings, which is a
  * form and not a hierarchy — an index of two rows would be a tap that buys
  * nothing. The `NavList` at the foot is therefore not a group index; it holds
- * the two things that ARE their own pages (the route editor, the weather
- * notes) plus the destructive action, which stays out of the form for the
- * reason the comp index gives: it is an action, not a setting, and it has no
- * business next to a Save button.
+ * the destructive action alone, at the foot of the column under the fields
+ * (issue #863): it is an action, not a setting, and Save is in the bar, a
+ * screen away from it.
  *
  * The controls are the settings-page family rather than the dialog one:
  * `DatePicker inline` (a calendar in flow, nothing for a phone keyboard to
@@ -19,7 +18,6 @@
  */
 import { useId, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
 import { NavActionRow, NavList } from "@/react/rac/nav-list";
 import { CheckList } from "@/react/rac/choice-list";
@@ -125,105 +123,100 @@ export function TaskSettings({
   }
 
   return (
-    <SettingsPage
+    <SettingsForm
       crumbs={underTask(compId, comp.name, taskId, task.name)}
       title="Settings"
+      dirty={dirty}
+      validate={() => ({
+        name: !name.trim() && "Enter a task name",
+        task_date: !taskDate && "Enter a task date",
+        pilot_classes: selectedClasses.length === 0 && "Select at least one pilot class",
+        stop_announcement_time: !!stopTime && !stopIso && "Enter a valid stop time",
+      })}
+      onSubmit={() =>
+        api.api.comp[":comp_id"].task[":task_id"].$patch({
+          param: { comp_id: compId, task_id: taskId },
+          json: {
+            name: name.trim(),
+            task_date: taskDate,
+            pilot_classes: selectedClasses,
+            stop_announcement_time: stopIso,
+            submissions_closed: !submissionsOpen,
+          },
+        })
+      }
+      onSuccess={onSaved}
     >
-      <SettingsForm
-        dirty={dirty}
-        validate={() => ({
-          name: !name.trim() && "Enter a task name",
-          task_date: !taskDate && "Enter a task date",
-          pilot_classes: selectedClasses.length === 0 && "Select at least one pilot class",
-          stop_announcement_time: !!stopTime && !stopIso && "Enter a valid stop time",
-        })}
-        onSubmit={() =>
-          api.api.comp[":comp_id"].task[":task_id"].$patch({
-            param: { comp_id: compId, task_id: taskId },
-            json: {
-              name: name.trim(),
-              task_date: taskDate,
-              pilot_classes: selectedClasses,
-              stop_announcement_time: stopIso,
-              submissions_closed: !submissionsOpen,
-            },
-          })
-        }
-        onSuccess={onSaved}
-      >
-        {/* Named as the API names them, so a refusal lands under its field. */}
-        <TextField
-          label="Name"
-          name="name"
-          isRequired
-          maxLength={128}
-          value={name}
-          onChange={setName}
+      {/* Named as the API names them, so a refusal lands under its field. */}
+      <TextField
+        label="Name"
+        name="name"
+        isRequired
+        maxLength={128}
+        value={name}
+        onChange={setName}
+      />
+
+      <div className="flex flex-col gap-2">
+        <Label id={dateId}>Date</Label>
+        <DatePicker
+          inline
+          required
+          name="task_date"
+          aria-labelledby={dateId}
+          value={taskDate}
+          onChange={setTaskDate}
         />
+      </div>
 
-        <div className="flex flex-col gap-2">
-          <Label id={dateId}>Date</Label>
-          <DatePicker
-            inline
-            required
-            name="task_date"
-            aria-labelledby={dateId}
-            value={taskDate}
-            onChange={setTaskDate}
-          />
-        </div>
+      <CheckList
+        label="Pilot classes"
+        name="pilot_classes"
+        value={selectedClasses}
+        onChange={setSelectedClasses}
+        options={compPilotClasses.map((cls) => ({ value: cls, label: cls }))}
+      />
 
-        <CheckList
-          label="Pilot classes"
-          name="pilot_classes"
-          value={selectedClasses}
-          onChange={setSelectedClasses}
-          options={compPilotClasses.map((cls) => ({ value: cls, label: cls }))}
+      <div className="flex flex-col gap-2">
+        <Label id={stopId}>
+          Task stop (
+          {zoneLabel(new Date(`${taskDate}T12:00:00Z`), timezone ?? "UTC")})
+        </Label>
+        {/* A segmented time field, not a popover — nothing to convert here,
+            and nothing that opens over the description below it. */}
+        <TimePicker
+          clearable
+          name="stop_announcement_time"
+          aria-labelledby={stopId}
+          value={stopTime}
+          onChange={setStopTime}
         />
+        <Description>
+          Only for a task stopped mid-flight. Leave empty otherwise.{" "}
+          <Explain label="Stopped tasks" className="align-middle">
+            <p>
+              Scores are recomputed under the stopped-task rules (FAI S7F
+              §13.4): a scored-back stop time, a clipped scoring window, and
+              an altitude bonus for pilots still flying.
+            </p>
+          </Explain>
+        </Description>
+      </div>
 
-        <div className="flex flex-col gap-2">
-          <Label id={stopId}>
-            Task stop (
-            {zoneLabel(new Date(`${taskDate}T12:00:00Z`), timezone ?? "UTC")})
-          </Label>
-          {/* A segmented time field, not a popover — nothing to convert here,
-              and nothing that opens over the description below it. */}
-          <TimePicker
-            clearable
-            name="stop_announcement_time"
-            aria-labelledby={stopId}
-            value={stopTime}
-            onChange={setStopTime}
-          />
-          <Description>
-            Only for a task stopped mid-flight. Leave empty otherwise.{" "}
-            <Explain label="Stopped tasks" className="align-middle">
-              <p>
-                Scores are recomputed under the stopped-task rules (FAI S7F
-                §13.4): a scored-back stop time, a clipped scoring window, and
-                an altitude bonus for pilots still flying.
-              </p>
-            </Explain>
-          </Description>
-        </div>
-
-        <SwitchList>
-          <SwitchField
-            name="submissions_closed"
-            checked={submissionsOpen}
-            onChange={setSubmissionsOpen}
-            label="Open for track submissions"
-            hint="When off, only organisers can add tracks or manual flights."
-          />
-        </SwitchList>
-      </SettingsForm>
+      <SwitchList>
+        <SwitchField
+          name="submissions_closed"
+          checked={submissionsOpen}
+          onChange={setSubmissionsOpen}
+          label="Open for track submissions"
+          hint="When off, only organisers can add tracks or manual flights."
+        />
+      </SwitchList>
 
       {/* No nav rows for the route or the weather notes, though both are
-          routed editors of this task. Each is reached from its own section on
-          the task page, beside the content it edits — which is where a
-          section-scoped manage action belongs (see the IA doc's design
-          language). Listing them here as well would duplicate those entry
-          points and, worse, frame content as settings. */}
+          routed editors of this task. Each is reached from the task page.
+          Listing them here as well would duplicate those entry points and,
+          worse, frame content as settings. */}
       <NavList label="Danger zone">
         <NavActionRow
           destructive
@@ -234,6 +227,6 @@ export function TaskSettings({
         />
       </NavList>
       <ActionErrorBanner action={deletion} />
-    </SettingsPage>
+    </SettingsForm>
   );
 }

@@ -13,12 +13,12 @@
  * - a reload rebuilds it from the URL alone — the thermal, the backdrop and
  *   the report — where the sheet was handed all three in memory;
  * - Back returns to the section on the same thermal, with the backdrop still
- *   on and at the scroll it was left at (#844), and the restore control in
- *   the map's corner is that same Back;
+ *   on and at the scroll it was left at (#844), and the bar's Back is that
+ *   same Back — the map has no restore control of its own (#863);
  * - side by side, the section opens with its default thermal named in the URL
  *   and lit in the census, though it loads from a bare-id URL whose canonical
  *   replace used to wipe the seed (#845);
- * - opened from a shared link, restore goes to the section in place of the
+ * - opened from a shared link, the bar's Back goes to the section in place of the
  *   map page rather than leaving the site.
  *
  * In the `mobile` project too (e2e/fixtures/mobile.ts): the sheet was a fixed
@@ -181,10 +181,12 @@ test("maximise is a link to the thermal map page: reload keeps it, Back returns"
   const maximise = thermalsCard(page).getByRole("link", { name: "Maximise map" });
   await expect(maximise).toHaveAttribute("href", new RegExp(`/analysis/thermals/map\\?(.*&)?thermal=${thermal}(&|$)`));
   // Somewhere down the page, so Back has an offset to restore: the control
-  // mid-screen, clear of the sticky header. Nothing scrolls after the Map
+  // a little under the bar, clear of it. (Centred was not far enough: under
+  // the bar alone the control is already in the top half of a desktop
+  // screen, and centring it scrolled nothing.) Nothing scrolls after the Map
   // toggle's REPLACE, so this also pins that the offset carries over to the
   // entry that replace made.
-  await maximise.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await maximise.evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 160));
   const leftAt = await page.evaluate(() => window.scrollY);
   expect(leftAt, "the section should have scrolled").toBeGreaterThan(0);
   const entries = await page.evaluate(() => history.length);
@@ -201,12 +203,14 @@ test("maximise is a link to the thermal map page: reload keeps it, Back returns"
     "aria-pressed",
     "true"
   );
-  await expect(page.getByRole("button", { name: "Restore map size" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Thermals" })).toBeVisible();
+  // The way back is the bar's (#863): the map has no restore control of its
+  // own, because Back does the same thing.
+  await expect(page.getByRole("button", { name: "Restore map size" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Back to Thermals" })).toBeVisible();
 
   // Sized to the screen: no sideways scroll, and the figure's box (the map
-  // and the rose over it) no taller than the viewport, so there is always
-  // page outside it to scroll by.
+  // and the rose over it) no taller than the viewport. The map has the
+  // screen under the bar to itself.
   await expectNoSidewaysScroll(page);
   const viewport = page.viewportSize()!;
   const rose = (await page.getByRole("img", { name: ROSE }).boundingBox())!;
@@ -242,18 +246,18 @@ test("maximise is a link to the thermal map page: reload keeps it, Back returns"
   await page.goBack();
   await expectSectionAsLeft();
 
-  // The restore control in the map's corner is that same Back: no new
-  // history entry, the same section.
+  // The bar's Back is that same Back: no new history entry, the same
+  // section.
   await page.goForward();
   await expect(page.getByRole("img", { name: ROSE })).toBeVisible();
-  await page.getByRole("button", { name: "Restore map size" }).click();
+  await page.getByRole("link", { name: "Back to Thermals" }).click();
   await expect.poll(() => urlState(page).path).toMatch(SECTION_PATH);
   await expect(thermalPane(page)).toBeVisible();
   expect(urlState(page).thermal).toBe(thermal);
   expect(await page.evaluate(() => history.length)).toBe(entries + 1);
 });
 
-test("opened from a shared link, restore goes to the section in its place", async ({
+test("opened from a shared link, Back goes to the section in its place", async ({
   page,
 }) => {
   // The URL the maximise link makes, opened cold in a fresh tab.
@@ -268,7 +272,7 @@ test("opened from a shared link, restore goes to the section in its place", asyn
   await expectNoSidewaysScroll(fresh);
 
   const entries = await fresh.evaluate(() => history.length);
-  await fresh.getByRole("button", { name: "Restore map size" }).click();
+  await fresh.getByRole("link", { name: "Back to Thermals" }).click();
   await expect.poll(() => urlState(fresh).path).toMatch(SECTION_PATH);
   await expect(thermalPane(fresh)).toBeVisible();
   expect(urlState(fresh).thermal).toBe(thermal);

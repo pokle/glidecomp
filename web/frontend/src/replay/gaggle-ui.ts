@@ -187,21 +187,21 @@ export class GaggleUI {
     this.rows.clear();
     if (episodes.length === 0) {
       const empty = document.createElement('li');
-      empty.className = 'px-3 py-2 text-[11px] text-slate-500';
+      empty.className = 'px-3 py-2 text-xs text-slate-500';
       empty.textContent = this.activeOnly ? 'No gaggle right now.' : 'No gaggles.';
       list.appendChild(empty);
       return;
     }
     for (const ep of episodes) {
       const li = renderElement<HTMLLIElement>(html`
-        <li class="flex items-start gap-2 px-3 py-1.5 hover:bg-slate-700/40 cursor-pointer select-none border-b border-slate-800/60">
+        <li class="flex items-start gap-2 px-3 py-1.5 pointer-coarse:min-h-11 hover:bg-slate-700/40 cursor-pointer select-none border-b border-slate-800/60">
           <span class="shrink-0 mt-0.5 w-3 h-3 rounded-sm" style="background:${css(gaggleColor(ep.id))}"></span>
           <span class="flex-1 min-w-0">
             <span class="flex justify-between gap-2">
               <span class="font-medium">${ep.peakSize} pilots</span>
-              <span class="text-[10px] text-slate-500 tabular-nums">${this.d.fmtTime(ep.tStart)}</span>
+              <span class="text-xs text-slate-500 tabular-nums">${this.d.fmtTime(ep.tStart)}</span>
             </span>
-            <span class="block text-[10px] text-slate-500 truncate">${this.tpLabel(ep, true)}${this.memberNames(ep)}</span>
+            <span class="block text-xs text-slate-500 truncate">${this.tpLabel(ep, true)}${this.memberNames(ep)}</span>
           </span>
         </li>`);
       li.addEventListener('pointerenter', () => this.d.onHighlight(ep.id));

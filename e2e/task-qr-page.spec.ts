@@ -85,21 +85,31 @@ const heading = (page: Page) => page.getByRole("heading", { level: 1, name: "QR 
 const qr = (page: Page) =>
   page.getByRole("img", { name: `${TASK_NAME} · scan with XCTrack, Flyskyhy or any XCTSK-aware app` });
 
+/** "QR code" is a row of the task page's ⋯ menu (issue #863). */
+async function openFromTask(page: Page) {
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "QR code" }).click();
+}
+
 test("the task page links to the QR page; a reload keeps it and Back leaves it", async ({
   page,
 }) => {
   await page.goto(`/comp/${open.compId}/task/${open.taskId}`);
   await expect(page.getByRole("heading", { level: 1, name: TASK_NAME })).toBeVisible();
 
-  await page.getByRole("link", { name: "QR code" }).click();
+  await openFromTask(page);
   // Compared by ids: the page settles a bare-id URL on its slugged one.
   await expect(page).toHaveURL(
     new RegExp(`/comp/[^/]*${open.compId}/task/[^/]*${open.taskId}/qr$`)
   );
   await expect(heading(page)).toBeVisible();
   await expect(qr(page)).toBeVisible();
-  // A page, not an overlay over the task page.
+  // A page, not an overlay over the task page. A read page with nothing to
+  // do on it: the bar has Back to the task, and no ⋯ and no Done.
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: `Back to ${TASK_NAME}` })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More actions" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(Done|Close)$/ })).toHaveCount(0);
 
   // Big enough for a camera across a table, and on screen whole.
   const viewport = page.viewportSize()!;
@@ -140,7 +150,7 @@ test("a hidden comp's QR page keeps its share key, and the id alone finds nothin
 
   await page.goto(`/comp/${keyed}/task/${hidden.taskId}`);
   await expect(page.getByRole("heading", { level: 1, name: TASK_NAME })).toBeVisible();
-  await page.getByRole("link", { name: "QR code" }).click();
+  await openFromTask(page);
   await expect(page).toHaveURL(
     new RegExp(`/comp/[^/]*${keyed}/task/[^/]*${hidden.taskId}/qr$`)
   );

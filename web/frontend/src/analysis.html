@@ -5,7 +5,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GlideComp - IGC Analysis</title>
+    <title>GlideComp - Climbs and glides</title>
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.webmanifest">
@@ -49,6 +49,140 @@
             class="fixed top-0 bottom-0 left-0 right-0 z-30 hidden bg-black/50 md:hidden"
         ></div>
 
+        <!-- The page bar (#869): the app's three slots (react/rac/page-bar.tsx;
+             the content pages' twin is static/src/components/SiteHeader.astro,
+             the replay's replay.html), as pills floating over the map.
+               leading   Back to the page above
+               centre    the page's name over a menu of where this page is:
+                         "Climbs and glides" for one track, "All tracks" for
+                         several (setPageMode in page-bar.ts)
+               trailing  Analysis (the side panel), then ⋯ for the page's actions
+             main.ts (page-bar.ts) fills the trail from the URL; the markup is
+             the My Flights trail, so the bar works before any fetch. The
+             header takes no pointer events, so the map stays reachable between
+             the pills. On a wide screen its right edge follows the panel's
+             left edge, so the panel never covers ⋯. -->
+        <header id="page-bar" data-page-bar
+            class="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-2 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] max-[400px]:gap-1.5 max-[400px]:px-2">
+            <a id="bar-back" href="/u/me" aria-label="Back to My Flights" class="bar-icon">
+                <!-- lucide chevron-left -->
+                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </a>
+
+            <details id="bar-title-menu" data-bar-menu class="pointer-events-auto relative mx-auto min-w-0 max-w-md flex-1">
+                <summary id="bar-title" aria-label="Climbs and glides: go to another page" class="bar-glass bar-summary flex h-11 cursor-pointer flex-col justify-center rounded-full px-4 text-center max-[400px]:px-3">
+                    <!-- Spans, not paragraphs: a <summary> holds phrasing content. -->
+                    <span data-page-name class="block truncate text-[0.9375rem] leading-5 font-semibold">Climbs and glides</span>
+                    <span aria-hidden="true" class="flex min-w-0 items-center justify-center gap-0.5 text-xs leading-4 text-muted-foreground">
+                        <span id="bar-trail" class="truncate">My Flights</span>
+                        <!-- lucide chevron-down -->
+                        <svg class="shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    </span>
+                </summary>
+                <nav aria-label="Pages" class="bar-panel left-1/2 min-w-64 -translate-x-1/2">
+                    <p class="bar-head">You are here</p>
+                    <!-- the trail's rows (page-bar.ts), then this page -->
+                    <ul id="bar-here">
+                        <li><a href="/u/me" class="bar-row" style="padding-left:12px">My Flights</a></li>
+                        <li id="bar-current">
+                            <span aria-current="page" class="bar-row font-semibold" style="padding-left:26px">
+                                <span data-page-name class="min-w-0 flex-1">Climbs and glides</span>
+                                <svg aria-hidden="true" class="shrink-0 text-link" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                            </span>
+                        </li>
+                    </ul>
+                    <div class="bar-rule"></div>
+                    <p class="bar-head">Elsewhere</p>
+                    <ul>
+                        <li data-bar-elsewhere="/comp"><a href="/comp" class="bar-row">Competitions</a></li>
+                        <li data-bar-elsewhere="/u/me"><a href="/u/me" class="bar-row">My Flights</a></li>
+                        <li data-bar-elsewhere="/submit"><a href="/submit" class="bar-row">Submit track</a></li>
+                    </ul>
+                </nav>
+            </details>
+
+            <!-- The side panel: the page's main thing beside ⋯ (owner decision, #869).
+                 "Lists" for one track (Events, Glides, Climbs, Sinks), "Scores"
+                 for several (setPageMode). Under 400 px it is a round icon,
+                 its name kept for a screen reader, so the title has room. -->
+            <button type="button" id="analysis-toggle" aria-expanded="false" aria-controls="waypoint-sidebar"
+                class="bar-glass pointer-events-auto relative flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full px-4 text-[0.9375rem] font-medium hover:bg-muted max-[400px]:w-11 max-[400px]:px-0">
+                <!-- lucide list, for one track's lists; lucide list-ordered, for the
+                     field's score table (setPageMode). Not a bar chart: that icon
+                     marks task and comp analysis in the app's menus. -->
+                <svg data-panel-icon="one" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg>
+                <svg data-panel-icon="field" hidden aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5h10"/><path d="M11 12h10"/><path d="M11 19h10"/><path d="M4 4h1v5"/><path d="M4 9h2"/><path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02"/></svg>
+                <span id="analysis-toggle-label" class="max-[400px]:sr-only">Lists</span>
+            </button>
+
+            <details id="bar-more" data-bar-menu class="pointer-events-auto relative shrink-0">
+                <summary aria-label="More actions" class="bar-icon bar-summary">
+                    <!-- lucide ellipsis -->
+                    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                </summary>
+                <div id="bar-more-panel" class="bar-panel right-0 min-w-72">
+                    <p class="bar-head">Show</p>
+                    <ul>
+                            <li><button type="button" id="menu-toggle-task" class="bar-row" aria-pressed="false"><span class="min-w-0 flex-1">Task</span><svg aria-hidden="true" class="bar-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button></li>
+                            <li><button type="button" id="menu-toggle-track" class="bar-row" aria-pressed="false"><span class="min-w-0 flex-1">Track</span><svg aria-hidden="true" class="bar-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button></li>
+                            <li><button type="button" id="menu-show-speed" class="bar-row" aria-pressed="false"><span class="min-w-0 flex-1">Speed and glide on the track</span><svg aria-hidden="true" class="bar-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button></li>
+                            <li><button type="button" id="menu-3d-track" class="bar-row" aria-pressed="false"><span class="min-w-0 flex-1">3D</span><svg aria-hidden="true" class="bar-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button></li>
+                            <li><button type="button" id="menu-annotate" class="bar-row" aria-pressed="false"><span class="min-w-0 flex-1">Draw on the map</span><kbd class="bar-kbd">D</kbd><svg aria-hidden="true" class="bar-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button></li>
+                    </ul>
+                    <div class="bar-rule"></div>
+                    <p class="bar-head">Open</p>
+                    <ul>
+                            <li><button type="button" id="menu-open-igc" class="bar-row">Open a track or task file…</button></li>
+                            <li><button type="button" id="menu-import-task" class="bar-row">XContest task…</button></li>
+                            <li><button type="button" id="menu-import-airscore" class="bar-row">AirScore task…</button></li>
+                        <!-- The samples reload the page with ?track= / ?sampleComp=,
+                             neither of which is the public competition deep link,
+                             so an anonymous reader would meet the sign-in gate on
+                             the way back in (issue #666): account only. -->
+                        <li data-requires-account>
+                            <details id="bar-samples">
+                                <summary class="bar-row bar-summary cursor-pointer"><span class="min-w-0 flex-1">Samples…</span>
+                                    <svg aria-hidden="true" class="bar-disclosure shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                                </summary>
+                                <ul class="pl-3">
+                            <li><button type="button" id="sample-tushar" class="bar-row">Tushar Pokle - Moyes Gecko / SeeYou Navigator - Corryong 2025-01-05</button></li>
+                            <li><button type="button" id="sample-bells-apollo" class="bar-row">Tushar Pokle - Moyes Gecko 155 / Flyskyhy - Bells Beach Run 2026-03-08</button></li>
+                            <li><button type="button" id="sample-comp-corryong" class="bar-row">Corryong Cup 2026 - Task 1 (33 pilots)</button></li>
+                                </ul>
+                            </details>
+                        </li>
+                        <li data-requires-account><a href="/u/me" class="bar-row">My Flights</a></li>
+                    </ul>
+                    <div class="bar-rule"></div>
+                    <p class="bar-head">Task</p>
+                    <ul>
+                            <li class="hidden"><button type="button" id="menu-download-task" class="bar-row">Download task (.xctsk)</button></li>
+                            <li><button type="button" id="menu-clear-session" class="bar-row">Unload task and track</button></li>
+                    </ul>
+                    <div class="bar-rule"></div>
+                    <p class="bar-head">Settings</p>
+                    <ul>
+                            <li><button type="button" id="menu-competition-settings" class="bar-row">Scoring settings…</button></li>
+                            <li><button type="button" id="menu-configure-settings" class="bar-row">Settings…</button></li>
+                            <li><button type="button" id="menu-feedback" class="bar-row">Send feedback</button></li>
+                        <!-- A debug tool for the map's label style: development only (main.ts) -->
+                            <li class="hidden" data-dev-only><button type="button" id="menu-text-shadow-tuner" class="bar-row">Text shadow tuner</button></li>
+                    </ul>
+                </div>
+            </details>
+        </header>
+
+        <!-- The page's one <h1>, and the trail as real links with the menus
+             closed (accessibility standard §4.3). Out of the Tab order: the
+             title menu is the way to them by keyboard. -->
+        <h1 data-page-name class="sr-only">Climbs and glides</h1>
+        <nav aria-label="Breadcrumb" class="sr-only">
+            <ol id="breadcrumbs">
+                <li><a href="/u/me" tabindex="-1">My Flights</a></li>
+                <li><span aria-current="page" data-page-name>Climbs and glides</span></li>
+            </ol>
+        </nav>
+
         <!-- Map container -->
         <div class="relative h-full w-full">
             <!-- Drop zone overlay -->
@@ -66,17 +200,8 @@
             <!-- Map -->
             <div id="map"></div>
 
-            <!-- Way back into the app for shared/direct links (IA v2 #277):
-                 real breadcrumb links, centered top so the map controls keep
-                 the corners. main.ts appends "› comp › task" links when a
-                 competition task is loaded. -->
-            <nav id="breadcrumbs" aria-label="Breadcrumb"
-                class="absolute left-1/2 top-3 z-20 flex max-w-[calc(100vw-140px)] -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/55 px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-white backdrop-blur-sm">
-                <a href="/" class="shrink-0 hover:underline underline-offset-4">GlideComp</a>
-            </nav>
-
-            <!-- Status alert overlay (below the breadcrumb bar) -->
-            <div class="pointer-events-none absolute left-1/2 top-14 z-10 w-full max-w-md -translate-x-1/2 px-4">
+            <!-- Status alert overlay (below the page bar) -->
+            <div class="pointer-events-none absolute left-1/2 top-[calc(4.25rem+env(safe-area-inset-top))] z-10 w-full max-w-md -translate-x-1/2 px-4">
                 <div id="status" class="alert pointer-events-auto hidden" role="alert">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"/>
@@ -87,7 +212,7 @@
                         <p id="status-message"></p>
                     </div>
                     <button
-                        class="btn btn-ghost btn-icon -mr-2"
+                        class="btn btn-ghost btn-icon touch-target -mr-2"
                         data-dismiss-alert
                         aria-label="Close alert"
                     >
@@ -100,217 +225,6 @@
             </div>
         </div>
     </main>
-
-    <!-- Command Menu Dialog -->
-    <dialog id="command-dialog" class="command-dialog" data-backdrop-close>
-        <div class="command">
-            <header>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="11" cy="11" r="8"/>
-                    <path d="m21 21-4.3-4.3"/>
-                </svg>
-                <input
-                    type="text"
-                    class="text-base"
-                    placeholder="Search options..."
-                    role="combobox"
-                    aria-expanded="true"
-                    aria-controls="command-menu"
-                >
-            </header>
-            <div role="menu" id="command-menu">
-                <!-- Feedback -->
-                <div role="group">
-                    <div role="menuitem" id="menu-feedback" data-keywords="feedback email bug feature request contact">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                        </svg>
-                        <span>Email Feedback</span>
-                    </div>
-                </div>
-
-                <hr role="separator">
-
-                <!-- File -->
-                <div role="group" aria-labelledby="file-heading">
-                    <div role="heading" id="file-heading">File</div>
-                    <div role="menuitem" id="menu-open-igc" data-keywords="load open igc file upload choose track">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="17 8 12 3 7 8"/>
-                            <line x1="12" x2="12" y1="3" y2="15"/>
-                        </svg>
-                        <span>Load track (IGC) / task (XCTSK) file</span>
-                    </div>
-                    <div role="menuitem" id="menu-import-task" data-keywords="load import xcontest task code">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"/>
-                            <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
-                            <path d="M2 12h20"/>
-                        </svg>
-                        <span>Load XContest task</span>
-                    </div>
-                    <div role="menuitem" id="menu-import-airscore" data-keywords="load import airscore task track competition highcloud">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
-                        </svg>
-                        <span>Load AirScore task</span>
-                    </div>
-                    <div role="menuitem" id="menu-download-task" data-keywords="download export save task xctsk file" class="hidden">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" x2="12" y1="15" y2="3"/>
-                        </svg>
-                        <span>Download task (.xctsk)</span>
-                    </div>
-                    <div role="menuitem" id="menu-clear-session" data-keywords="unload clear reset new start fresh task track">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M3 6h18"/>
-                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
-                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-                            <line x1="10" x2="10" y1="11" y2="17"/>
-                            <line x1="14" x2="14" y1="11" y2="17"/>
-                        </svg>
-                        <span>Unload all (task & track)</span>
-                    </div>
-                </div>
-
-                <hr role="separator">
-
-                <!-- Display Options -->
-                <div role="group" aria-labelledby="display-options-heading">
-                    <div role="heading" id="display-options-heading">Display Options</div>
-                    <div role="menuitem" id="menu-3d-track" data-keywords="3d three dimensional terrain">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="m21 16-4 4-4-4"/>
-                            <path d="M17 20V4"/>
-                            <path d="m3 8 4-4 4 4"/>
-                            <path d="M7 4v16"/>
-                        </svg>
-                        <span>Toggle 3D Track</span>
-                        <span class="text-muted-foreground" id="3d-track-status">(off)</span>
-                    </div>
-                    <div role="menuitem" id="menu-toggle-task" data-keywords="task turnpoint cylinder route hide show">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"/>
-                            <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
-                            <path d="M2 12h20"/>
-                        </svg>
-                        <span>Toggle Task</span>
-                        <span class="text-muted-foreground" id="task-visibility-status">(on)</span>
-                    </div>
-                    <div role="menuitem" id="menu-toggle-track" data-keywords="track flight path trace hide show igc">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
-                        </svg>
-                        <span>Toggle Track</span>
-                        <span class="text-muted-foreground" id="track-visibility-status">(on)</span>
-                    </div>
-                    <div role="menuitem" id="menu-show-speed" data-keywords="speed glide overlay chevrons labels show clear all track metrics altitude">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                        </svg>
-                        <span id="show-speed-label">Show track metrics</span>
-                        <span class="text-muted-foreground" id="show-speed-status">(off)</span>
-                    </div>
-                    <div role="menuitem" id="menu-annotate" data-keywords="annotate draw sketch scrawl pen pencil marker freehand">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>
-                            <path d="m15 5 4 4"/>
-                        </svg>
-                        <span>Annotate Map</span>
-                        <span class="text-muted-foreground" id="annotate-status">(off) D</span>
-                    </div>
-                    <div role="menuitem" id="menu-text-shadow-tuner" data-keywords="debug text shadow tuner label glide style css">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="3"/>
-                            <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
-                            <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
-                            <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
-                            <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-                        </svg>
-                        <span>Text Shadow Tuner</span>
-                    </div>
-                </div>
-
-                <hr role="separator">
-
-                <!-- Settings -->
-                <div role="group" aria-labelledby="settings-heading">
-                    <div role="heading" id="settings-heading">Settings</div>
-                    <div role="menuitem" id="menu-competition-settings" data-keywords="competition scoring gap parameters paragliding hang gliding nominal distance time leading arrival">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
-                        </svg>
-                        <span>Competition Settings...</span>
-                    </div>
-                    <div role="menuitem" id="menu-configure-settings" data-keywords="units configure settings speed altitude distance climb rate vario thresholds detection thermal glide circle">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                        <span>Settings...</span>
-                    </div>
-                </div>
-
-                <hr role="separator" data-requires-account>
-
-                <!-- Sample Flights. Both this group and the sample competition
-                     below reload the page with ?track= / ?sampleComp=, neither
-                     of which is the public competition deep link — so they are
-                     hidden from an anonymous reader, who would be met by the
-                     sign-in gate on the way back in (issue #666). -->
-                <div role="group" aria-labelledby="samples-heading" data-requires-account>
-                    <div role="heading" id="samples-heading">Sample Flights</div>
-                    <div role="menuitem" id="sample-tushar" data-keywords="tushar pokle moyes gecko seeyou navigator corryong sample flight">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
-                        </svg>
-                        <span>Tushar Pokle - Moyes Gecko / SeeYou Navigator - Corryong 2025-01-05</span>
-                    </div>
-                    <div role="menuitem" id="sample-bells-apollo" data-keywords="tushar pokle airborne sting3 flyskyhy bells beach apollo bay sample flight">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
-                        </svg>
-                        <span>Tushar Pokle - Moyes Gecko 155 / Flyskyhy - Bells Beach Run 2026-03-08</span>
-                    </div>
-
-                </div>
-
-                <!-- Sample Competitions -->
-                <hr role="separator" data-requires-account>
-                <div role="group" aria-labelledby="sample-comps-heading" data-requires-account>
-                    <div role="heading" id="sample-comps-heading">Sample Competitions</div>
-                    <div role="menuitem" id="sample-comp-corryong" data-keywords="corryong cup 2026 competition scoring sample hanggliding race task">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
-                            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-                            <path d="M4 22h16"/>
-                            <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
-                            <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
-                            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
-                        </svg>
-                        <span>Corryong Cup 2026 - Task 1 (33 pilots)</span>
-                    </div>
-                </div>
-
-                <!-- Stored Tasks (dynamically populated) -->
-                <hr role="separator" id="stored-tasks-separator" class="hidden">
-                <div role="group" aria-labelledby="stored-tasks-heading" id="stored-tasks-group" class="hidden">
-                    <div role="heading" id="stored-tasks-heading">Stored Tasks</div>
-                    <!-- Items inserted dynamically -->
-                </div>
-
-                <!-- Stored Tracks (dynamically populated) -->
-                <hr role="separator" id="stored-tracks-separator" class="hidden">
-                <div role="group" aria-labelledby="stored-tracks-heading" id="stored-tracks-group" class="hidden">
-                    <div role="heading" id="stored-tracks-heading">Stored Tracks</div>
-                    <!-- Items inserted dynamically -->
-                </div>
-            </div>
-        </div>
-    </dialog>
 
     <!-- Import Task Dialog (input-only, no command menu) -->
     <dialog id="import-task-dialog" class="command-dialog" data-backdrop-close>

@@ -111,7 +111,8 @@ test("Copy to a new competition makes a hidden copy with the waypoints and pilot
   await page.goto(`/comp/${source}/settings`);
   await page.getByRole("link", { name: /Copy to a new competition/ }).click();
   await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${source}[^/]*/copy$`));
-  await expect(h1(page, "Copy to a new competition")).toBeVisible({ timeout: 20_000 });
+  // The bar's title is the short name; the sentence is the row that opens it.
+  await expect(h1(page, "Copy competition")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // Next year's name, suggested.
@@ -120,7 +121,12 @@ test("Copy to a new competition makes a hidden copy with the waypoints and pilot
   await expect(page.getByRole("checkbox", { name: /Waypoints/ })).toBeChecked();
   await expect(page.getByRole("checkbox", { name: /Pilots/ })).toBeChecked();
 
-  await page.getByRole("button", { name: "Create copy" }).click();
+  // Create copy is in the bar, live while the copy has a name.
+  const createCopy = page.getByRole("button", { name: "Create copy" });
+  await name.fill("");
+  await expect(createCopy).toBeDisabled();
+  await name.fill(sourceName.replace("2026", "2027"));
+  await createCopy.click();
 
   // The new comp, on its keyed URL (it starts hidden).
   await expect(page).not.toHaveURL(new RegExp(source));
@@ -166,16 +172,20 @@ test("Copy pilots from another competition adds only the pilots not already here
   await expect(page.getByRole("grid", { name: "Pilots" }).getByRole("row").first()).toBeVisible({
     timeout: 20_000,
   });
-  await page.getByRole("button", { name: "Roster actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Copy from another competition…" }).click();
 
   await expect(page).toHaveURL(/\/pilots\/copy$/);
-  await expect(h1(page, "Copy pilots from another competition")).toBeVisible({ timeout: 20_000 });
+  // The bar says "Copy pilots"; the sentence is the ⋯ row that opened it.
+  await expect(h1(page, "Copy pilots")).toBeVisible({ timeout: 20_000 });
   await page.getByRole("link", { name: new RegExp(`Pilots Last Year ${testInfo.project.name}`) }).click();
 
   // The chosen competition is in the URL: a reload keeps the review.
   await expect(page).toHaveURL(new RegExp(`/pilots/copy\\?from=${lastYear}$`));
-  await expect(h1(page, /^Copy pilots from /)).toBeVisible({ timeout: 20_000 });
+  await expect(h1(page, "Copy pilots")).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator("p", { hasText: /^Copy pilots from / })).toBeVisible({
+    timeout: 20_000,
+  });
   await expect(page.getByRole("main")).toContainText("1 to copy · 1 already here");
   await expect(page.getByRole("main")).toContainText(
     "Already on this roster as T. Smith (same CIVL ID)"
@@ -203,7 +213,10 @@ test("Copy a route lists the nearest first and loads the choice as unsaved work"
   const task = await createTask(thisYear, "Day 1");
 
   await page.goto(`/comp/${thisYear}/task/${task}/route`);
-  await page.getByRole("button", { name: "Copy from another competition" }).click();
+  // Import and export are behind one row of the route's ⋯ menu (issue #863).
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Import or export", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Copy from another competition…" }).click();
   await expect(page).toHaveURL(/\/route\/copy$/);
   await expect(h1(page, "Copy a route")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("status").filter({ hasText: "Nearest to this competition’s waypoints first." })).toBeVisible({

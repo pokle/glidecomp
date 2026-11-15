@@ -262,9 +262,10 @@ test.describe("the pilot report card", () => {
    *
    * The report card is public and server-rendered, so most of its readers have
    * no session — the pilot who was sent the link, their club, a meet director
-   * on somebody else's laptop. Under the map it offers "Open full track in the
-   * analysis map", and that link used to be drawn for signed-in visitors only,
-   * because the analysis viewer bounced everyone else to sign-in.
+   * on somebody else's laptop. Its bar's ⋯ menu offers "Open the track on the
+   * map" (a button over the map until #863, where it sat on top of the map's
+   * own controls), and that link used to be drawn for signed-in visitors
+   * only, because the analysis viewer bounced everyone else to sign-in.
    *
    * What changed is deliberately one URL shape wide: `?compId=…&taskId=…`
    * (plus `pilotId`) opens with no session, and nothing else does. The three
@@ -282,10 +283,25 @@ test.describe("the pilot report card", () => {
       const mapbox = await installMapbox(context);
       await page.goto(cardUrl);
 
-      const link = page.getByRole("link", {
-        name: "Open full track in the analysis map (opens in a new tab)",
-      });
-      await expect(link).toBeVisible({ timeout: 30_000 });
+      // The action is the first row of the bar's ⋯ menu, for a reader with no
+      // session too — and no longer a button over the map.
+      const more = page.getByRole("button", { name: "More actions" });
+      await expect(more).toBeVisible({ timeout: 30_000 });
+      await more.click();
+      await expect(
+        page.getByRole("menuitem", { name: "Climbs and glides" })
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(
+        page.getByRole("link", { name: /Open full track in the analysis map/ })
+      ).toHaveCount(0);
+
+      // The same link is in the markup with the menu closed (the bar's
+      // visually hidden "Page actions" list), which is where its href is read.
+      const link = page
+        .getByRole("navigation", { name: "Page actions" })
+        .getByRole("link", { name: "Climbs and glides" });
+      await expect(link).toHaveCount(1);
       // `pilotId` is what narrows the viewer to this one track, which is what
       // keeps its panel in single-track mode. Without it the reader lands on
       // the whole field and the per-track tabs are replaced by a score table
@@ -303,10 +319,16 @@ test.describe("the pilot report card", () => {
       // Not bounced. This is the assertion the whole issue is about.
       await expect(page).toHaveURL(/\/analysis\?compId=/);
 
-      // The task arrived: the breadcrumbs are only built once it resolved.
+      // The task arrived: the bar's trail is only named once it resolved,
+      // and with a pilot in the link, Back is that pilot's report card.
       await expect(page.locator("#breadcrumbs")).toContainText("Task 4", {
         timeout: 60_000,
       });
+      await expect(page.locator("#breadcrumbs")).toContainText(cardPilot.pilot_name);
+      await expect(page.getByRole("link", { name: `Back to ${cardPilot.pilot_name}` })).toHaveAttribute(
+        "href",
+        new RegExp(`/task/[^/]*${fixture.taskId}/pilot/[^/]*${cardPilot.comp_pilot_id}$`),
+      );
 
       // And the pilot's track was parsed and analysed, under their registered
       // name rather than whatever the IGC header says.
@@ -317,13 +339,13 @@ test.describe("the pilot report card", () => {
 
       // All six single-track tabs — the tooling the report card does not have.
       // The panel is a sidebar over the map, collapsed to zero width until the
-      // reader opens it from the "Analysis" control. Collapsed is not the same
+      // reader opens it from "Lists" in the page bar. Collapsed is not the same
       // as absent: it keeps its markup (and enough of a box to look "visible"
       // to a bounding-box check), so its own `aria-hidden` is what says
       // whether it is open.
       const panel = page.locator("#waypoint-sidebar");
       if ((await panel.getAttribute("aria-hidden")) !== "false") {
-        await page.getByRole("button", { name: "Toggle analysis panel" }).click();
+        await page.getByRole("button", { name: "Lists", exact: true }).click();
       }
       await expect(panel).toHaveAttribute("aria-hidden", "false");
       const tabs = page.locator("#tab-row-single");
@@ -404,9 +426,9 @@ test.describe("the pilot report card", () => {
         );
 
         // And nothing about the competition leaked on the way to saying so:
-        // the breadcrumbs are built only after the task resolved, and the
-        // title is the page's own.
-        await expect(page.locator("#breadcrumbs")).toHaveText("GlideComp");
+        // the bar's trail keeps its generic names until the task resolves,
+        // and the title is the page's own.
+        await expect(page.locator("#breadcrumbs li")).toHaveText(["Competitions", "Competition", "Task", "All tracks"]);
         expect(await page.locator("body").innerText()).not.toContain(name);
         expect(await page.title()).not.toContain(name);
         expect(await page.title()).not.toContain("Secret task");

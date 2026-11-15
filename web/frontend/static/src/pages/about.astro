@@ -1,7 +1,6 @@
 ---
 /** About page. Ported from react/pages/About.tsx. */
 import Base from "../layouts/Base.astro";
-import BackLink from "../components/BackLink.astro";
 
 // Simple "name — description (licence)" acknowledgement sections, in display
 // order. The licence label is the one the project itself publishes; keep it in
@@ -93,11 +92,10 @@ const build = [
 ];
 ---
 
-<Base title="GlideComp - About">
+<Base page="about" title="GlideComp - About">
   <div class="min-h-screen bg-background text-foreground py-6 px-page-safe">
     <div class="max-w-2xl mx-auto">
       <header class="mb-10">
-        <BackLink href="/" />
         <h1 class="text-3xl font-bold flex items-center gap-3">
           <img src="/icon.svg" alt="GlideComp logo" class="w-8 h-8" />
           About GlideComp

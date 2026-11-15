@@ -70,8 +70,11 @@ describe("AppErrorBoundary", () => {
     expect(heading?.textContent).toBe("Something went wrong");
     expect(document.activeElement).toBe(heading);
     expect(container.textContent).toContain("Reloading usually fixes it");
-    const buttons = [...container.querySelectorAll("button, a")].map((b) => b.textContent);
-    expect(buttons).toEqual(["Reload page", "Go to the home page"]);
+    // The bar back control (an icon, named by its label), then the two ways out.
+    const buttons = [...container.querySelectorAll("button, a")].map(
+      (b) => b.getAttribute("aria-label") ?? b.textContent
+    );
+    expect(buttons).toEqual(["Back to the home page", "Reload page", "Go to the home page"]);
     expect(container.querySelector("a")?.getAttribute("href")).toBe("/");
   });
 

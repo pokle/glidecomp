@@ -211,13 +211,14 @@ export function SignIn() {
         </p>
 
         <div className="mt-6 flex flex-col gap-2">
-          <Button onPress={() => void signInWithGoogle(next)}>
+          <Button className="h-11" onPress={() => void signInWithGoogle(next)}>
             Continue with Google
             {lastMethod === "google" ? <LastUsedPill /> : null}
           </Button>
           {DEV_SIGN_IN_ENABLED ? (
             <Button
               variant="outline"
+              className="h-11"
               onPress={async () => {
                 setError(null);
                 const { error: err } = await signInAsDev(undefined, undefined, next);
@@ -261,12 +262,14 @@ export function SignIn() {
               value={email}
               onChange={setEmail}
               placeholder="you@example.com"
+              className="[&_input]:h-11"
             />
             {/* The only feedback while the code is being sent — this step has
                 no visible status line — so isPending, not a disabled swap. */}
             <Button
               type="submit"
               variant="outline"
+              className="h-11"
               isPending={busy}
               pendingLabel="Sending your code"
             >
@@ -296,14 +299,14 @@ export function SignIn() {
             >
               <InputOTPGroup>
                 {[0, 1, 2, 3, 4, 5].map((i) => (
-                  <InputOTPSlot key={i} index={i} className="size-10 text-base" />
+                  <InputOTPSlot key={i} index={i} className="size-11 text-base" />
                 ))}
               </InputOTPGroup>
             </InputOTP>
             <div className="flex items-center justify-between gap-2">
               <Button
                 variant="ghost"
-                size="sm"
+                className="h-11"
                 isDisabled={busy}
                 onPress={() => {
                   setStep("email");
@@ -320,7 +323,7 @@ export function SignIn() {
                   visible "Checking code…" status above owns that feedback. */}
               <Button
                 variant="outline"
-                size="sm"
+                className="h-11"
                 isDisabled={busy || cooldown > 0}
                 onPress={() => void send(email, true)}
               >
@@ -339,7 +342,10 @@ export function SignIn() {
 
       <p className="mt-6 text-center text-sm text-muted-foreground">
         {/* Competitions list is public — an escape hatch that isn't sign-in. */}
-        <Link to="/comp" className="underline underline-offset-4 hover:text-foreground">
+        <Link
+          to="/comp"
+          className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground"
+        >
           Browse competitions without signing in
         </Link>
       </p>

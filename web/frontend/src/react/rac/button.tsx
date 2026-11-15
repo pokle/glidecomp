@@ -44,11 +44,11 @@ const buttonVariants = cva(
       // gets a comfortable target on the sizes that matter (WCAG 2.5.8 wants
       // 24px minimum; `sm` is for dense table rows and clears it).
       size: {
-        default: "h-9 gap-1.5 px-4",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-10 gap-2 px-5 text-[0.9375rem]",
-        icon: "size-9",
-        "icon-sm": "size-7 rounded-[min(var(--radius-md),12px)]",
+        default: "h-9 gap-1.5 px-4 pointer-coarse:h-11",
+        sm: "touch-target h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-10 gap-2 px-5 text-[0.9375rem] pointer-coarse:h-11",
+        icon: "size-9 pointer-coarse:size-11",
+        "icon-sm": "touch-target size-7 rounded-[min(var(--radius-md),12px)]",
       },
     },
     defaultVariants: {

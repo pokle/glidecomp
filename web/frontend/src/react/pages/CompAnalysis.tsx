@@ -16,7 +16,7 @@ import { compAnalysisRows, hasAnyCorrelation } from "../analysis/types";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "../components/NotFound";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
@@ -37,7 +37,7 @@ import {
 import { ConsistencyChip } from "../analysis/ConsistencyChip";
 import { ConsistencyMap } from "../analysis/charts/ConsistencyMap";
 import { MetricGlossary, type GlossaryEntry } from "../analysis/MetricGlossary";
-import { underComp, COMP_ANALYSIS_LABEL } from "../lib/crumbs";
+import { underComp, compPages, COMP_ANALYSIS_LABEL } from "../lib/crumbs";
 import { compUrlId, idFromSegment, compAnalysisPath, taskAnalysisPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { usePollWhile } from "../lib/use-poll-while";
@@ -52,10 +52,6 @@ import {
 } from "../analysis/types";
 import { useAdminView } from "../lib/user";
 import { fetchWithRetry, type CompDetailData } from "../comp/types";
-import {
-  CompSectionNav,
-  compSectionNavProps,
-} from "../comp/CompSectionNav";
 
 export function CompAnalysis() {
   const { compId: compParam } = useParams<{ compId: string }>();
@@ -208,73 +204,81 @@ export function CompAnalysis() {
 
   const crumbs = underComp(compId, comp?.name ?? data?.comp_name);
   const isAdmin = useAdminView(!!comp?.is_admin);
-  const sectionNav = comp ? (
-    <CompSectionNav {...compSectionNavProps(compId, comp, isAdmin)} />
-  ) : (
-    <CompSectionNav
-      compId={compId}
-      compName={canonicalName ?? ""}
-      isAdmin={isAdmin}
-    />
-  );
-
-  // Gate on `status` only, never on the user session: the content is public,
-  // and useUser().loading is true throughout SSR + the first hydration render,
-  // so gating on it would make the server emit this skeleton instead of the
-  // seeded report.
-  if (status === "loading") {
-    return (
-      <div className="font-hyperlegible">
-        {sectionNav}
-        <Loading className="text-sm">Loading the comp analysis…</Loading>
-      </div>
-    );
-  }
 
   if (status === "notFound") {
     return <NotFound title="Comp analysis not found" />;
   }
 
-  if (status === "forbidden" || status === "error") {
+  // Gate on `status` only, never on the user session: the content is public,
+  // and useUser().loading is true throughout SSR + the first hydration render,
+  // so gating on it would make the server emit a skeleton instead of the
+  // seeded report.
+  const ready = status === "ready";
+  const selectClass = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("class", value);
+    setSearchParams(next, { replace: true });
+  };
+
+  // The bar is there before the report: the competition's other pages are in
+  // the title's menu (this one ticked), and the class select sticks under it —
+  // it filters the WHOLE report rather than any single table.
+  const bar = (
+    <PageBar
+      title={COMP_ANALYSIS_LABEL}
+      trail={crumbs}
+      related={compPages(
+        compId,
+        comp ?? (canonicalName ? { name: canonicalName } : null),
+        isAdmin,
+        COMP_ANALYSIS_LABEL
+      )}
+      below={
+        ready && classes.length > 1 ? (
+          <SimpleSelect
+            ariaLabel="Pilot class"
+            value={selectedClass}
+            onChange={selectClass}
+            options={classes.map((c) => ({
+              value: c.pilot_class,
+              label: c.pilot_class,
+            }))}
+          />
+        ) : undefined
+      }
+    />
+  );
+
+  if (!ready) {
     return (
-      <div className="font-hyperlegible">
-        <Breadcrumbs items={crumbs} current={COMP_ANALYSIS_LABEL} />
-        <h1 className="mt-3 text-2xl font-bold">{COMP_ANALYSIS_LABEL}</h1>
-        {sectionNav}
-        <Alert className="mt-4">
-          <AlertTitle>
-            {status === "forbidden" ? "Not available" : "Could not load the comp analysis"}
-          </AlertTitle>
-          <AlertDescription>
-            {status === "error"
-              ? "Please try again in a moment."
-              : "This comp analysis is not available. The competition is possibly not published yet."}
-          </AlertDescription>
-        </Alert>
-      </div>
+      <Page width="wide" bar={bar} className="font-hyperlegible">
+        {status === "loading" ? (
+          <Loading className="text-sm">Loading the comp analysis…</Loading>
+        ) : (
+          <Alert>
+            <AlertTitle>
+              {status === "forbidden" ? "Not available" : "Could not load the comp analysis"}
+            </AlertTitle>
+            <AlertDescription>
+              {status === "error"
+                ? "Please try again in a moment."
+                : "This comp analysis is not available. The competition is possibly not published yet."}
+            </AlertDescription>
+          </Alert>
+        )}
+      </Page>
     );
   }
 
   return (
-    // No gutter of its own — Shell's <main> already pays px-4 pt-6, same as
-    // every other page under it (see TaskAnalysis).
-    <div className="font-hyperlegible">
-      <Breadcrumbs items={crumbs} current={COMP_ANALYSIS_LABEL} />
+    <Page width="wide" bar={bar} className="font-hyperlegible">
+      <p className="text-sm text-muted-foreground">
+        {data?.comp_name ?? "This competition"} — which behaviours separated
+        the field, task by task.
+      </p>
 
-      <div className="mt-3 min-w-0">
-        <h1 className="text-2xl font-bold">{COMP_ANALYSIS_LABEL}</h1>
-        <p className="text-sm text-muted-foreground">
-          {data?.comp_name ?? "This competition"} — which behaviours separated
-          the field, task by task.
-        </p>
-      </div>
-
-      {sectionNav}
-
-      {/* The report's masthead: when it was computed, which chapters it has,
-          and which class it is showing. These belong together in one panel —
-          the class select filters the WHOLE report rather than any single
-          table, so it is page furniture and not a table's own control. */}
+      {/* The report's masthead: when it was computed and which chapters it
+          has. Which class it is showing is the select stuck under the bar. */}
       {data ? (
         <Card className="mt-4 gap-3">
           <ScoreFreshness
@@ -321,29 +325,12 @@ export function CompAnalysis() {
             </nav>
           ) : null}
 
+          {/* The class select is in the bar, which does not print: paper
+              gets a plain statement of which class this printout covers. */}
           {classes.length > 1 ? (
-            <div>
-              {/* The select is a control, so print swaps it for a plain
-                  statement of which class this printout covers. */}
-              <div className="print:hidden">
-                <SimpleSelect
-                  ariaLabel="Pilot class"
-                  value={selectedClass}
-                  onChange={(value) => {
-                    const next = new URLSearchParams(searchParams);
-                    next.set("class", value);
-                    setSearchParams(next, { replace: true });
-                  }}
-                  options={classes.map((c) => ({
-                    value: c.pilot_class,
-                    label: c.pilot_class,
-                  }))}
-                />
-              </div>
-              <p className="hidden text-sm print:block">
-                Pilot class: <strong>{selectedClass}</strong>
-              </p>
-            </div>
+            <p className="hidden text-sm print:block">
+              Pilot class: <strong>{selectedClass}</strong>
+            </p>
           ) : null}
         </Card>
       ) : null}
@@ -477,7 +464,7 @@ export function CompAnalysis() {
           </AlertDescription>
         </Alert>
       )}
-    </div>
+    </Page>
   );
 }
 

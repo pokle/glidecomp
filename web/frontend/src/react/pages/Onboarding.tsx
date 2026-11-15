@@ -108,7 +108,9 @@ export function Onboarding() {
       </h1>
       <p className="text-muted-foreground">Set up your GlideComp account</p>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      {/* No bar here (#863 decision 9): a focused card. Its controls are 44 px
+          at every pointer, as the bar's are. */}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 [&_input]:h-11">
         {/* RAC fields are self-labelling — the Label/Input/FieldError ids and
             aria-describedby are wired by TextField, so no useId plumbing. */}
         <TextField
@@ -145,7 +147,12 @@ export function Onboarding() {
         {generalError ? <p role="alert">{generalError}</p> : null}
 
         <div>
-          <Button type="submit" isPending={submitting} pendingLabel="Saving your profile">
+          <Button
+            type="submit"
+            className="h-11"
+            isPending={submitting}
+            pendingLabel="Saving your profile"
+          >
             Continue
           </Button>
         </div>

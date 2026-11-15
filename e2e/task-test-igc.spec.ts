@@ -82,8 +82,15 @@ test.afterAll(async ({ playwright }) => {
   await api.dispose();
 });
 
-const heading = (page: Page) =>
-  page.getByRole("heading", { level: 1, name: "Create a test IGC" });
+// The bar's title is one line: "Test IGC". "Create a test IGC" is the page's
+// name in the title's menu.
+const heading = (page: Page) => page.getByRole("heading", { level: 1, name: "Test IGC" });
+
+/** The task page's action is a row of its ⋯ menu (issue #863). */
+async function openFromTask(page: Page) {
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Create test IGC" }).click();
+}
 
 test("the task page links to the page; Back leaves it and a reload keeps it", async ({
   page,
@@ -92,7 +99,7 @@ test("the task page links to the page; Back leaves it and a reload keeps it", as
   await page.goto(`/comp/${compId}/task/${taskId}`);
   await expect(page.getByRole("heading", { level: 1, name: TASK_NAME })).toBeVisible();
 
-  await page.getByRole("link", { name: "Create test IGC" }).click();
+  await openFromTask(page);
   await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/task/[^/]*${taskId}/test-igc$`));
   await expect(heading(page)).toBeVisible();
   // A page, not an overlay over the task page.
@@ -125,10 +132,12 @@ test("Create shows what it made, on the page, and offers the file", async ({ pag
   await expect(verdict).toBeFocused();
   await expect(verdict).toBeInViewport();
   await expect(page).toHaveURL(/\/test-igc$/);
-  await expect(page.getByRole("button", { name: "Create again" })).toBeVisible();
+  // Create stays in the bar, to make another; the file is offered with the
+  // verdict, on the page.
+  await expect(page.getByRole("button", { name: "Create", exact: true })).toBeEnabled();
 
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download .igc" }).click();
+  await verdict.getByRole("button", { name: "Download .igc" }).click();
   expect((await download).suggestedFilename()).toMatch(/-ada-forge\.igc$/);
 });
 
@@ -179,11 +188,12 @@ test("a hidden comp's share key rides along into the page", async ({ page, playw
   await devLogin(page, ADMIN_USER);
   await page.goto(`/comp/${keyed}/task/${taskId}`);
   await expect(page.getByRole("heading", { level: 1, name: TASK_NAME })).toBeVisible();
-  await page.getByRole("link", { name: "Create test IGC" }).click();
+  await openFromTask(page);
   await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${keyed}/task/[^/]*${taskId}/test-igc$`));
   await expect(heading(page)).toBeVisible();
 
-  // The trail back to the task keeps the key too.
+  // The trail back to the task keeps the key too. (The landmark is in the
+  // markup, visually hidden: the title's menu is what a reader opens.)
   const crumb = page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", {
     name: TASK_NAME,
   });

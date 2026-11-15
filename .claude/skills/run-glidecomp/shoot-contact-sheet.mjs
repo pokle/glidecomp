@@ -83,7 +83,8 @@ await boot.evaluate(() =>
 // poll in flight by design, so networkidle never settles on them.
 await boot.goto(`${BASE}/comp/${compId}`, { waitUntil: "domcontentloaded" });
 const taskHref = await boot
-  .locator(`a[href*="/task/"]`)
+  // Not the bar's "New task" row, which is a link in the markup too (#863).
+  .locator(`a[href*="/task/"]:not([href$="/task/new"])`)
   .first()
   .getAttribute("href", { timeout: 20_000 })
   .catch(() => null);

@@ -72,7 +72,7 @@ export function TaskDebrief({
     <Card aria-labelledby="debrief-heading" className="gap-3">
       <h2
         id="debrief-heading"
-        className="flex items-center gap-1 scroll-mt-20 text-lg font-semibold"
+        className="flex items-center gap-1 scroll-mt-32 text-lg font-semibold"
       >
         Task debrief
         {/* What qualifies a behaviour for this list is method — behind the ⓘ,

@@ -5,7 +5,7 @@
  * from react/entry-client.tsx via react/lib/theme.ts).
  */
 import "../styles/global.css";
-import SiteHeader from "../components/SiteHeader.astro";
+import SiteHeader, { type PageId } from "../components/SiteHeader.astro";
 import SiteFooter from "../components/SiteFooter.astro";
 // The body face, preloaded. Without the hint it is CSS-discovered — the
 // browser only learns the URL once global.css has parsed, so first paint
@@ -15,11 +15,11 @@ import bodyFont from "@fontsource-variable/atkinson-hyperlegible-next/files/atki
 interface Props {
   title: string;
   description?: string;
-  /** Tab to underline in the global header. */
-  active?: "home" | "comp" | "flights";
+  /** Which page this is: the bar draws its title and its trail from it. */
+  page: PageId;
 }
 
-const { title, description, active } = Astro.props;
+const { title, description, page } = Astro.props;
 const metaDescription =
   description ??
   "GlideComp scores hang gliding and paragliding competitions and analyses the whole field's tracks: tasks, GAP scoring, per-pilot score explanations, and what separated the fast pilots.";
@@ -47,7 +47,7 @@ const metaDescription =
       type="font/woff2"
       crossorigin
     />
-    {/* "Submit track" is in the header of every one of these pages and is the
+    {/* "Submit track" is in the bar's menu on every one of these pages and is the
         homepage's primary action, but it lives in the SPA — so the app shell
         is fetched ahead of the click rather than after it. Prefetching
         /submit rather than /app primes the cache under the URL actually
@@ -68,7 +68,7 @@ const metaDescription =
   </head>
   <body>
     <!-- Skip link (WCAG 2.4.1, accessibility-standard §4.3): first focusable
-         element, visually hidden until focused, jumping past the header to
+         element, visually hidden until focused, jumping past the bar to
          <main>. Mirrors the SPA skip link in react/components/Shell.tsx. -->
     <a
       href="#main-content"
@@ -76,7 +76,7 @@ const metaDescription =
     >
       Skip to main content
     </a>
-    <SiteHeader active={active} />
+    <SiteHeader page={page} />
     <!-- Single <main> landmark for every static page; tabIndex=-1 so the skip
          link lands focus here, not just the scroll position. -->
     <main id="main-content" tabindex="-1" class="focus:outline-none">

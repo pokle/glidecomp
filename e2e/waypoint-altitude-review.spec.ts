@@ -11,8 +11,11 @@
  * - the list is a snapshot in membership AND order, and keeps both across a
  *   visit to one waypoint and across a reload (it lives in the waypoints
  *   draft, comp/waypoints-draft.ts);
- * - inside one waypoint, Back, Done and "All N" return to the review's LIST,
- *   never out of the review; the list's Done leaves it;
+ * - the way out of either page is the bar's Back and nothing else (issue
+ *   #863): inside one waypoint it returns to the review's LIST, never out of
+ *   the review; on the list it returns to the waypoints;
+ * - the list's actions — take the map's altitude for every row, widen the
+ *   list — are rows of the bar's ⋯, and nothing sticks to the bottom;
  * - accepting is an ordinary unsaved edit, saved by Save on the waypoints
  *   page.
  *
@@ -27,6 +30,7 @@ import { FRONTEND_URL } from "./fixtures/stack";
 import { coordsFields } from "./fixtures/coords";
 import { stubTerrainElevations } from "./fixtures/mapbox";
 import {
+  barAction,
   firstWaypointRow,
   h1,
   onEditorList,
@@ -59,11 +63,18 @@ async function checkAltitudes(page: Page, alt: number, alpha?: number): Promise<
   await stubTerrainElevations(page.context(), alt, alpha);
   await page.goto(`/comp/${compId}/waypoints`);
   await onEditorList(page, waypoints.length);
-  await page.getByRole("button", { name: "Check altitudes" }).click();
+  await barAction(page, "Check altitudes");
   await expect(page).toHaveURL(reviewUrl, { timeout: 20_000 });
   await expect(h1(page, "Check altitudes")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  // The bar, and its title, are there before the review's rows are (#863):
+  // wait for the list itself, or a reader of it gets an empty one.
+  await expect(reviewRows(page).first()).toBeVisible({ timeout: 20_000 });
 }
+
+/** The bar's Back: from one waypoint to the review, from the review to the waypoints. */
+const backToReview = (page: Page) => page.getByRole("link", { name: "Back to Check altitudes" });
+const backToWaypoints = (page: Page) => page.getByRole("link", { name: "Back to Waypoints" });
 
 /** The codes down the review's list, in order. */
 async function listedCodes(page: Page): Promise<string[]> {
@@ -103,8 +114,9 @@ test("Check altitudes reviews the set on a page and accepts one row", async ({ p
   await expect(topRow).toContainText("file 4000 m");
   await expect(topRow).not.toContainText(/[+-]\d+\s*m/);
 
-  // Done leaves the review for the waypoints, where the edit is unsaved.
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  // Back is the way out, and the only one: there is no Done beside it.
+  await expect(page.getByRole("button", { name: "Done", exact: true })).toHaveCount(0);
+  await backToWaypoints(page).click();
   await onEditorList(page, waypoints.length);
   await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   await expect(page.getByText("Unsaved changes")).toBeVisible();
@@ -112,7 +124,7 @@ test("Check altitudes reviews the set on a page and accepts one row", async ({ p
   expect(mutated()).toBe(false);
 });
 
-test("one waypoint of the review is a page; Back and Done return to the review", async ({
+test("one waypoint of the review is a page; Back returns to the review", async ({
   page,
 }) => {
   const mutated = trackMutations(page);
@@ -137,16 +149,12 @@ test("one waypoint of the review is a page; Back and Done return to the review",
   await altInput.fill("123");
   await altInput.blur();
 
-  // "All N" returns to the list…
-  await page.getByRole("button", { name: /^All \d+$/ }).click();
-  await expect(page).toHaveURL(reviewHref);
-  await expect(h1(page, "Check altitudes")).toBeVisible();
-
-  // …and so does Done, from one waypoint: "done with this waypoint" is not
-  // "done with the check".
-  await reviewRows(page).first().click();
-  await expect(page.getByText("In the file")).toBeVisible({ timeout: 20_000 });
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  // The bar's Back is the one way out, and it returns to the review's list:
+  // "done with this waypoint" is not "done with the check". There is no
+  // "All N" and no Done.
+  await expect(page.getByRole("button", { name: /^All \d+$/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Done", exact: true })).toHaveCount(0);
+  await backToReview(page).click();
   await expect(page).toHaveURL(reviewHref);
   await expect(h1(page, "Check altitudes")).toBeVisible();
 
@@ -193,7 +201,7 @@ test("the review keeps its list, in membership and order, across a reload", asyn
   await expect(page.getByText("From the map")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("main")).toContainText("4000 m");
   // Opened by a reload, its way back is to the review's list all the same.
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await backToReview(page).click();
   await expect(page).toHaveURL(reviewUrl);
   expect(await listedCodes(page)).toEqual(before);
 
@@ -228,11 +236,11 @@ test("typing a coordinate in the review keeps the comparison on screen", async (
   await expect(page.getByText(/^Enter a (latitude|longitude) between/)).toHaveCount(0);
 
   // Back on the list the waypoint has moved, so its reading is gone.
-  await page.getByRole("button", { name: /^All \d+$/ }).click();
+  await backToReview(page).click();
   await expect(h1(page, "Check altitudes")).toBeVisible();
   await expect(reviewRows(page).first()).toContainText("no map reading");
 
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await backToWaypoints(page).click();
   await onEditorList(page, waypoints.length);
   await expect(page.getByText("Unsaved changes")).toBeVisible();
   await expect(waypointRow(page, code)).toContainText("-36.61234");
@@ -262,7 +270,11 @@ test("the review narrows to the rows worth looking at, and can widen again", asy
 
   // Narrowed by default: the agreeing rows are counted, not listed.
   await expect(reviewRows(page)).toHaveCount(toLookAt);
-  await page.getByRole("button", { name: `Show all ${waypoints.length} waypoints` }).click();
+  // Nothing is stuck to the foot of the screen: both actions are rows of ⋯.
+  await expect(page.getByRole("button", { name: /^Show all/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Use the map’s altitude for all/ })).toHaveCount(0);
+  await expectNoSidewaysScroll(page);
+  await barAction(page, `Show all ${waypoints.length} waypoints`);
   await expect(reviewRows(page)).toHaveCount(waypoints.length);
   // Widened is in the URL, so a waypoint's page comes back to it widened.
   await expect(page).toHaveURL(/altitudes\?all=1$/);
@@ -271,18 +283,16 @@ test("the review narrows to the rows worth looking at, and can widen again", asy
   await page.goBack();
   await expect(reviewRows(page)).toHaveCount(waypoints.length);
 
-  await page.getByRole("button", { name: `Show only the ${toLookAt} to look at` }).click();
+  await barAction(page, `Show only the ${toLookAt} to look at`);
   await expect(reviewRows(page)).toHaveCount(toLookAt);
 
   // Accept the lot: every disagreement goes, and it is all one unsaved edit.
-  await page
-    .getByRole("button", { name: `Use the map’s altitude for all ${toLookAt}` })
-    .click();
+  await barAction(page, `Use the map’s altitude for all ${toLookAt}`);
   await expect(page.getByRole("status").filter({ hasText: "agrees" })).toContainText(
     "agrees with the map"
   );
 
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await backToWaypoints(page).click();
   await onEditorList(page, waypoints.length);
   await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   await expect(await firstWaypointRow(page)).toBeVisible();
@@ -300,7 +310,8 @@ test("with no review in progress, the review page offers the check", async ({ pa
   await expect(page).toHaveURL(reviewUrl, { timeout: 20_000 });
   await expect(h1(page, "Check altitudes")).toBeVisible({ timeout: 20_000 });
   await expect(reviewRows(page)).toHaveCount(0);
-  await page.getByRole("button", { name: "Check altitudes" }).click();
+  // Exact: the title's menu button is named after the page too.
+  await page.getByRole("button", { name: "Check altitudes", exact: true }).click();
   await expect(reviewRows(page)).toHaveCount(waypoints.length, { timeout: 20_000 });
 
   expect(mutated()).toBe(false);

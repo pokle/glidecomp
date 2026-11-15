@@ -90,7 +90,7 @@ export function MetricFamilySection({
     // scrolls here.
     <div
       id={familySectionId(family)}
-      className={printBreakBefore ? "scroll-mt-20 print:break-before-page" : "scroll-mt-20"}
+      className={printBreakBefore ? "scroll-mt-32 print:break-before-page" : "scroll-mt-32"}
     >
     <Disclosure
       title={familyLabel}
@@ -136,7 +136,7 @@ export function MetricFamilySection({
             <section
               key={m.id}
               id={metricBlockId(m.id)}
-              className="scroll-mt-20 space-y-1"
+              className="scroll-mt-32 space-y-1"
               aria-label={m.label}
             >
               {headingLevel === 2 ? (

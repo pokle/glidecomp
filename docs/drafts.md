@@ -262,7 +262,9 @@ size (`/waypoints/map`) and the altitude review (`/waypoints/altitudes`, and
 [#812](https://github.com/pokle/glidecomp/issues/812) made the route editor
 five pages over one draft: the route (`/comp/:c/task/:t/route`), one
 turnpoint (`/route/:n`), Quick entry (`/route/quick`), Load from XContest
-(`/route/xcontest`) and Add waypoint (`/route/add-waypoint`). The store is
+(`/route/xcontest`) and Add waypoint (`/route/add-waypoint`).
+[#863](https://github.com/pokle/glidecomp/issues/863) added the map at full
+size (`/route/map`), as the waypoints editor has. The store is
 `routeDraft` in `comp/route-draft.ts`, keyed `[compId, taskId]` (the comp's
 bare id); every page reaches it through `useRouteEditor()`
 (`comp/use-route-editor.ts`). It follows the waypoints editor in every point
@@ -295,9 +297,12 @@ above. What is particular to a route:
   page had loaded, which, when that load had failed too, was empty: the PUT
   then replaced the competition's waypoints with the new ones alone.
 - **Quick entry's line is not kept.** It is a view of the route, made again
-  from the draft each time the page opens; "Use this route" writes the result
-  into the draft, and Cancel or Back leaves the draft as it was.
+  from the draft each time the page opens; Done, in the page's bar, writes the
+  result into the draft, and Cancel or Back leaves the draft as it was.
 - **Leaving.** As in the waypoints editor: links between the editor's pages
   do not ask, a link out of it asks "Discard route changes?", Back means "not
-  now", and a reload keeps the draft. The route page's Cancel is the way to
-  throw the draft away on purpose; it asks first when there are changes.
+  now", and a reload keeps the draft. "Discard changes", in the route page's
+  ⋯ menu only while the draft differs from the saved route, is the way to
+  throw the draft away on purpose; it asks first, and the page stays, showing
+  the saved route. Save is the bar's commit button, live only while the draft
+  differs (#863).

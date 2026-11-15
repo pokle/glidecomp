@@ -84,7 +84,7 @@ export function Select<T extends object>({
       {label ? <Label>{label}</Label> : null}
       <AriaButton
         className={cn(
-          "flex h-8 w-full min-w-40 items-center justify-between gap-1.5 rounded-lg border border-input bg-card py-2 pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none",
+          "flex h-8 w-full min-w-40 items-center justify-between gap-1.5 rounded-lg border border-input bg-card py-2 pr-2 pl-2.5 text-sm pointer-coarse:h-11 pointer-coarse:text-base whitespace-nowrap transition-colors outline-none select-none",
           "data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50 data-disabled:cursor-not-allowed data-disabled:opacity-50 data-invalid:border-destructive dark:bg-input/30 dark:data-hovered:bg-input/50",
           triggerClassName
         )}
@@ -116,7 +116,7 @@ export function SelectItem({
       // textValue drives typeahead; default to the string content.
       textValue={typeof children === "string" ? children : undefined}
       className={cn(
-        "relative flex w-full cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-none select-none",
+        "relative flex w-full cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-none select-none pointer-coarse:min-h-11 pointer-coarse:pl-3 pointer-coarse:text-base",
         "data-focused:bg-accent data-focused:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
         className
       )}

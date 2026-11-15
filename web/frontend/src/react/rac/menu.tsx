@@ -2,9 +2,15 @@
  * React Aria Components Menu, styled to match the shadcn kit it replaced. MenuItems
  * accept `href` (+ download/target) so "download in format X" entries are real
  * links with menu keyboard semantics.
+ *
+ * On a coarse pointer every row is 44 px and body size (issue #863): a 28 px
+ * row is two rows to a fingertip. A second menu behind a row is RAC's
+ * `SubmenuTrigger`, re-exported here; open it BELOW its row
+ * (`placement="bottom end"`), because a phone has no room beside one.
  */
 import {
   MenuTrigger,
+  SubmenuTrigger,
   Menu as AriaMenu,
   MenuItem as AriaMenuItem,
   MenuSection as AriaMenuSection,
@@ -45,6 +51,7 @@ export function MenuItem({
     <AriaMenuItem
       className={cn(
         "flex w-full cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-none select-none",
+        "pointer-coarse:min-h-11 pointer-coarse:gap-3 pointer-coarse:px-3 pointer-coarse:py-2 pointer-coarse:text-base",
         "data-focused:bg-accent data-focused:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
         className
       )}
@@ -71,7 +78,10 @@ export function MenuHeader({
 }: React.ComponentProps<typeof AriaHeader>) {
   return (
     <AriaHeader
-      className={cn("px-1.5 py-1 text-xs font-medium text-muted-foreground", className)}
+      className={cn(
+        "px-1.5 py-1 text-xs font-medium text-muted-foreground pointer-coarse:px-3 pointer-coarse:pt-2",
+        className
+      )}
       {...props}
     />
   );
@@ -84,4 +94,4 @@ export function MenuSeparator({
   return <AriaSeparator className={cn("-mx-1 my-1 h-px bg-border", className)} {...props} />;
 }
 
-export { MenuTrigger };
+export { MenuTrigger, SubmenuTrigger };

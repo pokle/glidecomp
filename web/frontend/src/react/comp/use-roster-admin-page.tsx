@@ -1,6 +1,6 @@
 /**
- * What the roster's bulk-action pages (/pilots/import, /pilots/civl-fill)
- * fetch for themselves — the comp and its roster — and the states they share
+ * What the roster's bulk-action pages (/pilots/import, /pilots/civl-fill,
+ * /pilots/copy) fetch for themselves — the comp and its roster — and the states they share
  * before either is shown: not found, loading, not an organiser, no roster.
  *
  * They were sheets over the list until #810, handed the roster in memory.
@@ -12,16 +12,20 @@
  * (pages/CompPilotPage.tsx, lib/leave.ts): opened from the list, a real
  * Back, so the list returns searched, sorted and scrolled as it was left;
  * opened any other way, it replaces this entry with the list.
+ *
+ * Each is a tool with the page's bar (rac/page-bar.tsx, issue #863): Cancel on
+ * the left, and its commit on the right where it has one. The states before
+ * the page is ready carry the same bar, so the page does not jump.
  */
 import { useEffect, useState, type ReactElement } from "react";
 import { useParams } from "react-router-dom";
 import { useLeave } from "../lib/leave";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
-import { underCompPilots } from "../lib/crumbs";
+import { underCompPilots, type Crumb } from "../lib/crumbs";
 import { compPilotsPath, compScoresPath, compUrlId, idFromSegment } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
@@ -38,6 +42,8 @@ export type RosterAdminPage =
       roster: CompPilot[];
       /** The comp's id as it goes in URLs (share key and all, for a hidden comp). */
       urlId: string;
+      /** The pages above this one: the competition, then its roster. */
+      crumbs: Crumb[];
       /** The signed-in user's id: whose draft this page may read. */
       userId: string;
       /** Take in a change this page made to the comp (its classes, say). */
@@ -48,10 +54,13 @@ export type RosterAdminPage =
 
 export function useRosterAdminPage({
   current,
+  fullTitle,
   canonicalPath,
 }: {
-  /** The page's crumb, for the states shown before it is ready. */
+  /** The page's title, for the bar of the states shown before it is ready. */
   current: string;
+  /** The title in full, where `current` is a short form of it. */
+  fullTitle?: string;
   /** The page's own URL, once the comp's name is known. */
   canonicalPath: (urlId: string, compName: string) => string;
 }): RosterAdminPage {
@@ -100,10 +109,18 @@ export function useRosterAdminPage({
   if (notFound || !compId) {
     return { ready: false, element: <NotFound title="Competition not found" /> };
   }
+  const crumbs = underCompPilots(urlId, comp?.name);
+  const toList = () => {
+    leave(compPilotsPath(urlId, comp?.name));
+  };
+  const waiting = (body: ReactElement) => (
+    <Page bar={<PageBar title={current} fullTitle={fullTitle} trail={crumbs} cancel={toList} />}>
+      {body}
+    </Page>
+  );
   if (!comp || loading || (roster === null && !rosterError)) {
-    return { ready: false, element: <Loading>Loading pilots…</Loading> };
+    return { ready: false, element: waiting(<Loading>Loading pilots…</Loading>) };
   }
-  const crumbs = underCompPilots(urlId, comp.name);
   // Visitors find every pilot in the score tables.
   if (!isAdmin || !user) {
     return { ready: false, element: <OrganisersOnly to={compScoresPath(urlId, comp.name)} /> };
@@ -111,12 +128,7 @@ export function useRosterAdminPage({
   if (rosterError || !roster) {
     return {
       ready: false,
-      element: (
-        <div>
-          <Breadcrumbs items={crumbs} current={current} />
-          <p className="mt-2 text-muted-foreground">Could not load pilots</p>
-        </div>
-      ),
+      element: waiting(<p className="text-muted-foreground">Could not load pilots</p>),
     };
   }
 
@@ -125,10 +137,9 @@ export function useRosterAdminPage({
     comp,
     roster,
     urlId,
+    crumbs,
     userId: user.id,
     updateComp: (change) => setComp((c) => (c ? { ...c, ...change } : c)),
-    leave: () => {
-      leave(compPilotsPath(urlId, comp.name));
-    },
+    leave: toList,
   };
 }

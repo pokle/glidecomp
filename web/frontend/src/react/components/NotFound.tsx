@@ -10,8 +10,8 @@
  * The dead URL rebuilt as itself (same page, live ids) leads the list: that is
  * the page the visitor asked for, and everything else is a consolation prize.
  *
- * Deliberately no "elsewhere on GlideComp" list of standing links: the header
- * nav and the footer already carry them on every page, this one included.
+ * Deliberately no "elsewhere on GlideComp" list of standing links: the bar's
+ * menus and the footer already carry them on every page, this one included.
  *
  * That is defence in depth, not the fix: the seed script preserves the ids that
  * appear in URLs (web/scripts/lib/seed-identity.ts), so a re-seed no longer
@@ -32,6 +32,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { Loading } from "@/react/rac/progress";
+import { Page, PageBar, type Crumb } from "@/react/rac/page-bar";
 import { SearchField } from "@/react/rac/field";
 import { fetchWithRetry } from "@/react/comp/types";
 import {
@@ -50,6 +51,9 @@ const SEARCH_DEBOUNCE_MS = 300;
 const EMPTY: LookupResults = { comps: [], tasks: [], pilots: [] };
 
 const linkClass = "underline underline-offset-4 hover:text-foreground";
+
+/** The way back from a page that is not there: the list every competition is on. */
+const NOT_FOUND_TRAIL: Crumb[] = [{ label: "Competitions", to: "/comp" }];
 
 export function NotFound({
   title = "Page not found",
@@ -128,11 +132,10 @@ export function NotFound({
   const typed = query.trim().length > 0;
 
   return (
-    // A div, not a <main>: every route that renders this sits inside Shell's
+    // No <main> of its own: every route that renders this sits inside Shell's
     // <main id="main-content">, and a nested landmark gives assistive tech two
     // "main" regions to choose between.
-    <div className="mx-auto flex max-w-xl flex-col items-start gap-4 py-12">
-      <h1 className="text-2xl font-bold">{title}</h1>
+    <Page bar={<PageBar title={title} trail={NOT_FOUND_TRAIL} />} className="flex flex-col items-start gap-4">
       <p className="text-muted-foreground">
         {message ??
           "The page you're looking for doesn't exist or may have moved."}{" "}
@@ -174,6 +177,6 @@ export function NotFound({
             : "Nothing in the address matched a competition, task or pilot."}
         </p>
       ) : null}
-    </div>
+    </Page>
   );
 }

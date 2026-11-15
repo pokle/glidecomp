@@ -96,6 +96,8 @@ export const E2E_SHARDS = {
   "maps-and-analysis": [
     "analysis-map.spec.ts", // 76.8s
     "trusted-types.spec.ts", // 57.1s
+    "replay-bar.spec.ts", // new (#869) — measure on its first CI run (chromium + mobile)
+    "analysis-bar.spec.ts", // new (#869) — measure on its first CI run (chromium + mobile)
     "report-card.spec.ts", // 28.4s
     "task-analysis.spec.ts", // 20.6s
     "task-analysis-metric-chart.spec.ts", // new — measure on its first CI run (chromium + mobile)
@@ -139,6 +141,7 @@ export const E2E_SHARDS = {
     "roster-pages.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "civl-rankings.spec.ts", // 20.8s, ~11s of it seeding 14,535 ranked pilots
     "forms.spec.ts", // 10.0s (chromium + mobile)
+    "page-bar.spec.ts", // new (#863) — measure on its first CI run (chromium + mobile)
     "scoring-mutations.spec.ts", // 7.2s
     "task-scores-admin.spec.ts", // new — measure on its first CI run (chromium + mobile)
   ],

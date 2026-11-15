@@ -120,9 +120,14 @@ test("upload IGC file via the My Flights dashboard", async ({ page, request }) =
   const user = testUser("igc");
   await signInAndOnboard(request, page, user);
 
+  // The + in the bar opens the file picker, and is named for the tab: a
+  // top-level page, so the main menu is the bar's leading control.
+  await expect(page.getByRole("button", { name: "Main menu" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add .igc track log" })).toBeVisible();
+
   // setInputFiles fires the change event the dashboard listens for. Use the
-  // file input directly — clicking the upload-zone label would open the OS
-  // file picker which Playwright would have to negotiate via filechooser.
+  // file input directly — pressing + would open the OS file picker, which
+  // Playwright would have to negotiate via filechooser.
   await page.setInputFiles('input[accept=".igc"]', SAMPLE_IGC);
 
   // The list reflows after the refresh; look for the parsed pilot name from
@@ -136,10 +141,11 @@ test("upload XCTSK file via the Tasks tab", async ({ page, request }) => {
   const user = testUser("xctsk");
   await signInAndOnboard(request, page, user);
 
-  // Base UI only mounts the active tab panel, so the .xctsk input exists
-  // only once the Tasks tab is selected.
+  // The tabs are the bar's second layer. What + adds follows the tab, so the
+  // file input takes .xctsk only once the Tasks tab is selected.
   await page.getByRole("tab", { name: /Tasks/ }).click();
   await expect(page.getByText("No competition tasks yet")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add .xctsk task" })).toBeVisible();
   await page.setInputFiles('input[accept=".xctsk"]', SAMPLE_XCTSK);
 
   // Sample task has 5 turnpoints; assert the count rather than the name so the

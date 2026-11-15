@@ -1,6 +1,7 @@
 /**
- * The chrome every task-analysis page wears: the trail, the heading, the
- * freshness line, the class select, and the four states the report can be in
+ * The chrome every task-analysis page wears: the bar (trail, title, the
+ * pages beside this one, ⋯), the class select and the pilot highlight stuck
+ * under it, the freshness line, and the four states the report can be in
  * before there is anything to show.
  *
  * The summary page and its six sections (and their leaf pages) are the same report seen from
@@ -12,50 +13,126 @@
  *
  * SSR-safe: `document` is touched only inside an effect.
  */
+import { ChartColumnIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Button, LinkButton } from "@/react/rac/button";
+import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
-import { Loading } from "@/react/rac/progress";
+import { Loading, Spinner } from "@/react/rac/progress";
 import { SimpleSelect } from "@/react/rac/select";
+import { cn } from "@/react/lib/utils";
 import { NotFound } from "../components/NotFound";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
 import {
+  COMP_ANALYSIS_LABEL,
   TASK_ANALYSIS_LABEL,
   underTask,
   underTaskAnalysis,
   type Crumb,
+  type RelatedPages,
 } from "../lib/crumbs";
-import { compAnalysisPath, taskAnalysisSectionPath } from "../lib/slug";
+import {
+  compAnalysisPath,
+  compUrlId,
+  taskAnalysisSectionPath,
+  taskSimilarityPath,
+} from "../lib/slug";
 import { PilotHighlightProvider } from "./PilotHighlightContext";
 import { PILOT_PARAM, PilotPicker } from "./PilotPicker";
-import type { TaskAnalysisSectionSlug } from "./sections";
+import { TASK_ANALYSIS_SECTIONS, type TaskAnalysisSectionSlug } from "./sections";
 import { CLASS_PARAM, type TaskReportBundle } from "./use-task-report";
 import type { displayReport } from "./units";
+
+/** The similarity tool's name in a list of the report's pages. */
+export const SIMILAR_PILOTS_LABEL = "Similar pilots";
 
 export interface TaskAnalysisFrameProps {
   bundle: TaskReportBundle;
   /**
    * The sub-page this frame is wearing. Omit on the summary page, which is the
    * chapter itself: it takes the task as its parent crumb and "Task analysis"
-   * as its heading, where a sub-page takes the chapter as its parent.
+   * as its title, where a sub-page takes the chapter as its parent. A section
+   * of the report names its `slug`, and the title's menu then lists the
+   * sections beside it; a leaf page (one metric, one thermal) does not.
    */
-  section?: { label: string; lede: string };
+  section?: { label: string; lede: string; slug?: TaskAnalysisSectionSlug };
   /**
    * The section a page one level further down hangs off — "Metric details"
    * for one metric's full-size chart. It becomes the trail's last crumb, and
-   * takes the report's view state with it, as the chapter does for a section —
-   * or, given `search`, that query instead: the thermal map knows which of its
-   * own parameters the Thermals section reads.
+   * so where the bar's Back goes. It takes the report's view state with it,
+   * as the chapter does for a section — or, given `search`, that query
+   * instead: the thermal map knows which of its own parameters the Thermals
+   * section reads.
    */
   parent?: { slug: TaskAnalysisSectionSlug; label: string; search?: string };
   /** Shown beside the class select. Only pages with per-pilot rows want it. */
   pilotPicker?: boolean;
+  /**
+   * A page that is one thing with the screen to itself (the thermal map): the
+   * body gets the rest of the screen under the bar, and the page does not
+   * scroll. It has no second layer: the class rides in the URL.
+   */
+  fill?: boolean;
   children: (ctx: {
     active: NonNullable<TaskReportBundle["active"]>;
     report: NonNullable<ReturnType<typeof displayReport>>;
   }) => React.ReactNode;
+}
+
+/** A section the day left nothing in: no box on the contents page, no row in the menu. */
+export function isEmptySection(
+  bundle: Pick<TaskReportBundle, "styleClusters" | "hasWeatherSection" | "hasThermalsSection">,
+  slug: TaskAnalysisSectionSlug
+): boolean {
+  return (
+    (slug === "style" && !bundle.styleClusters) ||
+    (slug === "weather" && !bundle.hasWeatherSection) ||
+    (slug === "thermals" && !bundle.hasThermalsSection)
+  );
+}
+
+/**
+ * The pages of one task's analysis, for the bar's title menu: its sections,
+ * and the similarity tool where the contents page lists it (ahead of the
+ * method note). With `current` they are drawn BESIDE the page that is open;
+ * without it, UNDER the contents page.
+ *
+ * `search` is the report's view state (the class, the pinned pilot), which
+ * goes with the reader from page to page.
+ */
+export function taskAnalysisPages(
+  compId: string | undefined,
+  compName: string | null | undefined,
+  taskId: string | undefined,
+  taskName: string | null | undefined,
+  search: string,
+  current?: TaskAnalysisSectionSlug | "similar",
+  isEmpty: (slug: TaskAnalysisSectionSlug) => boolean = () => false
+): RelatedPages | undefined {
+  if (!compId || !taskId) return undefined;
+  const query = search ? `?${search}` : "";
+  const items: RelatedPages["items"] = [];
+  const similar = {
+    label: SIMILAR_PILOTS_LABEL,
+    to: taskSimilarityPath(compId, compName, taskId, taskName) + query,
+    current: current === "similar",
+  };
+  let placed = false;
+  for (const s of TASK_ANALYSIS_SECTIONS) {
+    if (s.slug !== current && isEmpty(s.slug)) continue;
+    // Ahead of the method note, which stays last: it is consulted once.
+    if (s.slug === "method") {
+      items.push(similar);
+      placed = true;
+    }
+    items.push({
+      label: s.label,
+      to: taskAnalysisSectionPath(compId, compName, taskId, taskName, s.slug) + query,
+      current: s.slug === current,
+    });
+  }
+  if (!placed) items.push(similar);
+  return { as: current ? "siblings" : "children", items };
 }
 
 export function TaskAnalysisFrame({
@@ -63,6 +140,7 @@ export function TaskAnalysisFrame({
   section,
   parent,
   pilotPicker = false,
+  fill = false,
   children,
 }: TaskAnalysisFrameProps) {
   const {
@@ -137,131 +215,147 @@ export function TaskAnalysisFrame({
           )[0],
         ];
 
-  // Gate on `status` only, never on the user session: the content is public,
-  // and useUser().loading is true throughout SSR + the first hydration render,
-  // so gating on it would make the server emit this skeleton instead of the
-  // seeded report.
-  if (status === "loading") {
-    return (
-      <div className="font-hyperlegible">
-        <Loading className="text-sm">Loading the task analysis…</Loading>
-      </div>
-    );
+  // The title's menu: the contents page lists its sections under it, a
+  // section lists them beside it. This is the only section navigation there
+  // is; the boxes on the contents page are information. A leaf page hangs off
+  // one section and lists none.
+  const related =
+    parent || (section && !section.slug)
+      ? undefined
+      : taskAnalysisPages(
+          compId,
+          comp?.name,
+          taskId,
+          task?.name,
+          viewState,
+          section?.slug,
+          (slug) => isEmptySection(bundle, slug)
+        );
+
+  // The trail goes up to the task, so the whole-comp report — the other half
+  // of this page's kinship, and where the other tasks' chapters are listed —
+  // is the first row of ⋯. Recompute is the organiser's.
+  const actions: BarAction[] = [];
+  if (compId) {
+    actions.push({
+      id: "comp-analysis",
+      label: COMP_ANALYSIS_LABEL,
+      icon: ChartColumnIcon,
+      to: compAnalysisPath(compUrlId(comp, compId), comp?.name),
+    });
+  }
+  if (isAdmin) {
+    actions.push({
+      id: "recompute",
+      icon: RefreshCwIcon,
+      label: "Recompute",
+      group: true,
+      onAction: refresh,
+      disabled: refreshing,
+    });
   }
 
   if (status === "notFound") {
     return <NotFound title="Task analysis not found" />;
   }
 
-  if (status === "forbidden" || status === "error") {
-    return (
-      <div className="font-hyperlegible">
-        <Breadcrumbs items={crumbs} current={heading} />
-        <h1 className="mt-3 text-2xl font-bold">{heading}</h1>
-        <Alert className="mt-4">
-          <AlertTitle>
-            {status === "forbidden"
-              ? "Not available"
-              : "Could not load the task analysis"}
-          </AlertTitle>
-          <AlertDescription>
-            {status === "forbidden"
-              ? "This task analysis is not available. It is possibly part of a competition that is not published."
-              : "Please try again in a moment."}
-          </AlertDescription>
-        </Alert>
+  // Gate on `status` only, never on the user session: the content is public,
+  // and useUser().loading is true throughout SSR + the first hydration render,
+  // so gating on it would make the server emit a skeleton instead of the
+  // seeded report.
+  const ready = status !== "loading" && status !== "forbidden" && status !== "error";
+
+  // The second layer: which class is being read, and the pilot pinned into
+  // every chart and table below. Both are view state of the whole report
+  // (URL-backed, `?class=` and `?pilot=`), so they stay in reach as it scrolls.
+  const showClasses = classes.length > 1;
+  const below =
+    ready && !fill && (showClasses || (pilotPicker && active && report)) ? (
+      <div className="flex items-center gap-2">
+        {showClasses ? (
+          <SimpleSelect
+            ariaLabel="Pilot class"
+            value={selectedClass}
+            onChange={selectClass}
+            options={classes.map((c) => ({
+              value: c.pilot_class,
+              label: c.pilot_class,
+            }))}
+            className="shrink-0"
+          />
+        ) : null}
+        {/* Pin one pilot's highlight page-wide — the reader finding
+            themselves in the field. */}
+        {pilotPicker && active && report ? <PilotPicker pilots={report.pilots} /> : null}
       </div>
-    );
-  }
+    ) : undefined;
 
   return (
-    // No gutter of its own: Shell's <main> already pays px-4 pt-6, and
-    // doubling it cost a phone 32px of card width per side.
-    <div className="mx-auto max-w-6xl min-w-0 font-hyperlegible">
-      <Breadcrumbs items={crumbs} current={heading} />
+    // The provider is outside the page, not at the body: the pilot picker is
+    // in the bar's second layer and pins into the same context every chart
+    // and table below reads.
+    <PilotHighlightProvider>
+      <Page
+        width="wide"
+        fill={fill}
+        // A filled page has no gutter of its own; this one keeps the app's.
+        className={cn("min-w-0 font-hyperlegible", fill && "px-gutter-safe")}
+        bar={
+          <PageBar
+            title={heading}
+            trail={crumbs}
+            related={related}
+            actions={actions}
+            status={refreshing ? <Spinner label="Recomputing" /> : undefined}
+            below={below}
+          />
+        }
+      >
+        {status === "loading" ? (
+          <Loading className="text-sm">Loading the task analysis…</Loading>
+        ) : status === "forbidden" || status === "error" ? (
+          <Alert>
+            <AlertTitle>
+              {status === "forbidden" ? "Not available" : "Could not load the task analysis"}
+            </AlertTitle>
+            <AlertDescription>
+              {status === "forbidden"
+                ? "This task analysis is not available. It is possibly part of a competition that is not published."
+                : "Please try again in a moment."}
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <>
+            {lede ? <p className="text-sm text-muted-foreground">{lede}</p> : null}
 
-      <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold">{heading}</h1>
-          {lede ? <p className="text-sm text-muted-foreground">{lede}</p> : null}
-        </div>
-        {/* Pure navigation/actions. */}
-        <div className="flex items-center gap-2">
-          {/* The trail goes up to the task, so the whole-comp report — the
-              other half of this page's kinship — gets an explicit link here.
-              It is also where the other tasks' chapters are listed. */}
-          {section ? null : (
-            <LinkButton
-              variant="outline"
-              size="sm"
-              href={compAnalysisPath(compId, comp?.name)}
-            >
-              Comp analysis
-            </LinkButton>
-          )}
-          {isAdmin && !section ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={refresh}
-              isDisabled={refreshing}
-            >
-              {refreshing ? "Recomputing…" : "Recompute"}
-            </Button>
-          ) : null}
-        </div>
-      </div>
+            {data?.error ? (
+              <Alert className="mt-4">
+                <AlertTitle>No analysis for this task</AlertTitle>
+                <AlertDescription>{data.error}</AlertDescription>
+              </Alert>
+            ) : null}
 
-      {data?.error ? (
-        <Alert className="mt-4">
-          <AlertTitle>No analysis for this task</AlertTitle>
-          <AlertDescription>{data.error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {data && !data.error ? (
-        <ScoreFreshness
-          computedAt={data.computed_at}
-          stale={data.stale}
-          pending={data.pending}
-          timezone={comp?.timezone ?? null}
-          etag={etag}
-          pollUrl={analysisUrl}
-          variant="analysis"
-        />
-      ) : null}
-
-      {/* The provider starts here, not at the body: the pilot picker sits on
-          the control row beside the class select and pins into the same
-          context every chart and table below reads. */}
-      <PilotHighlightProvider>
-        {classes.length > 1 || (pilotPicker && active && report) ? (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            {classes.length > 1 ? (
-              <SimpleSelect
-                ariaLabel="Pilot class"
-                value={selectedClass}
-                onChange={selectClass}
-                options={classes.map((c) => ({
-                  value: c.pilot_class,
-                  label: c.pilot_class,
-                }))}
+            {data && !data.error ? (
+              <ScoreFreshness
+                computedAt={data.computed_at}
+                stale={data.stale}
+                pending={data.pending}
+                timezone={comp?.timezone ?? null}
+                etag={etag}
+                pollUrl={analysisUrl}
+                variant="analysis"
               />
             ) : null}
-            {/* Pin one pilot's highlight page-wide — the reader finding
-                themselves in the field. URL-backed (?pilot=), like the
-                class, so it survives the walk between these pages. */}
-            {pilotPicker && active && report ? (
-              <PilotPicker pilots={report.pilots} />
-            ) : null}
-          </div>
-        ) : null}
 
-        {active && report ? (
-          <div className="mt-6 space-y-6">{children({ active, report })}</div>
-        ) : null}
-      </PilotHighlightProvider>
-    </div>
+            {active && report ? (
+              <div className={fill ? "mt-2 flex min-h-0 flex-1 flex-col" : "mt-6 space-y-6"}>
+                {children({ active, report })}
+              </div>
+            ) : null}
+          </>
+        )}
+      </Page>
+    </PilotHighlightProvider>
   );
 }
 

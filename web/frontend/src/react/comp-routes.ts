@@ -119,8 +119,9 @@ export const COMP_SHELL_ROUTES: readonly CompShellRoute[] = [
     admin: true,
     why:
       "The route editor's other pages (#812): one turnpoint (`/:n`), Quick entry (`/quick`), " +
-      "Load from XContest (`/xcontest`), Copy from another competition (`/copy`) and " +
-      "Add waypoint (`/add-waypoint`), all editing a draft only the browser has.",
+      "Load from XContest (`/xcontest`), Copy from another competition (`/copy`), " +
+      "Add waypoint (`/add-waypoint`) and the map at full size (`/map`, #863), " +
+      "all editing a draft only the browser has.",
   },
   {
     path: "/comp/:compId/task/:taskId/test-igc",

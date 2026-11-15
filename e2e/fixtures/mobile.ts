@@ -81,6 +81,18 @@ export const MOBILE_SPEC_FILES = [
   // on the screen — which is exactly what a phone's height, its keyboard and
   // a sheet's fixed header change.
   "forms.spec.ts",
+  // The bar every page has (#863): its 44 px targets exist only on a coarse
+  // pointer for the kit's own controls, and Back, a refused Save and Cancel
+  // are what a phone with no browser chrome (the installed app) depends on.
+  "page-bar.spec.ts",
+  // The 3D replay's page bar and controls (#869): the replay is opened from
+  // the task page and the report card on a phone, and its controls were the
+  // smallest in the app (#860 §1).
+  "replay-bar.spec.ts",
+  // The analysis page's bar and controls (#869): the report card opens it on
+  // a phone, in a tab with no browser Back, and its map and panel controls
+  // were 29-32 px (#860 §1).
+  "analysis-bar.spec.ts",
   // Where a refusal lands on the task's management tools — the manage grid's
   // row actions and the manual-flight page (#808). A task is run from a hill,
   // and a phone is where a refusal can land off-screen.
