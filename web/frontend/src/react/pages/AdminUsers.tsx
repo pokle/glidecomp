@@ -2,7 +2,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/react/rac/badge";
+import { Page, PageBar } from "@/react/rac/page-bar";
+import { Loading } from "@/react/rac/progress";
 import { Cell, Column, Row, Table, TableBody, TableHeader } from "@/react/rac/table";
+import { underSettings } from "../lib/crumbs";
 import { useGoToSignIn, useUser } from "../lib/user";
 
 interface AdminUser {
@@ -57,36 +60,35 @@ export function AdminUsers() {
     })();
   }, [user, userLoading, goToSignIn]);
 
+  // The bar before the data, so the page does not jump when it arrives. Wide:
+  // seven columns of counts.
+  const bar = <PageBar title="All users" trail={underSettings()} />;
+
   if (userLoading || state.kind === "loading") {
     return (
-      <div className="py-8 animate-pulse space-y-4" role="status" aria-label="Loading users">
-        <div className="h-8 w-48 rounded-md bg-muted" />
-        <div className="h-64 rounded-lg bg-muted" />
-        <span className="sr-only">Loading users…</span>
-      </div>
+      <Page width="wide" bar={bar}>
+        <Loading>Loading users…</Loading>
+      </Page>
     );
   }
 
   if (state.kind === "error") {
     return (
-      <div className="text-center py-12">
+      <Page width="wide" bar={bar}>
         <p className="text-sm text-muted-foreground" role="alert">
           {state.message}
         </p>
-      </div>
+      </Page>
     );
   }
 
   const { users } = state;
 
   return (
-    <section className="mx-auto w-full max-w-5xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">All users</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {users.length} registered user{users.length !== 1 ? "s" : ""}
-        </p>
-      </div>
+    <Page width="wide" bar={bar} className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        {users.length} registered user{users.length !== 1 ? "s" : ""}
+      </p>
 
       {/* scrollLabel: seven columns overflow on anything narrow, and without a
           focusable scroll region a keyboard-only admin can never reach the
@@ -143,6 +145,6 @@ export function AdminUsers() {
           ))}
         </TableBody>
       </Table>
-    </section>
+    </Page>
   );
 }

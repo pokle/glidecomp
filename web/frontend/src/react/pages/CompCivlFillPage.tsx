@@ -10,19 +10,20 @@
  * simply asks again. The form is comp/RosterActions.tsx's `CivlFill`.
  */
 import { compPilotsCivlFillPath } from "../lib/slug";
-import { CivlFill } from "../comp/RosterActions";
+import { CIVL_FILL_FULL_TITLE, CIVL_FILL_TITLE, CivlFill } from "../comp/RosterActions";
 import { useRosterAdminPage } from "../comp/use-roster-admin-page";
 
 export function CompCivlFillPage() {
   const page = useRosterAdminPage({
-    current: "Fill from CIVL rankings",
+    current: CIVL_FILL_TITLE,
+    fullTitle: CIVL_FILL_FULL_TITLE,
     canonicalPath: compPilotsCivlFillPath,
   });
   if (!page.ready) return page.element;
   return (
     <CivlFill
       compId={page.urlId}
-      compName={page.comp.name}
+      crumbs={page.crumbs}
       roster={page.roster}
       onDone={page.leave}
     />

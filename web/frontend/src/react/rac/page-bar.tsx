@@ -45,7 +45,7 @@
  * (accessibility standard §3.1). Keep the scrim.
  */
 import { createContext, useContext, type MouseEvent, type ReactNode } from "react";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 import { Button as AriaButton, MenuTrigger, SubmenuTrigger } from "react-aria-components";
 import {
   CheckIcon,
@@ -156,6 +156,9 @@ export function PageBar({
 }) {
   const leave = useLeave();
   const goToSignIn = useGoToSignIn();
+  // Signing in from the bar comes back to the page it was asked from.
+  const { pathname, search } = useLocation();
+  const here = pathname + search;
   const { user, loading } = useUser();
   const width = WIDTH[useContext(PageWidthContext)];
   const parent = trail[trail.length - 1];
@@ -187,6 +190,8 @@ export function PageBar({
       <RouterLink
         to={parent.to}
         aria-label={`Back to ${parent.label}`}
+        // Read by the unsaved-changes guard: this is Back, and Back never asks.
+        data-bar-back
         onClick={onClick}
         className={cn(
           buttonVariants({ variant: "ghost", size: "icon" }),
@@ -287,7 +292,7 @@ export function PageBar({
                   ))}
                 {/* A reader three pages deep is one menu from signing in. */}
                 {!user && !loading ? (
-                  <MenuItem id="sign-in" className={ROW} onAction={() => goToSignIn()}>
+                  <MenuItem id="sign-in" className={ROW} onAction={() => goToSignIn(here)}>
                     Sign in
                   </MenuItem>
                 ) : null}
@@ -349,7 +354,7 @@ export function PageBar({
       {commit}
       {/* Signed out, a top-level page has Sign in where a page's main action is. */}
       {!cancel && !parent && !commit && !user && !loading ? (
-        <Button className={commitClass} onPress={() => goToSignIn()}>
+        <Button className={commitClass} onPress={() => goToSignIn(here)}>
           Sign in
         </Button>
       ) : null}
@@ -490,6 +495,8 @@ function MainMenu({ className }: { className: string }) {
   const { user, loading, isSuperAdmin, previewRole, setPreviewRole } = useUser();
   const goToSignIn = useGoToSignIn();
   const navigate = useNavigate();
+  const { pathname, search } = useLocation();
+  const here = pathname + search;
   const topLevel = useTopLevel();
   const previewing = PREVIEW_ROLES.find(({ role }) => role === previewRole);
   const previewAs = isSuperAdmin ? (
@@ -557,7 +564,7 @@ function MainMenu({ className }: { className: string }) {
           </MenuSection>
         ) : loading ? null : (
           <MenuSection aria-label="Account">
-            <MenuItem id="sign-in" className={ROW} onAction={() => goToSignIn()}>
+            <MenuItem id="sign-in" className={ROW} onAction={() => goToSignIn(here)}>
               Sign in
             </MenuItem>
             {DEV_SIGN_IN_ENABLED ? (

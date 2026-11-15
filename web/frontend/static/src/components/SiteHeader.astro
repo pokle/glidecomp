@@ -1,202 +1,451 @@
 ---
 /**
- * Global glass menu bar for the static pages (Inscribe-style): sticky,
- * translucent, backdrop-blurred, with a right-aligned account slot.
- * min-h-[60px] matches the SPA header's height so the chrome doesn't jump
- * when crossing between static and SPA pages.
+ * The page bar of the static content pages: the vanilla twin of the app's
+ * `PageBar` (react/rac/page-bar.tsx, issue #863), so the whole website has one
+ * navigation. Read that file's header comment first; the three slots mean the
+ * same thing here:
  *
- * On phones (max-sm) and short landscape viewports the bar scrolls away
- * with the page instead of pinning — vertical space is too precious there.
- * The nav row is priority+overflow (issue #639): the links that fit stay in
- * the row and the rest fold into a "More" menu, so the bar is one line at
- * every width. Keep this in sync with the SPA header in
- * react/components/Shell.tsx.
+ *   leading   the way out      a back link to the page above, or the main menu
+ *                              on the home page
+ *   centre    where you are    the page's name in one line, over a menu drawn
+ *                              as one tree ("You are here"), then the other
+ *                              places ("Elsewhere")
+ *   trailing  what you can do  "Sign in" on the home page; nothing elsewhere
  *
- * The account slot is the one scripted part of the static chrome. These pages
- * are prerendered and edge-cached, so the build can't know who's visiting;
- * the small inline script below decides between "Sign in" and the account
- * menu from the localStorage hint the SPA writes (auth/client.ts), then
- * reconciles it against /api/auth/me. Signed-out visitors and crawlers make
- * no API call at all and see the markup exactly as prerendered.
+ * What differs from the app's bar, and why:
+ *
+ *  - The title is a `<p>`, not the page's `<h1>`. Every content page has its
+ *    own `<h1>` in the article (the homepage's hero above all), and a page has
+ *    one `<h1>`.
+ *  - The menus are native `<details>`, so they open with JavaScript off and
+ *    every link in them is in the prerendered HTML. `public/site-header.js`
+ *    adds what a disclosure does not do by itself: close on Escape, on a click
+ *    outside and when focus leaves.
+ *  - The account rows are the one scripted part. These pages are prerendered
+ *    and edge-cached, so the build cannot know who is visiting. The script
+ *    chooses between "Sign in" and the account rows from the localStorage hint
+ *    the SPA writes (auth/client.ts), then checks it against /api/auth/me. A
+ *    signed-out visitor and a crawler make no API call and see the markup as
+ *    prerendered.
+ *
+ * The site's hierarchy is the `PAGES` table below, and nowhere else: a page
+ * names itself (`page="gap"`) and the bar draws its trail from the table.
+ *
+ * The bar is `sticky`, never `fixed`, and the pills sit on an opaque scrim of
+ * the page's ground (accessibility standard §3.1). Keep both.
  */
+export type PageId =
+  | "home"
+  | "about"
+  | "assistant"
+  | "legal"
+  | "scoring"
+  | "gap"
+  | "open-distance"
+  | "data-cleaning"
+  | "track-validity"
+  | "not-found";
+
 interface Props {
-  /** Which tab to highlight, if any. */
-  active?: "home" | "comp" | "flights" | "submit";
+  page: PageId;
 }
-const { active } = Astro.props;
 
-const tab = (isActive: boolean) =>
-  `text-sm font-medium transition-colors hover:text-foreground ${
-    isActive ? "text-foreground" : "text-muted-foreground"
-  }`;
+interface PageInfo {
+  /** The name in the bar and in a menu row: short. */
+  label: string;
+  /** The name in full, where the label is a short form of it. */
+  full?: string;
+  href: string;
+  parent?: PageId;
+}
 
-/** Mirrors the SPA dropdown's item styling (react/rac/menu.tsx). */
-const menuItem =
-  "flex w-full cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground";
+const PAGES: Record<PageId, PageInfo> = {
+  home: { label: "Home", href: "/" },
+  about: { label: "About", href: "/about", parent: "home" },
+  scoring: { label: "Scoring", href: "/scoring", parent: "home" },
+  assistant: {
+    label: "Assistant",
+    full: "Use GlideComp from your AI assistant",
+    href: "/assistant",
+    parent: "home",
+  },
+  legal: { label: "Privacy & Terms", href: "/legal", parent: "home" },
+  gap: { label: "GAP scoring", href: "/scoring/gap", parent: "scoring" },
+  "open-distance": { label: "Open distance", href: "/scoring/open-distance", parent: "scoring" },
+  "data-cleaning": {
+    label: "Track data cleaning",
+    href: "/scoring/data-cleaning",
+    parent: "scoring",
+  },
+  "track-validity": { label: "Track validity", href: "/scoring/track-validity", parent: "scoring" },
+  "not-found": { label: "Page not found", href: "/404", parent: "home" },
+};
+
+/** The content sections, in the order the menus list them. */
+const SECTIONS: PageId[] = ["about", "scoring", "assistant", "legal"];
+/** The guides under Scoring. */
+const GUIDES: PageId[] = ["gap", "open-distance", "data-cleaning", "track-validity"];
+/** The places the app starts from (react/rac/page-bar.tsx, `useTopLevel`). */
+const APP = [
+  { label: "Competitions", href: "/comp" },
+  { label: "My Flights", href: "/u/me" },
+  { label: "Submit track", href: "/submit" },
+];
+
+const { page } = Astro.props;
+const here = PAGES[page];
+const isHome = page === "home";
+
+/** The pages above this one, from the top. */
+const trail: PageId[] = [];
+for (let id = here.parent; id; id = PAGES[id].parent) trail.unshift(id);
+const parent = trail.length > 0 ? PAGES[trail[trail.length - 1]] : undefined;
 
 /**
- * The same row, plus the marking a folded nav link takes with it: the reader
- * loses the row's "you are here" when their page is the one that folded. The
- * SPA's PriorityNav marks its entry with `data-current` because RAC filters
- * `aria-current` off a MenuItem; here the attribute survives, so it does both
- * jobs at once.
+ * One more level of the tree, as in the app's bar: the guides under Scoring,
+ * or beside the guide that is open. Beside, the list holds this page, so the
+ * row for "this page" is not drawn twice.
  */
-const navMenuItem = `${menuItem} aria-[current=page]:font-semibold aria-[current=page]:text-foreground`;
+const related =
+  page === "scoring"
+    ? { as: "children" as const, items: GUIDES }
+    : GUIDES.includes(page)
+      ? { as: "siblings" as const, items: GUIDES }
+      : undefined;
+const relatedDepth = trail.length + (related?.as === "children" ? 1 : 0);
+
+/** The sections the trail does not already hold. */
+const elsewhere = SECTIONS.filter((id) => id !== page && !trail.includes(id));
+
+const title = isHome ? "GlideComp" : here.label;
+const fullTitle = here.full ?? title;
+
+/** 12 px, and 14 px more for each level down: the app's bar exactly. */
+const indent = (depth: number) => `padding-left:${12 + depth * 14}px`;
+
+/** The glass a floating control is made of (react/rac/page-bar.tsx, GLASS). */
+const GLASS =
+  "border border-border/70 bg-card/75 shadow-card backdrop-blur-xl backdrop-saturate-150 dark:bg-card/60";
+const FOCUS =
+  "outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+/** A round 44 px control. */
+const ICON = `pointer-events-auto flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full hover:bg-muted ${GLASS} ${FOCUS}`;
+/** `<summary>` draws a marker unless it is told not to. */
+const SUMMARY = "list-none [&::-webkit-details-marker]:hidden select-none";
+/** A menu's panel. It is under its control, and never wider than the screen. */
+const PANEL =
+  "absolute top-full z-50 mt-1 max-h-[calc(100dvh-5rem)] w-max max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl bg-popover p-1 text-left text-popover-foreground shadow-md ring-1 ring-foreground/10";
+/** A menu row a finger can hit: 44 px, body size, and it may wrap. */
+const ROW =
+  "flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-base outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground";
+const HEAD = "px-3 pt-2 pb-1 text-xs font-medium text-muted-foreground";
+const RULE = "-mx-1 my-1 h-px bg-border";
+/** The bar is as wide as the widest thing under it. */
+const WIDTH = isHome ? "max-w-6xl" : "max-w-3xl";
 ---
 
-<!-- The glass stays full-bleed under `viewport-fit=cover`; `pt-safe` pushes
-     only the bar's content below the status bar, and `px-gutter-safe` holds it
-     clear of a landscape notch (issue #642). Mirrors Shell.tsx. -->
-<header class="sticky top-0 z-50 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150 pt-safe max-sm:static [@media(max-height:500px)]:static">
-  <nav
-    aria-label="Main"
-    class="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-gutter-safe py-3"
+<!-- `pt-safe` holds the controls below the status bar and `px-gutter-safe`
+     clear of a landscape notch (issue #642). The header takes no pointer
+     events itself, so the page scrolling beneath it stays reachable between
+     the pills. -->
+<header
+  data-page-bar
+  class="pointer-events-none sticky top-0 z-40 pt-safe [@media(max-height:500px)]:static print:hidden"
+>
+  <!-- Under the floating controls the page fades out as it scrolls beneath. -->
+  <div
+    aria-hidden="true"
+    class="absolute inset-x-0 top-0 -bottom-3 bg-linear-to-b from-background from-70% to-background/0"
   >
-    <a href="/" class="shrink-0 font-brand text-base font-semibold tracking-tight">GlideComp</a>
-    <!-- Priority+overflow row (issue #639), mirroring the SPA's PriorityNav
-         (react/rac/priority-nav.tsx): the links that fit stay in the row, the
-         rest fold into "More" instead of wrapping the bar onto a second line.
-         My Flights used to be `max-sm:hidden` here — folded is better than
-         gone, because folded is still one tap away.
-
-         Two differences from the SPA, both deliberate. The row only stops
-         WRAPPING once the script below runs, so a visitor with no JavaScript
-         keeps every link on the two lines this header has always used; and the
-         menu panel lives outside the clipping box, because there is no portal
-         to render it into. -->
-    <div class="relative flex min-w-0 flex-1 items-center">
-      <div
-        data-priority-nav
-        class="flex w-full flex-wrap items-center gap-x-6 gap-y-2"
-      >
-        <span data-priority-item="comp" class="shrink-0">
-          <a
-            href="/comp"
-            class={tab(active === "comp")}
-            aria-current={active === "comp" ? "page" : undefined}>Competitions</a>
-        </span>
-        <span data-priority-item="flights" class="shrink-0">
-          <a
-            href="/u/me"
-            class={tab(active === "flights")}
-            aria-current={active === "flights" ? "page" : undefined}>My Flights</a>
-        </span>
-        <!-- The one thing a pilot who has just landed came here to do, so it is
-             reachable from every page rather than only the homepage. -->
-        <span data-priority-item="submit" class="shrink-0">
-          <a
-            href="/submit"
-            class={tab(active === "submit")}
-            aria-current={active === "submit" ? "page" : undefined}>Submit track</a>
-        </span>
-      </div>
-      <!-- `hidden` until the script measures: with no JavaScript nothing is
-           folded, so a "More" holding nothing would be a dead control. -->
-      <div data-priority-trigger hidden class="absolute inset-y-0 right-0 flex items-center">
-        <button
-          type="button"
-          aria-haspopup="menu"
-          aria-expanded="false"
-          aria-controls="more-nav-panel"
-          aria-label="More pages"
-          data-priority-nav-trigger
-          class="touch-target flex h-7 items-center gap-1 rounded-lg px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none data-[current]:text-foreground"
-        >
-          More
-          <!-- lucide chevron-down, inlined: these pages ship no icon runtime. -->
+  </div>
+  <div class={`relative mx-auto flex w-full items-center gap-2 px-gutter-safe py-2 ${WIDTH}`}>
+    {
+      parent ? (
+        <a href={parent.href} aria-label={`Back to ${parent.label}`} class={ICON}>
+          {/* lucide chevron-left, inlined: these pages ship no icon runtime. */}
           <svg
             aria-hidden="true"
-            width="14"
-            height="14"
+            width="20"
+            height="20"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             stroke-width="2"
             stroke-linecap="round"
-            stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg
+            stroke-linejoin="round"
           >
-        </button>
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </a>
+      ) : (
+        <details data-bar-menu class="pointer-events-auto relative shrink-0">
+          <summary aria-label="Main menu" class={`${ICON} ${SUMMARY}`}>
+            {/* lucide menu */}
+            <svg
+              aria-hidden="true"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 5h16" />
+              <path d="M4 12h16" />
+              <path d="M4 19h16" />
+            </svg>
+          </summary>
+          <nav aria-label="Main" class={`${PANEL} left-0 min-w-60`}>
+            <p class={HEAD}>GlideComp</p>
+            <ul>
+              <li>
+                <span aria-current="page" class={`${ROW} font-semibold hover:bg-transparent`}>
+                  <span class="min-w-0 flex-1">Home</span>
+                  <svg
+                    aria-hidden="true"
+                    class="shrink-0 text-link"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                </span>
+              </li>
+              {APP.map((c) => (
+                <li>
+                  <a href={c.href} class={ROW}>
+                    {c.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <div class={RULE} />
+            <ul>
+              {SECTIONS.map((id) => (
+                <li>
+                  <a href={PAGES[id].href} class={ROW}>
+                    {PAGES[id].label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <div class={RULE} />
+            {/* What a signed-out visitor, a crawler and a browser with no
+                JavaScript get. Every sign-in path stays on /signin. */}
+            <ul data-account-signin>
+              <li>
+                <a href="/signin" class={ROW}>
+                  Sign in
+                </a>
+              </li>
+            </ul>
+            {/* Shown only when the script knows there is a session. */}
+            <div data-account-menu hidden>
+              <p data-account-name class={`${HEAD} max-w-64 truncate`} />
+              <ul>
+                <li>
+                  <a href="/settings" class={ROW}>
+                    Settings
+                  </a>
+                </li>
+                <li>
+                  <button type="button" data-account-signout class={`${ROW} cursor-pointer`}>
+                    Sign out
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </nav>
+        </details>
+      )
+    }
+
+    {
+      isHome ? (
         <div
-          id="more-nav-panel"
-          role="menu"
-          aria-label="More pages"
-          data-priority-nav-panel
-          hidden
-          class="absolute top-full right-0 z-50 mt-1 min-w-40 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+          class={`pointer-events-auto flex h-11 min-w-0 flex-1 flex-col justify-center rounded-full px-4 text-center ${GLASS}`}
         >
-          <a
-            href="/comp"
-            role="menuitem"
-            tabindex="-1"
-            hidden
-            data-priority-entry="comp"
-            aria-current={active === "comp" ? "page" : undefined}
-            class={navMenuItem}>Competitions</a>
-          <a
-            href="/u/me"
-            role="menuitem"
-            tabindex="-1"
-            hidden
-            data-priority-entry="flights"
-            aria-current={active === "flights" ? "page" : undefined}
-            class={navMenuItem}>My Flights</a>
-          <a
-            href="/submit"
-            role="menuitem"
-            tabindex="-1"
-            hidden
-            data-priority-entry="submit"
-            aria-current={active === "submit" ? "page" : undefined}
-            class={navMenuItem}>Submit track</a>
+          <p class="truncate font-brand text-[0.9375rem] leading-5 font-semibold">{title}</p>
         </div>
-      </div>
-    </div>
-    <!-- Fixed h-8 either way, so swapping the pill for the avatar can't shift
-         the bar. `relative` anchors the menu popover. -->
-    <div class="relative ml-auto h-8" data-account>
-      <!-- Plain link to the SPA sign-in page (Google + email code) — every
-           sign-in path stays on /signin. This is what a signed-out visitor,
-           a crawler and a no-JS browser get, unchanged from the prerender. -->
-      <a
-        href="/signin"
-        data-account-signin
-        class="inline-flex h-8 cursor-pointer items-center justify-center rounded-full bg-primary px-4 text-sm font-medium whitespace-nowrap text-primary-foreground transition-colors select-none hover:bg-primary/85"
-      >
-        Sign in
-      </a>
-      <!-- Account menu, revealed only once we know there's a session. Mirrors
-           the SPA's UserMenu (avatar initials → name, Settings, Sign out). -->
-      <div data-account-menu hidden>
-        <button
-          type="button"
-          aria-label="Account menu"
-          aria-haspopup="menu"
-          aria-expanded="false"
-          aria-controls="account-menu-panel"
-          data-account-trigger
-          class="flex size-8 items-center justify-center rounded-full border bg-muted text-xs font-semibold hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"></button>
-        <div
-          id="account-menu-panel"
-          role="menu"
-          aria-label="Account"
-          data-account-panel
-          hidden
-          class="absolute right-0 z-50 mt-1 min-w-40 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
-        >
-          <p
-            data-account-name
-            class="max-w-56 truncate px-1.5 py-1 text-xs font-medium text-muted-foreground"
+      ) : (
+        <details data-bar-menu class="pointer-events-auto relative min-w-0 flex-1">
+          <summary
+            aria-label={`${fullTitle}: go to another page`}
+            class={`flex h-11 cursor-pointer flex-col justify-center rounded-full px-4 text-center ${GLASS} ${FOCUS} ${SUMMARY}`}
           >
-          </p>
-          <div class="-mx-1 my-1 h-px bg-border"></div>
-          <a href="/settings" role="menuitem" tabindex="-1" class={menuItem}>Settings</a>
-          <button type="button" role="menuitem" tabindex="-1" data-account-signout class={menuItem}>
-            Sign out
-          </button>
-        </div>
-      </div>
+            {/* Spans, not paragraphs: a <summary> holds phrasing content. */}
+            <span class="block truncate text-[0.9375rem] leading-5 font-semibold">{title}</span>
+            <span
+              aria-hidden="true"
+              class="flex min-w-0 items-center justify-center gap-0.5 text-xs leading-4 text-muted-foreground"
+            >
+              {/* A phone has room for the parent; a wider screen for the trail. */}
+              <span class="truncate sm:hidden">
+                {parent!.label}
+                {trail.length > 1 ? ` +${trail.length - 1} more` : ""}
+              </span>
+              <span class="truncate max-sm:hidden">
+                {trail.map((id) => PAGES[id].label).join(" › ")}
+              </span>
+              {/* lucide chevron-down */}
+              <svg
+                class="shrink-0"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </span>
+          </summary>
+          <nav aria-label="Pages" class={`${PANEL} left-1/2 min-w-64 -translate-x-1/2`}>
+            <p class={HEAD}>You are here</p>
+            <ul>
+              {trail.map((id, i) => (
+                <li>
+                  <a href={PAGES[id].href} class={ROW} style={indent(i)}>
+                    {PAGES[id].label}
+                  </a>
+                </li>
+              ))}
+              {related?.as === "siblings" ? null : (
+                <li>
+                  <span
+                    aria-current="page"
+                    class={`${ROW} font-semibold hover:bg-transparent`}
+                    style={indent(trail.length)}
+                  >
+                    <span class="min-w-0 flex-1">{fullTitle}</span>
+                    <svg
+                      aria-hidden="true"
+                      class="shrink-0 text-link"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  </span>
+                </li>
+              )}
+              {(related?.items ?? []).map((id) => (
+                <li>
+                  {id === page ? (
+                    <span
+                      aria-current="page"
+                      class={`${ROW} font-semibold hover:bg-transparent`}
+                      style={indent(relatedDepth)}
+                    >
+                      <span class="min-w-0 flex-1">{PAGES[id].label}</span>
+                      <svg
+                        aria-hidden="true"
+                        class="shrink-0 text-link"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </span>
+                  ) : (
+                    <a href={PAGES[id].href} class={ROW} style={indent(relatedDepth)}>
+                      {PAGES[id].label}
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div class={RULE} />
+            <p class={HEAD}>Elsewhere</p>
+            <ul>
+              {APP.map((c) => (
+                <li>
+                  <a href={c.href} class={ROW}>
+                    {c.label}
+                  </a>
+                </li>
+              ))}
+              {elsewhere.map((id) => (
+                <li>
+                  <a href={PAGES[id].href} class={ROW}>
+                    {PAGES[id].label}
+                  </a>
+                </li>
+              ))}
+              {/* A reader two pages deep is one menu from signing in. */}
+              <li data-account-signin>
+                <a href="/signin" class={ROW}>
+                  Sign in
+                </a>
+              </li>
+            </ul>
+          </nav>
+        </details>
+      )
+    }
+
+    {/* Signed out, the home page has Sign in where a page's main action is.
+        Everywhere else the slot is empty, and as wide as the leading control
+        so the title stays in the middle. */}
+    <div class="flex min-w-11 shrink-0 justify-end">
+      {
+        isHome ? (
+          <a
+            href="/signin"
+            data-account-signin
+            class={`pointer-events-auto inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-[0.9375rem] font-medium whitespace-nowrap text-primary-foreground transition-colors select-none hover:bg-primary/85 ${FOCUS}`}
+          >
+            Sign in
+          </a>
+        ) : null
+      }
     </div>
-  </nav>
+  </div>
+
+  {/* The trail as real links with the menu closed (accessibility standard
+      §4.3). Out of the Tab order: the menu is the way to them by keyboard,
+      and a hidden link must not take focus where nobody can see it. */}
+  {
+    trail.length > 0 ? (
+      <nav aria-label="Breadcrumb" class="sr-only">
+        <ol>
+          {trail.map((id) => (
+            <li>
+              <a href={PAGES[id].href} tabindex="-1">
+                {PAGES[id].label}
+              </a>
+            </li>
+          ))}
+          <li>
+            <span aria-current="page">{fullTitle}</span>
+          </li>
+        </ol>
+      </nav>
+    ) : null
+  }
 </header>
 
 <!-- Behaviour lives in public/site-header.js: a file, not an inline script,

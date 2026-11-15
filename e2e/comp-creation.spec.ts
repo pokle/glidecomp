@@ -64,10 +64,11 @@ test("dev login, create competition and task", async ({ page, request }) => {
 
   // Step 2: the user gets a username auto-derived at sign-up, so there is no
   // onboarding gate to clear — landing on /comp stays on /comp instead of
-  // bouncing to /onboarding. The user-menu button rendering is the sync point
-  // that the signed-in user has resolved.
+  // bouncing to /onboarding. The + that starts a competition is offered once
+  // the page has rendered; the main menu is the bar's leading control on a
+  // top-level page.
   await page.goto("/comp");
-  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Main menu" })).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/comp");
 
   // Step 3: Create a competition. "Start a new competition" (the + beside the
@@ -81,6 +82,7 @@ test("dev login, create competition and task", async ({ page, request }) => {
   // choice here: every new comp starts hidden, and going public is the setup
   // guide's last step.
   await expect(createForm.getByText("Hidden?")).toHaveCount(0);
+  // Create is in the bar, live once the competition has a name.
   await createForm.getByRole("button", { name: "Create" }).click();
 
   // Client-side navigation to the competition detail page; the heading
@@ -116,16 +118,16 @@ test("dev login, create competition and task", async ({ page, request }) => {
   // optional "Review settings" step over. Being optional, it doesn't move the
   // required-step counter — the count stays "1 of 4". Settings is a hierarchy
   // of pages now: index → a group page → Save → back to the index → back to
-  // the comp.
-  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  // the comp. Save is live with nothing changed only here, on a competition
+  // whose settings have never been saved (issue #863): the save IS the review.
+  await page.getByRole("button", { name: `${COMP_NAME}: go to another page` }).click();
+  await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
   await page.getByRole("main").getByRole("link", { name: /^General/ }).click();
+  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   // The save lands back on the settings index; return to the comp page.
   await expect(page.getByRole("main").getByRole("link", { name: /^General/ })).toBeVisible();
-  await page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: COMP_NAME })
-    .click();
+  await page.getByRole("link", { name: `Back to ${COMP_NAME}` }).click();
   await expect(guide).toContainText("Completed: Review settings");
   await expect(guide).toContainText("1 of 5 steps");
 
@@ -140,10 +142,7 @@ test("dev login, create competition and task", async ({ page, request }) => {
   await expect(hidden).not.toBeChecked();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("main").getByRole("link", { name: /^Access/ })).toBeVisible();
-  await page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: COMP_NAME })
-    .click();
+  await page.getByRole("link", { name: `Back to ${COMP_NAME}` }).click();
   await expect(guide).toContainText("Completed: Make public");
   await expect(guide).toContainText("2 of 5 steps");
   await expect(page.getByText(/Anyone you send this page’s link to/)).toHaveCount(0);
@@ -152,10 +151,11 @@ test("dev login, create competition and task", async ({ page, request }) => {
     .poll(() => idFromSegment(new URL(page.url()).pathname.split("/")[2]))
     .toBe(createdCompId);
 
-  // Step 4: Create a task. Two "New task" links exist on an empty comp
-  // (section header + the empty-state CTA in the section body); both go to
-  // the page that creates one (#819).
-  await page.getByRole("link", { name: "New task" }).first().click();
+  // Step 4: Create a task. "New task" is a row of the comp page's ⋯ menu
+  // (issue #863; an empty comp also has it in the Tasks section's empty
+  // state); it goes to the page that creates one (#819).
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "New task", exact: true }).click();
   await expect(page).toHaveURL(/\/task\/new$/);
   const taskForm = page.getByRole("main");
   await taskForm.getByRole("textbox", { name: "Name" }).fill("Day 1 - Ridge Run");
@@ -172,10 +172,7 @@ test("dev login, create competition and task", async ({ page, request }) => {
   // guide. The task link is scoped to the Tasks section — the setup guide's
   // "Set the route for…" link also carries the task name.
   await expect(page.getByRole("heading", { level: 1, name: "Day 1 - Ridge Run" })).toBeVisible();
-  await page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: COMP_NAME })
-    .click();
+  await page.getByRole("link", { name: `Back to ${COMP_NAME}` }).click();
   await expect(
     page.locator("#tasks").getByRole("link", { name: /Day 1 - Ridge Run/ })
   ).toBeVisible();

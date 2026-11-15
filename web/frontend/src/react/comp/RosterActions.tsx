@@ -1,6 +1,7 @@
 /**
- * The pilots page's roster-wide actions, behind its ⋯ menu: import a CSV,
- * export one, fill from the CIVL rankings, add test pilots.
+ * Two of the pilots page's roster-wide actions, opened from its bar's ⋯
+ * (comp/PilotsSection.tsx): importing a CSV, and filling from the CIVL
+ * rankings.
  *
  * In the grid these edited the GRID, and nothing was written until Save — a
  * fill or an import the organiser disagreed with was undone by Cancel. With
@@ -24,17 +25,17 @@
  *   - /pilots/civl-fill (pages/CompCivlFillPage.tsx): it asks the rankings
  *     itself, about the roster the page fetched.
  *
- * Both are kit forms (rac/form.tsx): a refusal is pinned under the heading,
- * never a toast. Both write through the bulk route with a `remove` list and
+ * Both are kit forms (rac/form.tsx) around the page's bar (rac/page-bar.tsx,
+ * issue #863): Cancel on the left, the commit (Apply, Fill) on the right and
+ * live only when there is something to write, and a refusal first in the
+ * column, never a toast. Both write through the bulk route with a `remove` list and
  * ONLY the rows that change, so a pilot who joins while a review is open is
  * left alone — and the audit log and the score bump happen there, on the
  * server, as they always have.
  */
 import { useEffect, useState } from "react";
 import { FileTrigger } from "react-aria-components";
-import { EllipsisIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/react/rac/alert";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
 import { Disclosure } from "@/react/rac/disclosure";
 import {
@@ -44,12 +45,10 @@ import {
   useFormAction,
   useFormState,
 } from "@/react/rac/form";
-import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
+import { Page, PageBar, commitClass } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
-import { SettingsPage } from "../components/SettingsPage";
-import { SectionHeader } from "../components/SectionHeader";
 import { api } from "../../comp/api";
-import { underCompPilots } from "../lib/crumbs";
+import type { Crumb } from "../lib/crumbs";
 import { defineDraft } from "../lib/draft-store";
 import { toast } from "../lib/toast";
 import {
@@ -75,35 +74,46 @@ import {
   type ProblemRows,
 } from "./roster-import";
 
-export function RosterActionsMenu({
-  onImport,
-  onExport,
-  onFillCivl,
-  onCopyFromComp,
-  onAddTestPilots,
+/**
+ * The bar of a roster tool that writes, inside its kit `Form`: Cancel on the
+ * left, the commit on the right, live only when there is something to write.
+ * Cancel waits while the commit is in flight: leaving then would leave twice
+ * once the commit landed.
+ */
+export function RosterToolBar({
+  crumbs,
+  title,
+  fullTitle,
+  onCancel,
+  commit,
+  canCommit,
+  pendingLabel,
 }: {
-  onImport: () => void;
-  onExport: () => void;
-  onFillCivl: () => void;
-  /** Copy another competition's pilots in (pages/CompPilotsCopyPage.tsx). */
-  onCopyFromComp: () => void;
-  onAddTestPilots: () => void;
+  crumbs: Crumb[];
+  title: string;
+  /** The name in full, where the title is a short form of it. */
+  fullTitle?: string;
+  onCancel: () => void;
+  /** The commit button's word: Apply, Fill. */
+  commit: string;
+  canCommit: boolean;
+  pendingLabel: string;
 }) {
+  const { pending } = useFormState();
   return (
-    <MenuTrigger>
-      <Button variant="outline" size="icon" aria-label="Roster actions">
-        <EllipsisIcon aria-hidden="true" />
-      </Button>
-      <Menu placement="bottom end">
-        {/* The trailing "…" marks an action that asks something before it
-            acts (see ScoresDownload's "Open in Google Sheets…"). */}
-        <MenuItem onAction={onImport}>Import CSV…</MenuItem>
-        <MenuItem onAction={onExport}>Export CSV</MenuItem>
-        <MenuItem onAction={onFillCivl}>Fill from CIVL…</MenuItem>
-        <MenuItem onAction={onCopyFromComp}>Copy from another competition…</MenuItem>
-        <MenuItem onAction={onAddTestPilots}>Add test pilots</MenuItem>
-      </Menu>
-    </MenuTrigger>
+    <PageBar
+      title={title}
+      fullTitle={fullTitle}
+      trail={crumbs}
+      cancel={() => {
+        if (!pending) onCancel();
+      }}
+      commit={
+        <SubmitButton className={commitClass} isDisabled={!canCommit} pendingLabel={pendingLabel}>
+          {commit}
+        </SubmitButton>
+      }
+    />
   );
 }
 
@@ -141,12 +151,13 @@ export const rosterImportDraft = defineDraft<RosterImportDraft>({
  * needed: the moment someone imports.
  */
 export function ImportCsvPicker({
-  compId,
-  compName,
+  crumbs,
+  onCancel,
   onChosen,
 }: {
-  compId: string;
-  compName: string;
+  crumbs: Crumb[];
+  /** Leave without choosing a file. */
+  onCancel: () => void;
   onChosen: (draft: RosterImportDraft) => void;
 }) {
   async function choose(files: FileList | null) {
@@ -156,7 +167,10 @@ export function ImportCsvPicker({
   }
 
   return (
-    <SettingsPage crumbs={underCompPilots(compId, compName)} title="Import CSV">
+    <Page
+      bar={<PageBar title="Import CSV" trail={crumbs} cancel={onCancel} />}
+      className="flex flex-col gap-6"
+    >
       <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
         <li>
           Only <strong>name</strong> and <strong>class</strong> are required — every other
@@ -184,7 +198,7 @@ export function ImportCsvPicker({
           <Button>Choose file</Button>
         </FileTrigger>
       </div>
-    </SettingsPage>
+    </Page>
   );
 }
 
@@ -193,42 +207,10 @@ function tracksNote(n: number): string | null {
   return n > 0 ? `${n} track${n === 1 ? "" : "s"}` : null;
 }
 
-/**
- * The page's heading row: the title, then Cancel and the submit, top right —
- * where the sheet had them, in reach without scrolling past the whole list.
- * Cancel waits while the submit is in flight: leaving then would leave twice
- * once the submit landed.
- */
-function ReviewHeader({
-  title,
-  onCancel,
-  submit,
-}: {
-  title: string;
-  onCancel: () => void;
-  submit: React.ReactNode;
-}) {
-  const { pending } = useFormState();
-  return (
-    <SectionHeader
-      as="h1"
-      className="mt-2"
-      title={<span className="[overflow-wrap:anywhere]">{title}</span>}
-      action={
-        <div className="flex gap-2">
-          <Button variant="outline" isDisabled={pending} onPress={onCancel}>
-            Cancel
-          </Button>
-          {submit}
-        </div>
-      }
-    />
-  );
-}
-
 export function ImportReview({
   compId,
   compName,
+  crumbs,
   plan,
   compClasses,
   fallback,
@@ -240,6 +222,7 @@ export function ImportReview({
 }: {
   compId: string;
   compName: string;
+  crumbs: Crumb[];
   plan: ImportPlan;
   /** The comp's classes now, for "Its classes are …" and for adding to. */
   compClasses: string[];
@@ -266,28 +249,36 @@ export function ImportReview({
   const canApply = plan.errors.length === 0 && changes > 0;
 
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={underCompPilots(compId, compName)} current="Import CSV" />
-      <Form
-        onSubmit={() =>
-          api.api.comp[":comp_id"].pilot.bulk.$post({
-            param: { comp_id: compId },
-            json: planRequest(plan),
-          })
+    <Form
+      onSubmit={() =>
+        api.api.comp[":comp_id"].pilot.bulk.$post({
+          param: { comp_id: compId },
+          json: planRequest(plan),
+        })
+      }
+      onSuccess={() => {
+        toast.success(`Imported ${plan.fileName}`);
+        onApplied();
+      }}
+      className="contents"
+    >
+      <Page
+        bar={
+          <RosterToolBar
+            crumbs={crumbs}
+            // One line, cut short if the file's name is long; the title's
+            // menu prints it in full.
+            title={`Import ${plan.fileName}`}
+            onCancel={onCancel}
+            commit="Apply"
+            canCommit={canApply}
+            pendingLabel="Applying"
+          />
         }
-        onSuccess={() => {
-          toast.success(`Imported ${plan.fileName}`);
-          onApplied();
-        }}
+        className="flex flex-col gap-6"
       >
-        <ReviewHeader
-          title={`Import ${plan.fileName}`}
-          onCancel={onCancel}
-          submit={canApply ? <SubmitButton pendingLabel="Applying">Apply</SubmitButton> : null}
-        />
-        <p className="mt-1 text-sm text-muted-foreground">{summary}</p>
-        <FormErrorBanner className="mt-3" />
-        <div className="mt-4 flex flex-col gap-6">
+        <FormErrorBanner />
+        <p className="text-sm text-muted-foreground">{summary}</p>
           {plan.errors.length > 0 ? (
             <ImportBlocked
               compId={compId}
@@ -351,9 +342,8 @@ export function ImportReview({
               </li>
             ))}
           </ReviewSection>
-        </div>
-      </Form>
-    </div>
+      </Page>
+    </Form>
   );
 }
 
@@ -579,14 +569,21 @@ async function planCivlFill(compId: string, roster: CompPilot[]): Promise<FillPl
   return { matched: first.matched_count, changes, alreadySet: ranks.already_set, outcome };
 }
 
+/**
+ * The fill page's name: one line for the bar, and in full for the title's
+ * menu and the trail.
+ */
+export const CIVL_FILL_TITLE = "Fill from CIVL";
+export const CIVL_FILL_FULL_TITLE = "Fill from CIVL rankings";
+
 export function CivlFill({
   compId,
-  compName,
+  crumbs,
   roster,
   onDone,
 }: {
   compId: string;
-  compName: string;
+  crumbs: Crumb[];
   /** The roster the page fetched: what the rankings are asked about. */
   roster: CompPilot[];
   /** Cancelled, or filled: leave. */
@@ -613,31 +610,34 @@ export function CivlFill({
   }, [compId, roster]);
 
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={underCompPilots(compId, compName)} current="Fill from CIVL rankings" />
-      <Form
-        onSubmit={() =>
-          api.api.comp[":comp_id"].pilot.bulk.$post({
-            param: { comp_id: compId },
-            json: { pilots: plan!.changes.map((c) => c.row), remove: [] },
-          })
+    <Form
+      onSubmit={() =>
+        api.api.comp[":comp_id"].pilot.bulk.$post({
+          param: { comp_id: compId },
+          json: { pilots: plan!.changes.map((c) => c.row), remove: [] },
+        })
+      }
+      onSuccess={() => {
+        toast.success(plan!.outcome);
+        onDone();
+      }}
+      className="contents"
+    >
+      <Page
+        bar={
+          <RosterToolBar
+            crumbs={crumbs}
+            title={CIVL_FILL_TITLE}
+            fullTitle={CIVL_FILL_FULL_TITLE}
+            onCancel={onDone}
+            commit="Fill"
+            canCommit={!!plan && plan.changes.length > 0}
+            pendingLabel="Filling from the rankings"
+          />
         }
-        onSuccess={() => {
-          toast.success(plan!.outcome);
-          onDone();
-        }}
+        className="flex flex-col gap-4"
       >
-        <ReviewHeader
-          title="Fill from CIVL rankings"
-          onCancel={onDone}
-          submit={
-            plan && plan.changes.length > 0 ? (
-              <SubmitButton pendingLabel="Filling from the rankings">Fill</SubmitButton>
-            ) : null
-          }
-        />
-        <FormErrorBanner className="mt-3" />
-        <div className="mt-4 flex flex-col gap-4">
+        <FormErrorBanner />
           {loadError ? (
             <Alert variant="destructive">
               <AlertDescription>{loadError}</AlertDescription>
@@ -678,8 +678,7 @@ export function CivlFill({
               </ul>
             </>
           )}
-        </div>
-      </Form>
-    </div>
+      </Page>
+    </Form>
   );
 }

@@ -38,12 +38,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFilter, type Selection } from "react-aria-components";
 import { useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeftIcon } from "lucide-react";
 
 import { Card } from "@/react/rac/card";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Button, LinkButton } from "@/react/rac/button";
+import { Button } from "@/react/rac/button";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { Checkbox } from "@/react/rac/checkbox";
 import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
 import { TagGroup, Tag } from "@/react/rac/tag-group";
@@ -55,8 +54,9 @@ import { MetricDistribution } from "../analysis/charts/MetricDistribution";
 import { NotFound } from "../components/NotFound";
 import { api } from "../../comp/api";
 import { fetchWithRetry, type CompDetailData, type TaskDetailData } from "../comp/types";
-import { underTaskAnalysis } from "../lib/crumbs";
-import { idFromSegment, taskAnalysisPath } from "../lib/slug";
+import { COMP_ANALYSIS_LABEL, underTaskAnalysis } from "../lib/crumbs";
+import { compAnalysisPath, compUrlId, idFromSegment, taskAnalysisPath } from "../lib/slug";
+import { reportViewState, taskAnalysisPages } from "../analysis/TaskAnalysisFrame";
 import { useUnits } from "../lib/units";
 import { cn } from "../lib/utils";
 import { displayReport } from "../analysis/units";
@@ -392,16 +392,50 @@ export function TaskPilotSimilarity() {
 
   useEffect(() => setShowAll(false), [subject?.trackFile, metricsParam]);
 
-  if (status === "loading") return <Loading>Loading the task analysis…</Loading>;
   if (status === "notFound") return <NotFound />;
+
+  // The bar is there before the report is: the names fall back to generic
+  // labels, and the links work from the ids alone. Back goes to the task
+  // analysis this tool hangs off; the title's menu lists the report's other
+  // pages beside it, with the class and the pilot being read.
+  const bar = (
+    <PageBar
+      title="Who flew like me?"
+      trail={underTaskAnalysis(compId, comp?.name, taskId, task?.name)}
+      related={taskAnalysisPages(
+        compId,
+        comp?.name,
+        taskId,
+        task?.name,
+        reportViewState(searchParams),
+        "similar"
+      )}
+      actions={[
+        {
+          id: "comp-analysis",
+          label: COMP_ANALYSIS_LABEL,
+          to: compAnalysisPath(compUrlId(comp, compId), comp?.name),
+        },
+      ]}
+    />
+  );
+
+  if (status === "loading")
+    return (
+      <Page width="wide" bar={bar}>
+        <Loading>Loading the task analysis…</Loading>
+      </Page>
+    );
   if (status === "error")
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Could not load the analysis</AlertTitle>
-        <AlertDescription>
-          The task analysis could not be fetched. Reload to try again.
-        </AlertDescription>
-      </Alert>
+      <Page width="wide" bar={bar}>
+        <Alert variant="destructive">
+          <AlertTitle>Could not load the analysis</AlertTitle>
+          <AlertDescription>
+            The task analysis could not be fetched. Reload to try again.
+          </AlertDescription>
+        </Alert>
+      </Page>
     );
 
   const analysisHref = taskAnalysisPath(compId, comp?.name, taskId, task?.name);
@@ -415,25 +449,11 @@ export function TaskPilotSimilarity() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <Breadcrumbs
-        items={underTaskAnalysis(compId, comp?.name, taskId, task?.name)}
-        current="Who flew like me?"
-      />
-
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Who flew like me?</h1>
-          <p className="text-sm text-muted-foreground">
-            {task?.name ?? "This task"} — pilots ranked by how alike they flew, on
-            the behaviours you pick. Scores aren&rsquo;t used.
-          </p>
-        </div>
-        <LinkButton href={analysisHref} variant="outline" size="sm">
-          <ArrowLeftIcon className="size-4" />
-          Task analysis
-        </LinkButton>
-      </div>
+    <Page width="wide" bar={bar} className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        {task?.name ?? "This task"} — pilots ranked by how alike they flew, on
+        the behaviours you pick. Scores aren&rsquo;t used.
+      </p>
 
       {report === null || subject === null ? (
         <Card>
@@ -818,6 +838,6 @@ export function TaskPilotSimilarity() {
           </Card>
         </>
       )}
-    </div>
+    </Page>
   );
 }

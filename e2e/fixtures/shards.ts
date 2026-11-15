@@ -139,6 +139,7 @@ export const E2E_SHARDS = {
     "roster-pages.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "civl-rankings.spec.ts", // 20.8s, ~11s of it seeding 14,535 ranked pilots
     "forms.spec.ts", // 10.0s (chromium + mobile)
+    "page-bar.spec.ts", // new (#863) — measure on its first CI run (chromium + mobile)
     "scoring-mutations.spec.ts", // 7.2s
     "task-scores-admin.spec.ts", // new — measure on its first CI run (chromium + mobile)
   ],

@@ -144,6 +144,9 @@ const TaskRouteQuickPage = lazy(() =>
 const TaskRouteXContestPage = lazy(() =>
   import("./pages/TaskRouteXContestPage").then((m) => ({ default: m.TaskRouteXContestPage }))
 );
+const TaskRouteMapPage = lazy(() =>
+  import("./pages/TaskRouteMapPage").then((m) => ({ default: m.TaskRouteMapPage }))
+);
 const TaskRouteAddWaypointPage = lazy(() =>
   import("./pages/TaskRouteAddWaypointPage").then((m) => ({
     default: m.TaskRouteAddWaypointPage,
@@ -181,6 +184,13 @@ const Scores = lazy(() =>
 );
 const Settings = lazy(() =>
   import("./pages/Settings").then((m) => ({ default: m.Settings }))
+);
+// Account settings are an index and a page per group (#863): one chunk.
+const SettingsGroupPage = lazy(() =>
+  import("./pages/Settings").then((m) => ({ default: m.SettingsGroupPage }))
+);
+const NewApiKeyPage = lazy(() =>
+  import("./pages/Settings").then((m) => ({ default: m.NewApiKeyPage }))
 );
 const AdminUsers = lazy(() =>
   import("./pages/AdminUsers").then((m) => ({ default: m.AdminUsers }))
@@ -373,6 +383,10 @@ export function AppRoutes() {
               element={<TaskRouteAddWaypointPage />}
             />
             <Route
+              path="/comp/:compId/task/:taskId/route/map"
+              element={<TaskRouteMapPage />}
+            />
+            <Route
               path="/comp/:compId/task/:taskId/route/copy"
               element={<TaskRouteCopyPage />}
             />
@@ -463,6 +477,9 @@ export function AppRoutes() {
             {/* "My Profile" merged into Settings; keep the old path working. */}
             <Route path="/profile" element={<Navigate to="/settings" replace />} />
             <Route path="/settings" element={<Settings />} />
+            {/* One page per group, and the form that makes an API key. */}
+            <Route path="/settings/:group" element={<SettingsGroupPage />} />
+            <Route path="/settings/api-keys/new" element={<NewApiKeyPage />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/cache" element={<AdminCache />} />
             <Route path="*" element={<NotFound />} />

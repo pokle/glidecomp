@@ -12,8 +12,8 @@
  *
  *   - a reload comes back to the review of the same file;
  *   - Back leaves the draft where it is, so Forward comes back to it too;
- *   - Apply and Cancel forget it, and so does the menu's "Import CSV…",
- *     which always starts at choosing a file;
+ *   - Apply and the review's Cancel forget it, and so does the menu's
+ *     "Import CSV…", which always starts at choosing a file;
  *   - with no draft to read — a link opened in another tab or browser, a
  *     draft discarded, from an older shape or an expired one — the page is
  *     simply at its first step and asks for the file. No error: there is
@@ -58,8 +58,8 @@ export function CompRosterImportPage() {
   if (!plan) {
     return (
       <ImportCsvPicker
-        compId={page.urlId}
-        compName={page.comp.name}
+        crumbs={page.crumbs}
+        onCancel={page.leave}
         onChosen={(file) => void setDraft(file)}
       />
     );
@@ -80,6 +80,7 @@ export function CompRosterImportPage() {
     <ImportReview
       compId={page.urlId}
       compName={comp.name}
+      crumbs={page.crumbs}
       plan={plan}
       compClasses={comp.pilot_classes}
       fallback={fallback}

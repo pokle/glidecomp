@@ -142,23 +142,28 @@ export function OAuthConsent() {
             {error}
           </p>
         ) : null}
+        {/* No bar here (#863 decision 9), so the answer stays under the
+            question: the way out first, then Allow, last and primary. Both
+            44 px at every pointer. */}
         <div className="flex flex-wrap gap-3">
           <Button
-            onPress={() => void answer(true)}
-            isPending={busy === "allow"}
-            pendingLabel="Allowing"
-            isDisabled={busy === "deny"}
-          >
-            Allow
-          </Button>
-          <Button
             variant="outline"
+            className="h-11"
             onPress={() => void answer(false)}
             isPending={busy === "deny"}
             pendingLabel="Declining"
             isDisabled={busy === "allow"}
           >
             Don't allow
+          </Button>
+          <Button
+            className="h-11"
+            onPress={() => void answer(true)}
+            isPending={busy === "allow"}
+            pendingLabel="Allowing"
+            isDisabled={busy === "deny"}
+          >
+            Allow
           </Button>
         </div>
       </Card>

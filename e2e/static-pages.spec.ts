@@ -144,17 +144,42 @@ test.describe("with JavaScript off", () => {
     await expect(page.getByRole("tabpanel").first()).toBeVisible();
   });
 
-  test("every header link is still in the row on a phone", async ({ page }) => {
-    // The nav folds links away only once a script has run. Without one the row
-    // wraps, exactly as this header always behaved — a "More" button that
-    // cannot be opened would put My Flights and Submit track out of reach.
+  test("the bar's menu opens, and every link in it is reachable, on a phone", async ({ page }) => {
+    // The bar's menus are native <details>, so they open with no script at
+    // all: a menu that only a script could open would put Competitions,
+    // My Flights and Submit track out of reach.
     await page.setViewportSize({ width: 320, height: 812 });
     await page.goto("/about");
-    const nav = page.getByRole("navigation", { name: "Main" });
-    for (const name of ["Competitions", "My Flights", "Submit track"]) {
-      await expect(nav.getByRole("link", { name })).toBeVisible();
+    const bar = page.locator("[data-page-bar]");
+    await expect(bar.getByRole("link", { name: "Back to Home" })).toHaveAttribute("href", "/");
+
+    const menu = bar.getByRole("navigation", { name: "Pages" });
+    await expect(menu).toBeHidden();
+    await bar.locator("summary").click();
+    await expect(menu).toBeVisible();
+    for (const [name, href] of [
+      ["Home", "/"],
+      ["Competitions", "/comp"],
+      ["My Flights", "/u/me"],
+      ["Submit track", "/submit"],
+      ["Scoring", "/scoring"],
+      ["Sign in", "/signin"],
+    ]) {
+      const link = menu.getByRole("link", { name, exact: true });
+      await expect(link).toBeVisible();
+      await expect(link).toHaveAttribute("href", href);
     }
-    await expect(nav.getByRole("button", { name: "More pages" })).toBeHidden();
+  });
+
+  test("the home page's main menu opens, and Sign in is a plain link", async ({ page }) => {
+    await page.goto("/");
+    const bar = page.locator("[data-page-bar]");
+    await bar.locator('summary[aria-label="Main menu"]').click();
+    const menu = bar.getByRole("navigation", { name: "Main" });
+    for (const name of ["Competitions", "My Flights", "Submit track", "About", "Scoring"]) {
+      await expect(menu.getByRole("link", { name, exact: true })).toBeVisible();
+    }
+    await expect(menu.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/signin");
   });
 
   test("the GAP guide still shows its formulas", async ({ page }) => {
@@ -167,39 +192,109 @@ test.describe("with JavaScript off", () => {
 });
 
 /**
- * The header's priority+overflow nav (issue #639). The static pages carry
- * their own vanilla twin of the SPA's PriorityNav, and the two halves of the
- * rule for these pages pull in opposite directions here: with a script the bar
- * must be one line at every width, and without one every link must still be
- * reachable. So both are asserted.
+ * The page bar (issue #863): the static pages carry a vanilla twin of the
+ * app's `PageBar` (static/src/components/SiteHeader.astro), so the whole
+ * website has one navigation. The trail is asserted from the HTML a crawler
+ * gets; the menus' behaviour in a browser.
  */
-test.describe("the header's priority+overflow nav", () => {
-  test("folds the links that do not fit into More, on one line", async ({ page }) => {
-    await page.goto("/about");
-    const nav = page.getByRole("navigation", { name: "Main" });
-    const overflow = nav.locator("[data-priority-trigger]");
-    const wideHeight = (await nav.boundingBox())!.height;
-    await expect(overflow).toHaveAttribute("data-priority-overflow", "0");
+test.describe("the page bar", () => {
+  /** Each page, the page its back link goes to, and its trail. */
+  const TRAILS = [
+    { path: "/about", back: ["Home", "/"], trail: ["/"] },
+    { path: "/assistant", back: ["Home", "/"], trail: ["/"] },
+    { path: "/legal", back: ["Home", "/"], trail: ["/"] },
+    { path: "/scoring", back: ["Home", "/"], trail: ["/"] },
+    { path: "/scoring/gap", back: ["Scoring", "/scoring"], trail: ["/", "/scoring"] },
+    { path: "/scoring/open-distance", back: ["Scoring", "/scoring"], trail: ["/", "/scoring"] },
+    { path: "/scoring/data-cleaning", back: ["Scoring", "/scoring"], trail: ["/", "/scoring"] },
+    { path: "/scoring/track-validity", back: ["Scoring", "/scoring"], trail: ["/", "/scoring"] },
+  ] as const;
 
+  for (const { path, back, trail } of TRAILS) {
+    test(`${path} has a back link, a breadcrumb trail and one h1 in the HTML`, async ({
+      request,
+    }) => {
+      const body = await html(request, path);
+      expect(body.match(/<h1[\s>]/g), "exactly one <h1>: the article's").toHaveLength(1);
+      // A real link to the page above, so it works with JavaScript off.
+      expect(body).toMatch(
+        new RegExp(`<a href="${back[1]}" aria-label="Back to ${back[0]}"`)
+      );
+      const crumbs = body.match(/<nav aria-label="Breadcrumb"[\s\S]*?<\/nav>/)?.[0] ?? "";
+      expect(
+        [...crumbs.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]),
+        "the pages above, from the top"
+      ).toEqual([...trail]);
+      expect(crumbs).toContain('aria-current="page"');
+    });
+  }
+
+  test("the home page has the main menu, no back link, and one h1", async ({ request }) => {
+    const body = await html(request, "/");
+    expect(body.match(/<h1[\s>]/g)).toHaveLength(1);
+    expect(body).toContain('aria-label="Main menu"');
+    expect(body).not.toContain('aria-label="Back to');
+    expect(body).not.toContain('aria-label="Breadcrumb"');
+  });
+
+  test("a menu closes on Escape and on a click outside", async ({ page }) => {
+    await page.goto("/scoring/gap");
+    const bar = page.locator("[data-page-bar]");
+    const control = bar.locator("summary");
+    const menu = bar.getByRole("navigation", { name: "Pages" });
+
+    await control.click();
+    // The guides beside this one are one more level of the same tree.
+    await expect(menu.getByRole("link", { name: "Open distance" })).toBeVisible();
+    await expect(menu.locator('[aria-current="page"]')).toHaveText(/GAP scoring/);
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(control).toBeFocused();
+
+    await control.click();
+    await expect(menu).toBeVisible();
+    // The page's edge: the panel is in the middle, over the article.
+    await page.mouse.click(4, 400);
+    await expect(menu).toBeHidden();
+  });
+
+  test("the back link goes to the page above", async ({ page }) => {
+    await page.goto("/scoring/gap");
+    await page.getByRole("link", { name: "Back to Scoring" }).click();
+    await expect(page).toHaveURL(/\/scoring$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Scoring" })).toBeVisible();
+  });
+
+  test("the bar is one line with 44 px controls at 320px, and the page does not scroll sideways", async ({
+    page,
+  }) => {
     // 320px is the narrowest viewport the accessibility standard supports
     // (docs/accessibility-standard.md §3.2).
     await page.setViewportSize({ width: 320, height: 812 });
-    await expect
-      .poll(async () => Number(await overflow.getAttribute("data-priority-overflow")))
-      .toBeGreaterThan(0);
+    await page.goto("/scoring/data-cleaning");
+    const bar = page.locator("[data-page-bar]");
+    for (const control of [bar.getByRole("link", { name: "Back to Scoring" }), bar.locator("summary")]) {
+      const box = (await control.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.width).toBeGreaterThanOrEqual(44);
+    }
+    expect((await bar.boundingBox())!.height, "44 px and its padding").toBeLessThanOrEqual(64);
     expect(
-      (await nav.boundingBox())!.height,
-      "one line at 320px, exactly as at the default width"
-    ).toBeCloseTo(wideHeight, 0);
-
-    // Folded is not gone.
-    await nav.getByRole("button", { name: "More pages" }).click();
-    const menu = page.getByRole("menu", { name: "More pages" });
-    await expect(menu.getByRole("menuitem", { name: "Submit track" })).toBeVisible();
-    await menu.getByRole("menuitem", { name: "Submit track" }).click();
-    await expect(page).toHaveURL(/\/submit/);
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+    ).toBe(true);
   });
 
+  test("a heading an in-page link jumps to stops under the bar, not behind it", async ({
+    page,
+  }) => {
+    await page.goto("/scoring/gap#ftv");
+    const barBottom = await page
+      .locator("[data-page-bar]")
+      .evaluate((el) => el.getBoundingClientRect().bottom);
+    await expect
+      .poll(() => page.locator("#ftv").evaluate((el) => el.getBoundingClientRect().top))
+      .toBeGreaterThanOrEqual(barBottom);
+  });
 });
 
 test.describe("the homepage's vanilla enhancements", () => {

@@ -239,6 +239,12 @@ test.describe("submitting a track without an account", () => {
   test("preselects the task flying today", async ({ page }) => {
     await page.goto(`${BASE_URL}/submit`);
     await expect(page.getByRole("heading", { name: "Submit your track" })).toBeVisible();
+    // One of the places the app starts from, and a form: the main menu where
+    // a form under another page has Cancel, and Submit in the bar — live only
+    // once there is a file to send.
+    await expect(page.getByRole("button", { name: "Main menu" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancel" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Submit", exact: true })).toBeDisabled();
     // One choice out of a small visible set, so it is a radio group — and the
     // commonest answer is already made, because most pilots submit on the day.
     const todaysTask = page.getByRole("radio", { name: /Today's Task/ });
@@ -352,13 +358,17 @@ test.describe("submitting a track without an account", () => {
     });
     await expect(page.getByText("forged.igc")).toBeVisible();
 
-    await page.getByRole("button", { name: "Submit track" }).click();
+    await page.getByRole("button", { name: "Submit", exact: true }).click();
 
     // The summary is the whole point of the success state: it is where a
     // pilot notices they sent the wrong file.
     await expect(page.getByText(/Track (submitted|replaced) for Jane E2E/)).toBeVisible({
       timeout: 15_000,
     });
+    // The result took the form's place, at the top of the page and on screen;
+    // nothing is left to submit, so the bar has no Submit.
+    await expect(page.getByText(/Track (submitted|replaced) for Jane E2E/)).toBeInViewport();
+    await expect(page.getByRole("button", { name: "Submit", exact: true })).toHaveCount(0);
     await expect(page.getByText("2026-01-01")).toBeVisible(); // the file's own date
     await expect(
       page.getByRole("link", { name: "View provisional score card" })
@@ -370,7 +380,7 @@ test.describe("submitting a track without an account", () => {
 
   // The form is the kit form (rac/form.tsx). A refusal one step can fix is
   // shown under that step's field, focused; a refusal no field can fix is
-  // pinned beside Submit with who to ask. docs/track-submission.md, "Errors are
+  // in the banner at the top of the page with who to ask. docs/track-submission.md, "Errors are
   // repairable".
 
   test("a wrong identifier is shown under the identifier, which is focused", async ({
@@ -385,7 +395,7 @@ test.describe("submitting a track without an account", () => {
       mimeType: "application/octet-stream",
       buffer: Buffer.from(PLAIN_IGC),
     });
-    await page.getByRole("button", { name: "Submit track" }).click();
+    await page.getByRole("button", { name: "Submit", exact: true }).click();
 
     // The server's sentence, under the field it is about and read out with it.
     await expect(identifier).toHaveAttribute("aria-invalid", "true", { timeout: 15_000 });
@@ -415,7 +425,7 @@ test.describe("submitting a track without an account", () => {
       mimeType: "application/octet-stream",
       buffer: Buffer.from("Not a tracklog at all.\r\n"),
     });
-    await page.getByRole("button", { name: "Submit track" }).click();
+    await page.getByRole("button", { name: "Submit", exact: true }).click();
 
     const fileButton = page.getByRole("button", { name: "Change file…" });
     await expect(fileButton).toHaveAccessibleDescription(
@@ -427,7 +437,7 @@ test.describe("submitting a track without an account", () => {
     await expect(page.getByText("We could not accept that track")).toHaveCount(0);
   });
 
-  test("a refusal no field can fix is pinned beside Submit, with who to ask", async ({
+  test("a refusal no field can fix is in the banner under the bar, with who to ask", async ({
     page,
   }) => {
     // A competition that asks pilots to sign in. The pilot cannot fix that in
@@ -462,7 +472,7 @@ test.describe("submitting a track without an account", () => {
         mimeType: "application/octet-stream",
         buffer: Buffer.from(PLAIN_IGC),
       });
-      const submit = page.getByRole("button", { name: "Submit track" });
+      const submit = page.getByRole("button", { name: "Submit", exact: true });
       await submit.click();
 
       const pinned = page
@@ -472,7 +482,7 @@ test.describe("submitting a track without an account", () => {
         timeout: 15_000,
       });
       await expect(pinned).toBeFocused();
-      // Beside Submit, both on screen at once.
+      // Under the bar Submit is in: both on screen at once.
       await expect(pinned).toBeInViewport();
       await expect(submit).toBeInViewport();
       // The help it carries: the sign-in, back to this page, and the organiser.
@@ -749,11 +759,17 @@ test.describe("submitting a track without an account", () => {
       await devLogin(page);
       await page.goto(`${BASE_URL}/comp/${fixture.compId}/task/${fixture.taskId}`);
 
-      // Task settings are a routed page since #637, so this is a link rather
-      // than a dialog trigger.
-      const settings = page.getByRole("link", { name: "Settings", exact: true });
-      await expect(settings).toBeVisible({ timeout: 20_000 });
-      await settings.click();
+      // Task settings are a routed page since #637, and "Task settings" is a
+      // row of the task page's ⋯ menu (issue #863). The organiser's rows
+      // arrive once the session has resolved, so wait for the row's link in
+      // the markup before opening the menu.
+      await expect(
+        page
+          .getByRole("navigation", { name: "Page actions" })
+          .getByRole("link", { name: "Task settings" })
+      ).toHaveCount(1, { timeout: 20_000 });
+      await page.getByRole("button", { name: "More actions" }).click();
+      await page.getByRole("menuitem", { name: "Task settings" }).click();
 
       // A switch on the settings page, where it was a checkbox in the dialog:
       // it is an on/off setting rather than a form checkbox, and RAC gives it
@@ -799,9 +815,10 @@ test.describe("submitting a track without an account", () => {
       await expect(
         visitorPage.getByText("This task is closed for track submissions.")
       ).toBeVisible({ timeout: 20_000 });
-      // In main: the site header's own Submit track is always there.
+      // No "Submit your track" in the bar's ⋯ menu: with the menu closed its
+      // rows that open a page are real links in the markup.
       await expect(
-        visitorPage.getByRole("main").getByRole("link", { name: "Submit track" })
+        visitorPage.getByRole("link", { name: "Submit your track" })
       ).toHaveCount(0);
 
       // And /submit stops offering it — the only user-side coverage of the
@@ -816,9 +833,10 @@ test.describe("submitting a track without an account", () => {
       await visitor.close();
 
       // The organiser still can — the stop is aimed at pilots, not at them.
-      await expect(
-        page.getByRole("main").getByRole("link", { name: "Submit track" }).first()
-      ).toBeVisible();
+      await expect(page.getByText("You can still upload as an organiser.")).toBeVisible();
+      await page.getByRole("button", { name: "More actions" }).click();
+      await expect(page.getByRole("menuitem").first()).toHaveText("Submit your track");
+      await page.keyboard.press("Escape");
 
       // Put it back so the rest of the file's expectations still hold — and
       // CHECK that it went back. This task is shared with the test below,
@@ -908,7 +926,7 @@ test.describe("submitting a track without an account", () => {
         mimeType: "application/octet-stream",
         buffer: Buffer.from(PLAIN_IGC),
       });
-      await page.getByRole("button", { name: "Submit track" }).click();
+      await page.getByRole("button", { name: "Submit", exact: true }).click();
 
       await expect(
         page.getByText(/Track (submitted|replaced) for Mistyped Pilot/)
@@ -932,9 +950,14 @@ test.describe("submitting a track without an account", () => {
     // neighbouring assertion in this file already used 15-20s.
     //
     // A link to /submit, not a dialog (#820) — task-submit-link.spec.ts
-    // follows it. In main: the site header carries a Submit track of its own.
+    // follows it. It is the first row of the bar's ⋯ menu (issue #863); with
+    // the menu closed it is a real link in the markup.
     await expect(
-      page.getByRole("main").getByRole("link", { name: "Submit track" }).first()
-    ).toBeVisible({ timeout: 20_000 });
+      page
+        .getByRole("navigation", { name: "Page actions" })
+        .getByRole("link", { name: "Submit your track" })
+    ).toHaveCount(1, { timeout: 20_000 });
+    await page.getByRole("button", { name: "More actions" }).click();
+    await expect(page.getByRole("menuitem").first()).toHaveText("Submit your track");
   });
 });

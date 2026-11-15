@@ -106,7 +106,7 @@ export function MetricGlossary({
                 <div
                   key={e.id}
                   id={glossaryEntryId(e.id)}
-                  className="scroll-mt-20 break-inside-avoid rounded-md target:bg-accent/50"
+                  className="scroll-mt-32 break-inside-avoid rounded-md target:bg-accent/50"
                 >
                   <dt className="text-sm font-medium">
                     {e.label}

@@ -19,6 +19,7 @@
 /scores  /app  200
 /profile  /app  200
 /settings  /app  200
+/settings/*  /app  200
 /onboarding  /app  200
 /signin  /app  200
 /oauth/consent  /app  200

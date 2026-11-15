@@ -9,7 +9,9 @@
  * - A row opens that waypoint's PAGE (/waypoints/:n), where it opened a
  *   full-screen sheet until #811. Add waypoint (/waypoints/new) and the map
  *   at full size (/waypoints/map) are pages too. Each is left by the
- *   browser's Back, and Done/Back return to the list.
+ *   browser's Back or the bar's, and a waypoint's Done returns to the list.
+ * - Every action is in the page's bar (issue #863): Save is its commit
+ *   button, and the rest are rows of ⋯ ("More actions").
  * - What they edit is a DRAFT of the whole file in sessionStorage (#811,
  *   docs/drafts.md), so an edit survives going between the pages and a
  *   reload; Save on the list sends it, and "Discard changes" throws it away.
@@ -17,8 +19,8 @@
  *   between its own pages does not; Back keeps the draft for later.
  * - Anonymous visitors get the same list, read-only, and are sent to it from
  *   the editor's pages.
- * - The device-export panel (RAC Menu of download formats, QR toggle, swap
- *   checkbox).
+ * - The device rows of ⋯ (the download formats behind one row, the QR, the
+ *   code/name swap).
  * - One save round-trip against the real API, restored afterwards from the
  *   captured original so the seeded comp is left exactly as found.
  *
@@ -41,6 +43,8 @@ import { FRONTEND_URL } from "./fixtures/stack";
 import { coordsFields, fillCoords } from "./fixtures/coords";
 import {
   COMP_NAME,
+  barAction,
+  barActionLabels,
   editorRows,
   firstWaypointRow,
   h1,
@@ -88,14 +92,11 @@ async function expectBigEnoughToTap(target: Locator): Promise<void> {
 }
 
 /**
- * The device-export toolbar's first button. Its LABEL depends on the pointer:
- * a coarse pointer gets hosted links to open in a flight app, a fine one gets
- * a client-side download menu (WaypointDeviceExport).
+ * The first device row of ⋯. Its LABEL depends on the pointer: a coarse
+ * pointer gets hosted links to open in a flight app, a fine one gets
+ * client-side downloads (WaypointDeviceExport).
  */
-const deviceExportButton = (page: Page) =>
-  page.getByRole("button", {
-    name: /Download waypoints|Open waypoints in a flight app/,
-  });
+const DEVICE_FILES = /^(Download|Open in a flight app)$/;
 
 const saveButton = (page: Page) => page.getByRole("button", { name: "Save", exact: true });
 
@@ -122,21 +123,16 @@ async function editWaypoint(
 }
 
 /**
- * Re-enter the waypoints page through the comp's section nav, and answer with
- * the comp page's URL — so there is a real in-app page underneath, which is
- * what a reader has.
+ * Re-enter the waypoints page through the comp page's title menu, and answer
+ * with the comp page's URL — so there is a real in-app page underneath, which
+ * is what a reader has.
  */
 async function reachWaypointsFromCompPage(page: Page): Promise<string> {
-  await page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: COMP_NAME })
-    .click();
+  await page.getByRole("link", { name: `Back to ${COMP_NAME}` }).click();
   await expect(h1(page, COMP_NAME)).toBeVisible();
   const compUrl = page.url();
-  await page
-    .getByRole("navigation", { name: "Sections" })
-    .getByRole("link", { name: /^Waypoints/ })
-    .click();
+  await page.getByRole("button", { name: `${COMP_NAME}: go to another page` }).click();
+  await page.getByRole("menuitem", { name: "Waypoints", exact: true }).click();
   await onEditorList(page, waypoints.length);
   return compUrl;
 }
@@ -220,7 +216,7 @@ test("the editor lists waypoints, edits one on its own page, and blocks bad coor
   await expect(page.getByText("1 need valid coordinates")).toBeVisible();
 
   // …and Save refuses (client-side) instead of PUTting bad data, saying why
-  // beside the button rather than in a toast.
+  // under the bar rather than in a toast.
   await saveButton(page).click();
   await expect(
     page.getByRole("alert").filter({ hasText: "Every waypoint needs valid coordinates before saving" })
@@ -246,8 +242,8 @@ test("Back and Done leave a waypoint's page for the list, at its scroll", async 
     await page.setViewportSize({ width: size.width, height: 600 });
   }
 
-  // The last row, scrolled to the MIDDLE of the screen, clear of the sticky
-  // map pane above it and the sticky Save bar below.
+  // The last row, scrolled to the MIDDLE of the screen, clear of the bar and
+  // the sticky map pane above it.
   const index = waypoints.length - 1;
   const lastCode = waypoints[index].code;
   const centre = async () => {
@@ -313,7 +309,7 @@ test("the draft survives a reload, on the waypoint's page and on the list", asyn
 
   // Discard changes is how the draft goes on purpose — asked first — and,
   // as the route editor's Cancel does, it leaves for the competition.
-  await page.getByRole("button", { name: "Discard changes" }).click();
+  await barAction(page, "Discard changes");
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Discard changes" }).click();
@@ -324,6 +320,8 @@ test("the draft survives a reload, on the waypoint's page and on the list", asyn
   await expect(page.getByText("Unsaved changes")).toBeHidden();
   await expect(await firstWaypointRow(page)).not.toContainText("E2E Reloaded");
   await expect(saveButton(page)).toBeDisabled();
+  // Nothing to discard, so ⋯ does not offer to.
+  expect(await barActionLabels(page)).not.toContain("Discard changes");
 
   expect(mutated()).toBe(false);
 });
@@ -339,18 +337,24 @@ test("remove a waypoint, and add one on a page of its own (nothing saved)", asyn
   await expect(page.getByText(`${waypoints.length - 1} waypoints`)).toBeVisible();
   await expect(await firstWaypointRow(page)).not.toContainText(firstCode);
 
-  // Add waypoint is a page — no dialog — on the kit form.
-  await page.getByRole("link", { name: "Add waypoint" }).click();
+  // Add waypoint is a page — no dialog — on the kit form, with Cancel and
+  // Add in its bar.
+  await barAction(page, "Add waypoint");
   await expect(page).toHaveURL(/\/waypoints\/new$/);
   await expect(h1(page, "Add waypoint")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
   await expectNoSidewaysScroll(page);
   await page.getByRole("textbox", { name: "Code" }).fill("E2E1");
 
-  // Coordinates are the one thing it cannot do without: refused under the
+  // Coordinates are the one thing it cannot do without: Add is not live
+  // until there are some, and ones that do not parse are refused under the
   // field, which takes focus.
-  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const add = page.getByRole("button", { name: "Add", exact: true });
+  await expect(add).toBeDisabled();
   const coords = coordsFields(page);
+  await coords.lat.fill("not a latitude");
+  await add.click();
   await expect(page.getByText("Enter a latitude between -90 and 90.")).toBeVisible();
   await expect(page.getByText("Enter a longitude between -180 and 180.")).toBeVisible();
   await expect(coords.lat).toBeFocused();
@@ -361,14 +365,21 @@ test("remove a waypoint, and add one on a page of its own (nothing saved)", asyn
   await expect(page.getByText(`${waypoints.length} waypoints`)).toBeVisible();
   await expect(waypointRow(page, "E2E1")).toBeVisible();
 
-  // Back from Add waypoint adds nothing.
-  await page.getByRole("link", { name: "Add waypoint" }).click();
+  // Back from Add waypoint adds nothing, and nor does Cancel.
+  await barAction(page, "Add waypoint");
   await expect(h1(page, "Add waypoint")).toBeVisible({ timeout: 20_000 });
   await page.getByRole("textbox", { name: "Code" }).fill("E2E2");
   await fillCoords(page, "-36.6, 148.3");
   await page.goBack();
   await onEditorList(page, waypoints.length);
   await expect(waypointRow(page, "E2E2")).toHaveCount(0);
+
+  await barAction(page, "Add waypoint");
+  await expect(h1(page, "Add waypoint")).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("textbox", { name: "Code" }).fill("E2E3");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await onEditorList(page, waypoints.length);
+  await expect(waypointRow(page, "E2E3")).toHaveCount(0);
 
   expect(mutated()).toBe(false);
 });
@@ -431,27 +442,29 @@ test("save round-trip persists an edit, restore leaves the comp as found", async
 });
 
 test("device export: the QR section carries the swap toggle", async ({ page }) => {
-  // Runs in BOTH projects. The pointer decides what the first toolbar button
+  // Runs in BOTH projects. The pointer decides what the first device row
   // does, but the QR half is the same everywhere.
   const mutated = trackMutations(page);
 
   await expect(page.getByRole("checkbox", { name: /Swap code & name/ })).toHaveCount(0);
-  await page.getByRole("button", { name: "QR code" }).click();
+  await barAction(page, "QR code");
   await expect(page.getByText(/Scan with XCTrack, Flyskyhy/)).toBeVisible();
+  // The QR is on the page, and the page still does not scroll sideways.
+  await expectNoSidewaysScroll(page);
 
   const swap = page.getByRole("checkbox", { name: /Swap code & name/ });
   await expect(swap).not.toBeChecked();
   await page.getByText(/Swap code & name/).click();
   await expect(swap).toBeChecked();
 
-  await page.getByRole("button", { name: "Hide QR" }).click();
+  await barAction(page, "Hide QR");
   await expect(page.getByText(/Scan with XCTrack, Flyskyhy/)).toHaveCount(0);
   await expect(swap).toHaveCount(0);
 
   expect(mutated()).toBe(false);
 });
 
-test("the map fold toggle rides the toolbar, on ONE line", async ({ page, isMobile }) => {
+test("the map folds away while it is stacked over the list", async ({ page, isMobile }) => {
   // Stacked only: side by side there is no fold and DetailFoldButton hides
   // itself, with the same `@5xl:` container query MasterDetail splits on.
   const mutated = trackMutations(page);
@@ -463,10 +476,6 @@ test("the map fold toggle rides the toolbar, on ONE line", async ({ page, isMobi
     return;
   }
 
-  const qr = page.getByRole("button", { name: "QR code" });
-  const rowTop = async (l: Locator) => (await l.boundingBox())!.y;
-  expect(Math.abs((await rowTop(fold)) - (await rowTop(qr)))).toBeLessThan(8);
-
   await expect(fold).toHaveAttribute("aria-expanded", "true");
   await fold.click();
   const unfold = page.getByRole("button", { name: "Show map" });
@@ -477,50 +486,88 @@ test("the map fold toggle rides the toolbar, on ONE line", async ({ page, isMobi
   await unfold.click();
   await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible();
 
-  await qr.click();
-  await expect(page.getByText(/Scan with XCTrack, Flyskyhy/)).toBeVisible();
-  expect(
-    Math.abs((await rowTop(fold)) - (await rowTop(page.getByRole("button", { name: "Hide QR" }))))
-  ).toBeLessThan(8);
+  // Add from map needs the map: armed with the map folded away, it unfolds.
+  await fold.click();
+  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeHidden();
+  await barAction(page, "Add from map");
+  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible();
+  await expect(page.getByText("Tap the map to place…")).toBeVisible();
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.getByText("Tap the map to place…")).toHaveCount(0);
 
   expect(mutated()).toBe(false);
 });
 
-// DESKTOP_ONLY: a coarse pointer gets "Open in app" with hosted links instead
-// of the client-side download menu (WaypointDeviceExport).
-test("device export: download menu lists every format", { tag: DESKTOP_ONLY }, async ({ page }) => {
+test("nothing sticks to the bottom, and Enter in the filter is not Save", async ({ page }) => {
   const mutated = trackMutations(page);
-  await page.getByRole("button", { name: "Download waypoints" }).click();
-  const menu = page.getByRole("menu");
-  await expect(menu).toBeVisible();
-  // All 8 engine export formats (WAYPOINT_EXPORT_FORMATS).
-  await expect(menu.getByRole("menuitem")).toHaveCount(8);
-  await expect(menu.getByRole("menuitem", { name: "SeeYou (.cup)" })).toBeVisible();
+  await editWaypoint(page, await firstWaypointRow(page), waypoints[0].code, "Name", "E2E Filter");
+  await expect(saveButton(page)).toBeEnabled();
+
+  // The filter is the bar's second layer, so it is inside the bar's form.
+  const filter = page.getByRole("searchbox", { name: "Filter waypoints" });
+  await filter.fill("E2E Filter");
+  await expect(page.getByText(`1 of ${waypoints.length} match`)).toBeVisible();
+  await filter.press("Enter");
+  await expect(page.getByText(`1 of ${waypoints.length} match`)).toBeVisible();
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  // Save is in the bar at the top, not in a bar at the foot of the screen.
+  const save = (await saveButton(page).boundingBox())!;
+  expect(save.y, "Save is in the page bar").toBeLessThan(80);
+  const stuck = await page.evaluate(() =>
+    [...document.querySelectorAll("main *")].filter((el) => {
+      const style = getComputedStyle(el);
+      return (
+        (style.position === "sticky" || style.position === "fixed") &&
+        style.bottom === "0px" &&
+        style.top === "auto" &&
+        el.getBoundingClientRect().height > 0
+      );
+    }).length
+  );
+  expect(stuck, "nothing is stuck to the bottom of the screen").toBe(0);
+
+  expect(mutated()).toBe(false);
+});
+
+// DESKTOP_ONLY: a coarse pointer gets "Open in a flight app" with hosted
+// links instead of client-side downloads (WaypointDeviceExport).
+test("device export: the Download row lists every format", { tag: DESKTOP_ONLY }, async ({ page }) => {
+  const mutated = trackMutations(page);
+  await barAction(page, "Download");
+  // The formats are a second menu, behind the row.
+  const formats = page
+    .getByRole("menu")
+    .filter({ has: page.getByRole("menuitem", { name: "SeeYou (.cup)" }) });
+  await expect(formats).toBeVisible();
+  // The swap row, then all 8 engine export formats (WAYPOINT_EXPORT_FORMATS).
+  await expect(formats.getByRole("menuitem")).toHaveCount(9);
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
   expect(mutated()).toBe(false);
 });
 
 // DESKTOP_ONLY: fine pointer only, for the same reason as the test above.
-test("device export: the download menu carries its own swap toggle", { tag: DESKTOP_ONLY }, async ({
+test("device export: the formats menu carries its own swap row", { tag: DESKTOP_ONLY }, async ({
   page,
 }) => {
   const mutated = trackMutations(page);
   await expect(page.getByRole("checkbox", { name: /Swap code & name/ })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Download waypoints" }).click();
-  const item = page.getByRole("menuitemcheckbox", { name: /Swap code & name/ });
-  await expect(item).toBeVisible();
-  await expect(item).not.toBeChecked();
-  // Selecting it must NOT close the menu.
-  await item.click();
-  await expect(item).toBeChecked();
-  await expect(page.getByRole("menu")).toBeVisible();
+  await barAction(page, "Download");
+  await page.getByRole("menuitem", { name: "Swap code & name: off" }).click();
+  // The row says what it is set to the next time the menu is opened.
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await barAction(page, "Download");
+  await expect(page.getByRole("menuitem", { name: "Swap code & name: on" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "SeeYou (.cup)" })).toBeVisible();
-
   await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
   // One piece of state behind both: the QR section opens already swapped.
-  await page.getByRole("button", { name: "QR code" }).click();
+  await barAction(page, "QR code");
   await expect(page.getByRole("checkbox", { name: /Swap code & name/ })).toBeChecked();
 
   expect(mutated()).toBe(false);
@@ -532,19 +579,21 @@ test("leaving the editor by a link asks; going between its pages does not", asyn
   await editWaypoint(page, await firstWaypointRow(page), code, "Name", "E2E Unsaved");
   await expect(page.getByText("Unsaved changes")).toBeVisible();
 
-  // Into a waypoint's page and back out by its breadcrumb: the editor's own
+  // Into a waypoint's page and back out by the bar's Back: the editor's own
   // pages, so nothing asks.
   await openWaypoint(page, await firstWaypointRow(page), code);
-  await page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: "Waypoints" })
-    .click();
+  await page.getByRole("link", { name: "Back to Waypoints" }).click();
   await onEditorList(page, waypoints.length);
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await expect(await firstWaypointRow(page)).toContainText("E2E Unsaved");
 
-  // Out of the editor: asked. Keep editing stays, with the edit.
-  await page.getByRole("link", { name: "Competitions" }).first().click();
+  // Out of the editor: asked. Keep editing stays, with the edit. The trail's
+  // links are in the markup but visually hidden (the title's menu is the way
+  // to them), so the link is clicked where it is rather than aimed at.
+  const competitions = page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Competitions", exact: true });
+  await competitions.evaluate((a: HTMLElement) => a.click());
   const dialog = page.getByRole("alertdialog");
   await expect(
     dialog.getByText("This page has unsaved changes. Leaving will discard them.")
@@ -556,7 +605,7 @@ test("leaving the editor by a link asks; going between its pages does not", asyn
 
   // Discard: the navigation proceeds, and the draft really is gone — the
   // waypoints come back as saved.
-  await page.getByRole("link", { name: "Competitions" }).first().click();
+  await competitions.evaluate((a: HTMLElement) => a.click());
   await page.getByRole("alertdialog").getByRole("button", { name: "Discard changes" }).click();
   await expect(page).toHaveURL(/\/comp$/);
   await page.goto(`/comp/${compId}/waypoints`);
@@ -606,13 +655,26 @@ test("the map opens at full size on a page of its own, with its own Add from map
   await expect(page.getByText(`${waypoints.length} waypoints · nothing is saved`)).toBeVisible();
   await expectNoSidewaysScroll(page);
 
-  // Armed is in the URL, so coming back from Add waypoint finds it armed.
-  await page.getByRole("button", { name: "Add from map" }).click();
-  await expect(page.getByRole("button", { name: /Tap the map to place/ })).toBeVisible();
-  await expect(page).toHaveURL(/\/waypoints\/map\?add=1$/);
+  // The page is the bar and the map: it does not scroll, and there is no
+  // Done — the bar's Back does that.
+  await expect(page.getByRole("button", { name: "Done" })).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollHeight - document.documentElement.clientHeight
+    ),
+    "the map page does not scroll"
+  ).toBeLessThanOrEqual(1);
 
-  // Done goes back to the list.
-  await page.getByRole("button", { name: "Done" }).click();
+  // Armed is in the URL, so coming back from Add waypoint finds it armed.
+  await barAction(page, "Add from map");
+  await expect(page.getByText("Tap the map to place…")).toBeVisible();
+  await expect(page).toHaveURL(/\/waypoints\/map\?add=1$/);
+  await barAction(page, "Stop adding from map");
+  await expect(page.getByText("Tap the map to place…")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/waypoints\/map$/);
+
+  // The bar's Back goes back to the list.
+  await page.getByRole("link", { name: "Back to Waypoints" }).click();
   await onEditorList(page, waypoints.length);
 
   // And so does Back.
@@ -624,9 +686,11 @@ test("the map opens at full size on a page of its own, with its own Add from map
   expect(mutated()).toBe(false);
 });
 
-test("the device panel follows the SAVED set, not the editor's rows", async ({ page }) => {
-  // A file parsed into the editor is not yet on the server, so the panel —
-  // whose links are hosted endpoints — must not offer it.
+test("the device rows follow the SAVED set, not the editor's rows", async ({ page }) => {
+  // A file parsed into the editor is not yet on the server, so the device
+  // rows — whose links are hosted endpoints — must not offer it.
+  const deviceRows = async () =>
+    (await barActionLabels(page)).filter((l) => DEVICE_FILES.test(l) || l === "QR code");
   const origRes = await page.request.get(`/api/comp/${compId}/waypoints`);
   expect(origRes.ok()).toBe(true);
   const original = (await origRes.json()) as { waypoints: Waypoint[] };
@@ -639,21 +703,21 @@ test("the device panel follows the SAVED set, not the editor's rows", async ({ p
     await page.reload();
     await onEditorList(page, 0);
 
-    await expect(deviceExportButton(page)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "QR code" })).toHaveCount(0);
+    expect(await deviceRows()).toEqual([]);
 
-    // Adding a waypoint in the editor does NOT bring it back — only a save does.
-    await page.getByRole("link", { name: "Add waypoint" }).click();
+    // Adding a waypoint in the editor does NOT bring them back — only a save does.
+    await barAction(page, "Add waypoint");
     await expect(h1(page, "Add waypoint")).toBeVisible({ timeout: 20_000 });
     await page.getByRole("textbox", { name: "Code" }).fill("E2E2");
     await fillCoords(page, "-36.5, 148.2");
     await page.getByRole("button", { name: "Add", exact: true }).click();
     await onEditorList(page, 1);
     await expect(page.getByText("Unsaved changes")).toBeVisible();
-    await expect(deviceExportButton(page)).toHaveCount(0);
+    expect(await deviceRows()).toEqual([]);
 
     await saveButton(page).click();
-    await expect(deviceExportButton(page)).toBeVisible();
+    await expect(saveButton(page)).toBeDisabled();
+    expect(await deviceRows()).toHaveLength(2);
   } finally {
     const restore = await page.request.put(`/api/comp/${compId}/waypoints`, {
       data: { waypoints: original.waypoints },
@@ -704,15 +768,17 @@ test("anonymous visitors get the same list, read-only, and no editor pages", asy
 
   await expectNoSidewaysScroll(page);
 
-  // No admin chrome, no Tabulator.
-  await expect(page.getByRole("button", { name: "Upload file" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Check altitudes" })).toHaveCount(0);
+  // No admin chrome, no Tabulator: ⋯ holds the device rows, which are for
+  // everyone, and nothing else; and there is no Save.
+  const labels = await barActionLabels(page);
+  expect(labels).toHaveLength(2);
+  expect(labels[0]).toMatch(DEVICE_FILES);
+  expect(labels[1]).toBe("QR code");
   await expect(page.getByRole("link", { name: "Add waypoint" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await expect(page.locator(".tabulator")).toHaveCount(0);
-
-  // The device-export panel is for everyone.
-  await expect(deviceExportButton(page)).toBeVisible();
+  // The filter is in the bar for a visitor too.
+  await expect(page.getByRole("searchbox", { name: "Filter waypoints" })).toBeVisible();
 
   // The editor's pages are the organisers': a visitor is sent to the list.
   for (const sub of ["1", "new", "map", "altitudes"]) {

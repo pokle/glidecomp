@@ -1,7 +1,8 @@
 /**
  * The pilots page's roster editor (/comp/:id/pilots, admin-only): a LIST of
- * pilots, each opening that pilot's own page, under a search box and a +
- * that stay at the top of the screen as the list scrolls.
+ * pilots, each opening that pilot's own page, under the page's bar: its +
+ * and ⋯, and the search box and the sort that stick with it as the list
+ * scrolls (rac/page-bar.tsx, issue #863).
  *
  * Mobile first (see the rule in CLAUDE.md). It replaced a read-only RAC table
  * and, behind an Edit button, a fourteen-column Tabulator grid in a dialog —
@@ -12,9 +13,9 @@
  *   - comp/PilotList.tsx — a row per pilot: name, then class · glider ·
  *     points · whether their tracks can find them.
  *   - pages/CompPilotPage.tsx (form: comp/PilotForm.tsx) — one pilot, on a
- *     page of its own, saved the moment Done is pressed. Nothing on this page
- *     waits for a page-level Save, so there is none.
- *   - The search bar — search and +, side by side, sticky at the top. It sat
+ *     page of its own, saved the moment its Save is pressed. Nothing on this
+ *     page waits for a page-level Save, so there is none.
+ *   - The search — in the bar's second layer, with the sort beside it. It sat
  *     at the bottom of the screen like iOS Contacts' until 2026-11, which
  *     meant a fixed bar lifted over the keyboard by hand, and on an iPhone it
  *     once stuck halfway up the screen: the keyboard comes up from the
@@ -25,19 +26,19 @@
  *     duplicates are avoided.
  *   - The search and the sort are in the URL (`?q=`, `?sort=`), so Back from
  *     a pilot's page returns to the list exactly as it was left.
- *   - comp/RosterActions.tsx — the ⋯ menu's import, export, CIVL fill and
- *     test pilots. The import and the fill are pages of their own
- *     (/pilots/import, /pilots/civl-fill), each previewing what it will write.
+ *   - The bar's ⋯ — copy from another competition, the CIVL fill, CSV import
+ *     and export, test pilots. The copy, the fill and the import are pages of
+ *     their own (/pilots/copy, /pilots/civl-fill, /pilots/import; the last
+ *     two are comp/RosterActions.tsx), each previewing what it will write.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { PlusIcon } from "lucide-react";
 import { Badge } from "@/react/rac/badge";
-import { Button } from "@/react/rac/button";
 import { SearchField } from "@/react/rac/field";
-import { Loading } from "@/react/rac/progress";
+import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
+import { Loading, Spinner } from "@/react/rac/progress";
 import { SimpleSelect } from "@/react/rac/select";
-import { SectionHeader } from "../components/SectionHeader";
+import { compPages, underComp } from "../lib/crumbs";
 import { api } from "../../comp/api";
 import { downloadFile } from "../lib/format";
 import { openedHere } from "../lib/leave";
@@ -54,7 +55,7 @@ import {
 import { filterPilots, queryWords } from "./pilot-search";
 import { groupByTeam, rosterTeams } from "./team-names";
 import { PilotList } from "./PilotList";
-import { RosterActionsMenu, rosterImportDraft } from "./RosterActions";
+import { rosterImportDraft } from "./RosterActions";
 
 type SortBy = "name" | "wprs_points" | "team";
 const SORTS: SortBy[] = ["name", "wprs_points", "team"];
@@ -85,28 +86,26 @@ function sortPilots(pilots: CompPilot[], by: SortBy): CompPilot[] {
 
 export function PilotsSection({
   compId,
-  compName,
-  compClasses,
-  openRegistration,
-  onCountChange,
-  headingAs = "h2",
+  comp,
 }: {
   compId: string;
-  compName: string;
-  compClasses: string[];
-  /** Whether a pilot can join this comp by submitting a track. Shown here
-   *  because the roster is the only place the consequence is visible. */
-  openRegistration?: boolean;
-  /** The roster's size, whenever it changes — for the page's section nav,
-   *  whose "Pilots (n)" otherwise holds the count the page loaded with. */
-  onCountChange?: (count: number) => void;
-  /** "h1" when the section is the whole page (/comp/:id/pilots). */
-  headingAs?: "h1" | "h2";
+  /** The competition: its name and classes, whether a pilot can join it by
+   *  submitting a track, and what the title's menu needs (lib/crumbs.ts). */
+  comp: {
+    name: string;
+    pilot_classes: string[];
+    open_registration?: boolean;
+    scoring_format?: string | null;
+  };
 }) {
+  const compName = comp.name;
+  const compClasses = comp.pilot_classes;
+  const openRegistration = comp.open_registration;
   const [pilots, setPilots] = useState<CompPilot[] | null>(null);
   const [loadError, setLoadError] = useState(false);
-  // The ⋯ menu's "Add test pilots": its refusal shows under the heading the
-  // menu hangs off, never as a toast (rac/form.tsx, `useAction`).
+  // The ⋯ menu's "Add test pilots": its refusal shows first on the page,
+  // under the bar the menu hangs off, never as a toast (rac/form.tsx,
+  // `useAction`).
   const addTestAction = useAction();
   // In the URL, so Back from a pilot's page returns the list as it was left.
   // Replaced, never pushed: a keystroke is not a place to go Back to.
@@ -154,15 +153,6 @@ export function PilotsSection({
   /** The whole roster changed (a bulk write answered with all of it). */
   const replaceRoster = (roster: CompPilot[]) => setPilots(roster);
 
-  // Through a ref, so a parent passing an inline callback does not re-run
-  // this on every render.
-  const countChanged = useRef(onCountChange);
-  countChanged.current = onCountChange;
-  const count = pilots?.length;
-  useEffect(() => {
-    if (count !== undefined) countChanged.current?.(count);
-  }, [count]);
-
   const teams = useMemo(() => rosterTeams(pilots ?? []), [pilots]);
   // "Team" is offered only while some pilot has one: on a roster with none it
   // would file everyone under "No team", which sorts nothing. Removing the
@@ -182,14 +172,17 @@ export function PilotsSection({
 
   /**
    * The +: a blank pilot — or, when the search found nobody, one already
-   * carrying the name that was searched for.
+   * carrying the name that was searched for. A link, which the bar marks as
+   * opened here (lib/leave.ts), so Back returns the list as it was left.
    */
-  const add = () =>
-    navigate(
-      compPilotPath(compId, compName, "new") +
-        (nobodyMatches ? `?${new URLSearchParams({ name: typedName })}` : ""),
-      openedHere()
-    );
+  const add = pilots
+    ? {
+        label: nobodyMatches ? `Add a pilot named ${typedName}` : "Add pilot",
+        to:
+          compPilotPath(compId, compName, "new") +
+          (nobodyMatches ? `?${new URLSearchParams({ name: typedName })}` : ""),
+      }
+    : undefined;
 
   async function addTestPilots() {
     if (!pilots) return;
@@ -229,34 +222,87 @@ export function PilotsSection({
     );
   }
 
+  // The trailing "…" marks an action that asks something before it acts
+  // (see ScoresDownload's "Open in Google Sheets…").
+  const actions: BarAction[] = pilots
+    ? [
+        {
+          id: "copy",
+          label: "Copy from another competition…",
+          to: compPilotsCopyPath(compId, compName),
+        },
+        {
+          id: "civl-fill",
+          label: "Fill from CIVL…",
+          to: compPilotsCivlFillPath(compId, compName),
+        },
+        {
+          id: "import",
+          label: "Import CSV…",
+          group: true,
+          onAction: () => {
+            // "Import CSV…" always starts at choosing a file: a file chosen
+            // earlier and left unapplied is not what was asked for.
+            rosterImportDraft.clear([bareCompId(compId)]);
+            navigate(compPilotsImportPath(compId, compName), openedHere());
+          },
+        },
+        { id: "export", label: "Export CSV", onAction: exportCsv },
+        {
+          id: "test-pilots",
+          label: "Add test pilots",
+          group: true,
+          disabled: addTestAction.pending,
+          onAction: () => void addTestPilots(),
+        },
+      ]
+    : [];
+
   return (
-    <div className="max-w-2xl">
-      <SectionHeader
-        as={headingAs}
-        className={headingAs === "h1" ? "mt-2" : undefined}
-        title={<>Pilots {pilots && pilots.length > 0 ? `(${pilots.length})` : ""}</>}
-        action={
-          pilots ? (
-            <RosterActionsMenu
-              onImport={() => {
-                // "Import CSV…" always starts at choosing a file: a file
-                // chosen earlier and left unapplied is not what was asked for.
-                rosterImportDraft.clear([bareCompId(compId)]);
-                navigate(compPilotsImportPath(compId, compName), openedHere());
-              }}
-              onExport={exportCsv}
-              onFillCivl={() =>
-                navigate(compPilotsCivlFillPath(compId, compName), openedHere())
-              }
-              onCopyFromComp={() =>
-                navigate(compPilotsCopyPath(compId, compName), openedHere())
-              }
-              onAddTestPilots={() => void addTestPilots()}
-            />
-          ) : null
-        }
-      />
-      <ActionErrorBanner action={addTestAction} className="mt-2" />
+    <Page
+      bar={
+        <PageBar
+          title="Pilots"
+          trail={underComp(compId, compName)}
+          related={compPages(compId, comp, true, "Pilots")}
+          add={add}
+          actions={actions}
+          status={addTestAction.pending ? <Spinner label="Adding test pilots" /> : undefined}
+          below={
+            // Search and sort stick with the bar. A bar at the bottom had to
+            // dodge the keyboard by hand; up here the keyboard never reaches it.
+            <div className="flex items-center gap-2">
+              <SearchField
+                variant="floating"
+                aria-label="Find a pilot"
+                placeholder="Find a pilot"
+                value={query}
+                onChange={setQuery}
+                className="min-w-0 flex-1"
+              />
+              {pilots && pilots.length > 1 ? (
+                <SimpleSelect
+                  label="Sort"
+                  // Label beside the control, not above it: one line for one word.
+                  className="shrink-0 flex-row items-center"
+                  // As tall as the search field beside it, and no wider than
+                  // its own words: a phone has the two side by side.
+                  triggerClassName="h-12 min-w-0 rounded-full bg-card/95 pr-3 pl-4 text-base shadow-lg backdrop-blur-sm pointer-coarse:h-12 dark:bg-card/95"
+                  value={sort}
+                  onChange={(v) => setSortBy(v as SortBy)}
+                  options={[
+                    { value: "name", label: "Name" },
+                    { value: "wprs_points", label: "WPRS points" },
+                    ...(teams.length > 0 ? [{ value: "team", label: "Team" }] : []),
+                  ]}
+                />
+              ) : null}
+            </div>
+          }
+        />
+      }
+    >
+      <ActionErrorBanner action={addTestAction} className="mb-3" />
 
       {/* Whether this list can grow on its own. It used to be true of every
           competition with nothing anywhere to say so — an organiser reading
@@ -264,7 +310,7 @@ export function PilotsSection({
           This is the list the answer belongs to, because this is the list that
           changes. */}
       {openRegistration !== undefined ? (
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
           <Badge variant={openRegistration ? "default" : "secondary"}>
             {openRegistration ? "Open registration" : "Registration closed"}
           </Badge>
@@ -281,53 +327,16 @@ export function PilotsSection({
         <Loading className="mt-4">Loading pilots…</Loading>
       ) : (
         <>
-          {/* Search and +, sticky at the top of the screen, under the comp's
-              section tabs (CompSectionNav, 37px), which stick too — and under
-              the site header where that sticks as well (61px, wider screens).
-              In a short landscape window neither sticks, so the bar goes to
-              the very top. A bar at the bottom had to dodge the keyboard by
-              hand; up here the keyboard never reaches it. */}
-          <div className="sticky top-[37px] z-20 mt-4 bg-background/90 py-2 backdrop-blur sm:top-[98px] [@media(max-height:500px)]:top-0 print:hidden">
-            <div className="flex items-center gap-3">
-              <SearchField
-                variant="floating"
-                aria-label="Find a pilot"
-                placeholder="Find a pilot"
-                value={query}
-                onChange={setQuery}
-                className="min-w-0 flex-1"
-              />
-              <Button
-                aria-label={nobodyMatches ? `Add a pilot named ${typedName}` : "Add pilot"}
-                onPress={add}
-                className="size-12 shrink-0 rounded-full shadow-lg"
-              >
-                <PlusIcon className="size-6" aria-hidden="true" />
-              </Button>
-            </div>
-          </div>
-          <div className="mt-2 mb-2 flex items-center justify-between gap-3">
-            {/* Always in the DOM, so a screen reader hears the count change as
-                the search narrows; empty while nothing is being searched,
-                because the heading already says how many there are. */}
-            <p role="status" className="text-sm text-muted-foreground">
-              {searching ? `${shown.length} of ${pilots.length} pilots` : ""}
-            </p>
-            {pilots.length > 1 ? (
-              <SimpleSelect
-                label="Sort"
-                // Label beside the control, not above it: one line for one word.
-                className="flex-row items-center"
-                value={sort}
-                onChange={(v) => setSortBy(v as SortBy)}
-                options={[
-                  { value: "name", label: "Name" },
-                  { value: "wprs_points", label: "WPRS points" },
-                  ...(teams.length > 0 ? [{ value: "team", label: "Team" }] : []),
-                ]}
-              />
-            ) : null}
-          </div>
+          {/* How many there are — the bar's title is the page's name alone —
+              and, while a search narrows the list, how many of them it shows.
+              Always in the DOM, so a screen reader hears the count change. */}
+          <p role="status" className="mt-4 mb-2 text-sm text-muted-foreground">
+            {searching
+              ? `${shown.length} of ${pilots.length} pilots`
+              : pilots.length > 0
+                ? `${pilots.length} ${pilots.length === 1 ? "pilot" : "pilots"}`
+                : ""}
+          </p>
 
           <PilotList
             pilots={shown}
@@ -349,6 +358,6 @@ export function PilotsSection({
           />
         </>
       )}
-    </div>
+    </Page>
   );
 }

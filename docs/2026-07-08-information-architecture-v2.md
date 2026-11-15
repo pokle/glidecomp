@@ -133,6 +133,9 @@ Maximum depth anywhere: 3. No page exists whose only purpose is navigation
 [GlideComp]  Competitions  My Flights  Submit track    [Sign in | ☰ user menu]
 ```
 
+- **Superseded 2026-11-15 (#863):** there is no row of header tabs any more.
+  These places are the bar's main menu on a top-level page and "Elsewhere" in
+  the title's menu on a deeper one — see §10, "One bar on every page".
 - **Competitions** first (it's the shared, public space; login lands here).
   **My Flights** second. Active tab underlined, as today.
 - **Update (2026-08-02, #535):** a third tab, **Submit track** (`/submit`),
@@ -365,7 +368,46 @@ typing. Cheap, offline-generatable, purely presentational.
 Conventions that emerged while implementing this IA, now encoded as
 components so future work stays consistent:
 
+- **One bar on every page (2026-11-15, #863). This supersedes the header
+  tabs of §3, the breadcrumb row, the title row with its buttons, the
+  competition's strip of section links and every bar stuck to the bottom.**
+  The owner's principle: *the page is for information, and every action goes
+  in the bar.* `src/react/rac/page-bar.tsx` (`PageBar`, with `Page` for the
+  column under it) has three slots that always mean the same thing:
+  - **Left, the way out**: back to the page above; Cancel on a form; the main
+    menu on a top-level page (Competitions, My Flights, Submit track,
+    Settings). The main menu holds the account and, for a site super admin,
+    "Preview as".
+  - **Centre, where you are**: the page's title, one line, which is its
+    `<h1>`, over a menu drawn as one tree — up to the pages above, across or
+    down to the pages beside or under this one (a competition's Scores,
+    Waypoints, Pilots, Comp analysis and Settings; a task's sibling tasks),
+    and out to the other top-level places. A page whose name is a sentence is
+    an action: the sentence is the ⋯ row that opens it, and the page has a
+    short title.
+  - **Right, what you can do**: a form's commit button; or ⋯ for the page's
+    actions, grouped by rules, with + and a status beside it. "Submit your
+    track" is the first row of ⋯ on the competition and task pages.
+  - A second layer may stick with the bar: a search field, tabs or a class
+    select. Nothing else sticks, and nothing sticks to the bottom.
+  - An action stays on the page only where its place says something: "Add
+    turnpoint" under the list, the one destructive action at the foot of a
+    form.
+  - The same bar at every width, and on the content pages in plain markup
+    (`static/src/components/SiteHeader.astro`). The analysis page and the 3D
+    replay keep their own chrome for now.
+- **Where a form's button goes, and what it says (2026-11-15, #863).** One
+  prominent commit button in the bar's right slot, Cancel in the left. It is
+  live only when there is something to commit. **Save** writes to the server
+  and no other word does; **Create** or **Add** makes something new (Create:
+  a competition, a task, a key; Add: a member of a list); **Done** only
+  closes, or finishes one part of a draft that its page will save later, is
+  always live, and in the bar is drawn as Save is. A page with no bar
+  (Onboarding, the OAuth consent page) has its buttons under the fields, the
+  primary last; so does a dialog's footer.
 - **Section actions sit right-aligned on the section header row** —
+  *(narrowed by the bar, above: `SectionHeader` is an `<h2>` row now, and a
+  page-level action is a ⋯ row, not a button on a section's header.)*
   `SectionHeader` (`src/react/components/SectionHeader.tsx`): title owns the
   left edge (scan column), the section's manage action sits top right.
   Applied to comp/task Settings, Tasks → New Task, Turnpoints → Edit route,
@@ -373,7 +415,11 @@ components so future work stays consistent:
   (which ride the tab-switcher row, as that page has no section headers).
   Inline CTA clusters (the hero's action row) are content, not section
   management — they stay left-aligned.
-- **Breadcrumbs** — same label for the same destination everywhere
+- **Breadcrumbs** — *(superseded 2026-11-15, #863: the trail a reader sees
+  is the tree in the bar's title menu, and `rac/breadcrumbs.tsx` is gone. The
+  labels still come from `lib/crumbs.ts`, and the bar keeps a visually hidden
+  `<nav aria-label="Breadcrumb">` in the markup. What follows is the
+  history.)* Same label for the same destination everywhere
   ("Competitions"). The pilot score page carries the full
   `Competitions › comp › task` trail; the full-screen tools carry the
   top-center bar described in §3. One component app-wide (see the RAC
@@ -415,8 +461,8 @@ components so future work stays consistent:
 - **Print**: every major comp-page section (`#tasks #scores #pilots
   #activity #admins`) starts a fresh page (`break-before-page`) so a printed
   comp page works as briefing handouts.
-- **Chrome details**: SPA and static headers share a 60px min-height (no
-  jump crossing between them); the static footer clears the viewport-fixed
+- **Chrome details**: the app's bar and the content pages' bar are the same
+  60px (no jump crossing between them); the static footer clears the viewport-fixed
   hills background; `#edit-route` on a task page URL opens the route editor
   and clears the hash on close (`pages/TaskDetail.tsx`). The mechanism
   outlived its first caller: the hero's "Edit route" is gone with the hero,

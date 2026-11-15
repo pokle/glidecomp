@@ -156,10 +156,12 @@ test("the full-size chart is a page: a link in, reload, and Back out", async ({ 
   await expect(scatter(page)).toBeVisible();
   // A page, not an overlay: nothing modal over it.
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  // The trail walks up to the section the page belongs to.
+  // The trail walks up to the section the page belongs to: the bar's Back
+  // goes there, and the trail is in the markup (visually hidden) as links.
+  await expect(page.getByRole("link", { name: "Back to Metric details" })).toBeVisible();
   await expect(
-    page.getByRole("navigation", { name: /breadcrumb/i }).getByRole("link", { name: "Metric details" })
-  ).toBeVisible();
+    page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Metric details" })
+  ).toHaveCount(1);
 
   // The chart is drawn the shape of the screen. One frame for the measure.
   await page.waitForTimeout(400);

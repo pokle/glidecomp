@@ -53,8 +53,10 @@ test.afterEach(async ({ page }) => {
   createdCompId = null;
 });
 
+// The bar's title is one line: "New competition". The sentence is the + that
+// opens the page, and the page's name in the title's menu.
 const heading = (page: Page) =>
-  page.getByRole("heading", { level: 1, name: "Start a new competition" });
+  page.getByRole("heading", { level: 1, name: "New competition" });
 const startLink = (page: Page) => page.getByRole("link", { name: "Start a new competition" });
 const nameField = (page: Page) => page.getByRole("textbox", { name: "Name" });
 const classesField = (page: Page) => page.getByRole("textbox", { name: "Pilot classes" });
@@ -93,16 +95,18 @@ test.describe("signed in", () => {
     await startLink(page).click();
     await expect(heading(page)).toBeVisible();
 
-    // Nothing typed: the form's own check, under Name, which takes focus.
-    await create(page).click();
-    await expect(nameField(page)).toHaveAccessibleDescription(/Enter a name\./);
-    await expect(nameField(page)).toBeFocused();
+    // Create is in the bar, and live only once the competition has a name
+    // (issue #863). Spaces are not a name.
+    await expect(create(page)).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
+    await nameField(page).fill("   ");
+    await expect(create(page)).toBeDisabled();
     expect(new URL(page.url()).pathname).toBe("/comp/new");
 
     // The server refuses one pilot class (`field: "pilot_classes.1"`): under
     // Pilot classes, which takes focus, and everything typed is kept.
     await nameField(page).fill(COMP_NAME);
-    await expect(nameField(page)).not.toHaveAccessibleDescription(/Enter a name\./);
+    await expect(create(page)).toBeEnabled();
     await classesField(page).fill("open, <b>");
     await create(page).click();
     await expect(classesField(page)).toHaveAccessibleDescription(/must not contain < or >/);

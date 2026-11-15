@@ -1,7 +1,9 @@
 /** Super-admin KV cache stats + clear — React port of admin-cache.ts/admin-cache.html. */
 import { useEffect, useState } from "react";
-import { Button } from "@/react/rac/button";
+import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
+import { Loading, Spinner } from "@/react/rac/progress";
 import { useConfirm } from "../lib/confirm";
+import { underSettings } from "../lib/crumbs";
 import { toast } from "../lib/toast";
 import { useGoToSignIn, useUser } from "../lib/user";
 import { Card } from "@/react/rac/card";
@@ -144,62 +146,70 @@ export function AdminCache() {
     }
   }
 
+  // The two things this page can do, under ⋯ — only once the stats have
+  // loaded, which is also the proof that this reader may do them. While one
+  // runs the bar says so, and neither can be started again.
+  const busy = clearing || reindexing;
+  const actions: BarAction[] =
+    state.kind === "ready"
+      ? [
+          {
+            id: "reindex",
+            label: "Rebuild search index",
+            onAction: () => void handleReindex(),
+            disabled: busy,
+          },
+          {
+            id: "clear",
+            label: "Clear entire cache",
+            onAction: () => void handleClear(),
+            destructive: true,
+            group: true,
+            disabled: busy,
+          },
+        ]
+      : [];
+  const bar = (
+    <PageBar
+      title="Cache"
+      trail={underSettings()}
+      actions={actions}
+      status={
+        clearing ? (
+          <Spinner label="Clearing the cache" />
+        ) : reindexing ? (
+          <Spinner label="Rebuilding the search index" />
+        ) : undefined
+      }
+    />
+  );
+
   if (userLoading || state.kind === "loading") {
     return (
-      <div className="py-8 animate-pulse space-y-4" role="status" aria-label="Loading cache stats">
-        <div className="h-8 w-48 rounded-md bg-muted" />
-        <div className="h-32 rounded-lg bg-muted" />
-        <span className="sr-only">Loading cache stats…</span>
-      </div>
+      <Page bar={bar}>
+        <Loading>Loading cache stats…</Loading>
+      </Page>
     );
   }
 
   if (state.kind === "error") {
     return (
-      <div className="text-center py-12">
+      <Page bar={bar}>
         <p className="text-sm text-muted-foreground" role="alert">
           {state.message}
         </p>
-      </div>
+      </Page>
     );
   }
 
   const { stats } = state;
 
   return (
-    <section className="mx-auto w-full max-w-3xl">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Cache</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Materialised scores in D1, the search index, the KV replay-bundle
-            cache, and the AirScore proxy cache
-          </p>
-        </div>
-        {/* isPending, not isDisabled + a label swap: the button stays
-            focusable while the request is in flight, so focus isn't dumped to
-            the body mid-action, and RAC announces the flip. */}
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            isPending={reindexing}
-            pendingLabel="Rebuilding the search index"
-            onPress={() => void handleReindex()}
-          >
-            Rebuild search index
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            isPending={clearing}
-            pendingLabel="Clearing the cache"
-            onPress={() => void handleClear()}
-          >
-            Clear entire cache
-          </Button>
-        </div>
-      </div>
+    <Page bar={bar}>
+      <p className="mb-6 text-sm text-muted-foreground">
+        Materialised scores in D1, the search index, the KV replay-bundle cache, and the
+        AirScore proxy cache
+      </p>
 
       <Card className="mb-6 gap-1">
         <p className="text-sm text-muted-foreground">Total items</p>
@@ -230,6 +240,6 @@ export function AdminCache() {
           </Card>
         ))}
       </div>
-    </section>
+    </Page>
   );
 }

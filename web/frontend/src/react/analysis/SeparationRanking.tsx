@@ -213,10 +213,13 @@ export function SeparationRanking({
           // width on chrome the chart needs. Side by side the pane is a
           // column of its own and the card comes back.
           paneWidthClassName="w-full"
-          // Side by side the pane is a column of its own: give it the sticky
-          // column's height (same 7rem as MasterDetail's max-h) so the
-          // scatter can fill it. Stacked it sizes from content. Paper too.
-          paneClassName="rounded-none border-0 bg-transparent @5xl:rounded-lg @5xl:border @5xl:bg-card @5xl:h-[calc(100vh-7rem)] print:h-auto"
+          // Side by side the pane is a column of its own, stuck under the
+          // page's bar AND the class select and pilot highlight stuck beneath
+          // it (about 7rem; MasterDetail's own offset clears the bar alone).
+          // Give it the rest of the window's height so the scatter can fill
+          // it. Stacked it sizes from content. Paper too.
+          paneWrapClassName="scroll-mt-28 @5xl:top-28"
+          paneClassName="rounded-none border-0 bg-transparent @5xl:rounded-lg @5xl:border @5xl:bg-card @5xl:h-[calc(100vh-9rem)] @5xl:max-h-[calc(100vh-9rem)] print:h-auto"
           master={
             <RankingTable
               ranked={ranked}

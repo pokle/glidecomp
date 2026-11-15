@@ -32,6 +32,9 @@ export function isSpaRoute(path: string): boolean {
     path === "/proto" ||
     path.startsWith("/proto/") ||
     /^\/(submit|profile|settings|onboarding|signin|oauth\/consent)\/?$/.test(path) ||
+    // Account settings: a page per group (/settings/profile), and the form
+    // that makes an API key (/settings/api-keys/new).
+    path.startsWith("/settings/") ||
     /^\/admin\/(users|cache)\/?$/.test(path)
   );
 }

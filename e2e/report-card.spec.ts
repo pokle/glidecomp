@@ -262,9 +262,10 @@ test.describe("the pilot report card", () => {
    *
    * The report card is public and server-rendered, so most of its readers have
    * no session — the pilot who was sent the link, their club, a meet director
-   * on somebody else's laptop. Under the map it offers "Open full track in the
-   * analysis map", and that link used to be drawn for signed-in visitors only,
-   * because the analysis viewer bounced everyone else to sign-in.
+   * on somebody else's laptop. Its bar's ⋯ menu offers "Open the track on the
+   * map" (a button over the map until #863, where it sat on top of the map's
+   * own controls), and that link used to be drawn for signed-in visitors
+   * only, because the analysis viewer bounced everyone else to sign-in.
    *
    * What changed is deliberately one URL shape wide: `?compId=…&taskId=…`
    * (plus `pilotId`) opens with no session, and nothing else does. The three
@@ -282,10 +283,25 @@ test.describe("the pilot report card", () => {
       const mapbox = await installMapbox(context);
       await page.goto(cardUrl);
 
-      const link = page.getByRole("link", {
-        name: "Open full track in the analysis map (opens in a new tab)",
-      });
-      await expect(link).toBeVisible({ timeout: 30_000 });
+      // The action is the first row of the bar's ⋯ menu, for a reader with no
+      // session too — and no longer a button over the map.
+      const more = page.getByRole("button", { name: "More actions" });
+      await expect(more).toBeVisible({ timeout: 30_000 });
+      await more.click();
+      await expect(
+        page.getByRole("menuitem", { name: "Open the track on the map" })
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(
+        page.getByRole("link", { name: /Open full track in the analysis map/ })
+      ).toHaveCount(0);
+
+      // The same link is in the markup with the menu closed (the bar's
+      // visually hidden "Page actions" list), which is where its href is read.
+      const link = page
+        .getByRole("navigation", { name: "Page actions" })
+        .getByRole("link", { name: "Open the track on the map" });
+      await expect(link).toHaveCount(1);
       // `pilotId` is what narrows the viewer to this one track, which is what
       // keeps its panel in single-track mode. Without it the reader lands on
       // the whole field and the per-track tabs are replaced by a score table

@@ -10,16 +10,14 @@
  *
  * Load puts the task into the route's DRAFT (comp/route-draft.ts) — asking
  * first when that would replace turnpoints already there — and goes back to
- * the route. Nothing is saved until Save on the route. Back is Cancel, and so
- * is the Cancel button.
+ * the route. Nothing is saved until Save on the route. Cancel is the bar's
+ * left control and Load its commit button (#863); Back is Cancel too.
  */
 import { useRef, useState } from "react";
 import type { XCTask } from "@glidecomp/engine";
-import { SectionHeader } from "../components/SectionHeader";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Button } from "@/react/rac/button";
 import { TextField } from "@/react/rac/field";
 import { Form, FormErrorBanner, SubmitButton, refusal } from "@/react/rac/form";
+import { Page, PageBar, commitClass } from "@/react/rac/page-bar";
 import { fetchTaskByCodeWithRaw } from "../../analysis/xctsk-fetch";
 import { underTaskRoute } from "../lib/crumbs";
 import { taskRouteXContestPath } from "../lib/slug";
@@ -38,7 +36,10 @@ export function TaskRouteXContestPage() {
       ? taskRouteXContestPath(urlId, compName, taskId, taskName)
       : null
   );
-  const gate = routeEditorGate(editor);
+  const gate = routeEditorGate(editor, {
+    title: "Load from XContest",
+    trail: underTaskRoute(urlId, compName, taskId, taskName),
+  });
   if (gate) return gate;
   return <XContestForm editor={editor} />;
 }
@@ -51,12 +52,8 @@ function XContestForm({ editor }: { editor: RouteEditorState }) {
   const fetched = useRef<{ task: XCTask; code: string } | null>(null);
 
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs
-        items={underTaskRoute(urlId, compName, taskId, taskName)}
-        current="Load from XContest"
-      />
       <Form
+        className="contents"
         onSubmit={async () => {
           const wanted = code.trim();
           try {
@@ -80,23 +77,27 @@ function XContestForm({ editor }: { editor: RouteEditorState }) {
           }
         }}
       >
-        <SectionHeader
-          as="h1"
-          className="mt-2"
-          title="Load from XContest"
-          action={
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onPress={() => editor.leave()}>
-                Cancel
-              </Button>
-              <SubmitButton pendingLabel="Loading" isDisabled={code.trim() === ""}>
-                Load
-              </SubmitButton>
-            </div>
+        <Page
+          className="flex flex-col gap-4"
+          bar={
+            <PageBar
+              title="Load from XContest"
+              trail={underTaskRoute(urlId, compName, taskId, taskName)}
+              // Nothing typed here is worth asking about: a code is pasted.
+              cancel={() => editor.leave()}
+              commit={
+                <SubmitButton
+                  className={commitClass}
+                  pendingLabel="Loading"
+                  isDisabled={code.trim() === ""}
+                >
+                  Load
+                </SubmitButton>
+              }
+            />
           }
-        />
-        <FormErrorBanner className="mt-3" />
-        <div className="mt-4 flex flex-col gap-4">
+        >
+        <FormErrorBanner />
           <p className="text-sm text-muted-foreground">
             Paste an XContest/XCTrack task code. It replaces the route; nothing
             is saved until you press Save.
@@ -110,8 +111,7 @@ function XContestForm({ editor }: { editor: RouteEditorState }) {
             value={code}
             onChange={setCode}
           />
-        </div>
+        </Page>
       </Form>
-    </div>
   );
 }

@@ -91,6 +91,11 @@ export function useUnsavedChangesGuard(
       // A download saves a file and leaves the page, and its edits, where
       // they are.
       if (anchor.hasAttribute("download")) return;
+      // The page bar's back control is Back, not a link out (issue #863). A
+      // form has Cancel there instead, which asks for itself; a back control
+      // on a page with unsaved work is a draft's list page, and Back keeps
+      // the draft.
+      if (anchor.hasAttribute("data-bar-back")) return;
       const href = anchor.getAttribute("href") ?? "";
       const url = new URL(href, window.location.href);
       // External links fall through to beforeunload; same-page hashes are fine.

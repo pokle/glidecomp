@@ -15,6 +15,11 @@
  * added here is on the list when the reader goes back to it, and nothing is
  * saved until Save there.
  *
+ * The page is the bar and the map (issue #863): `<Page fill>`, so the page
+ * does not scroll and every drag belongs to the map. Add from map is the
+ * bar's one action, under ⋯, and the bar's Back is the way out — there is no
+ * Done, which did the same thing.
+ *
  * Add from map STAYS armed after each point — the point of the big map is to
  * place several in a row, and re-arming between each is the friction that
  * makes it not worth doing. Armed is `?add=1` in the URL, so coming back from
@@ -23,12 +28,11 @@
  */
 import { lazy, Suspense } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Minimize2Icon } from "lucide-react";
 import type { MapWaypoint } from "../../analysis/map-provider";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Button, ToggleButton } from "@/react/rac/button";
+import { Button } from "@/react/rac/button";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { underCompWaypoints } from "../lib/crumbs";
-import { compWaypointsMapPath, compWaypointsNewPath, compWaypointsPath } from "../lib/slug";
+import { compWaypointsMapPath, compWaypointsNewPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { parseCoords } from "../comp/route-editor";
 import { newWaypointSearch } from "../comp/AddWaypointForm";
@@ -51,8 +55,13 @@ export function CompWaypointsMapPage() {
 
   useCanonicalPath(compName ? compWaypointsMapPath(urlId, compName) : null);
 
-  const gate = waypointsEditorGate(editor);
+  const trail = underCompWaypoints(urlId, compName);
+  const gate = waypointsEditorGate(editor, { title: "Waypoint map", trail });
   if (gate) return gate;
+
+  /** Armed is in the URL, so coming back from Add waypoint finds it armed. */
+  const setAddMode = (on: boolean) =>
+    setSearchParams(on ? { add: "1" } : {}, { replace: true, state: location.state });
 
   const rows = editor.draft.rows;
   const mapWaypoints: MapWaypoint[] = rows.flatMap((r) => {
@@ -69,37 +78,40 @@ export function CompWaypointsMapPage() {
   );
 
   return (
-    <div>
-      <Breadcrumbs items={underCompWaypoints(urlId, compName)} current="Waypoint map" />
-      {/* Controls on one line, the note under them: wrapped together on a
-          phone they cost the map two rows instead of one. */}
-      <div className="mt-2 flex items-center gap-2">
-        <ToggleButton
-          size="sm"
-          isSelected={addMode}
-          onChange={(on) =>
-            setSearchParams(on ? { add: "1" } : {}, { replace: true, state: location.state })
-          }
-        >
-          {addMode ? "Tap the map to place…" : "Add from map"}
-        </ToggleButton>
-        <Button
-          variant="outline"
-          size="sm"
-          className="ml-auto"
-          onPress={() => editor.leave(compWaypointsPath(urlId, compName))}
-        >
-          <Minimize2Icon className="size-4" aria-hidden="true" />
-          Done
-        </Button>
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        {rows.length} waypoint{rows.length === 1 ? "" : "s"} · nothing is saved until you press
-        Save
-      </p>
-      {/* An explicit height: Mapbox renders nothing into an unsized
-          container. The screen, less the header and the two lines above. */}
-      <section aria-label="Waypoint map" className="mt-2 h-[calc(100dvh-13rem)] min-h-80 w-full">
+    <Page
+      fill
+      bar={
+        <PageBar
+          title="Waypoint map"
+          trail={trail}
+          actions={[
+            {
+              id: "add-from-map",
+              label: addMode ? "Stop adding from map" : "Add from map",
+              onAction: () => setAddMode(!addMode),
+            },
+          ]}
+        />
+      }
+    >
+      {/* The mode says so above the map, in the page's flow, where it cannot
+          sit on the map's own controls. */}
+      {addMode ? (
+        <div className="flex shrink-0 items-center gap-2 border-t border-border bg-card py-1 pr-1 pl-4">
+          <p role="status" className="min-w-0 flex-1 text-sm font-medium">
+            Tap the map to place…
+          </p>
+          <Button variant="ghost" className="h-11 px-4" onPress={() => setAddMode(false)}>
+            Stop
+          </Button>
+        </div>
+      ) : null}
+      {/* The rest of the screen: Mapbox renders nothing into an unsized
+          container, and `min-h-0 flex-1` inside the fill page is a size. */}
+      <section
+        aria-label="Waypoint map"
+        className="min-h-0 w-full flex-1 overflow-hidden border-y border-border sm:rounded-xl sm:border"
+      >
         <Suspense fallback={mapFallback}>
           <RouteMap
             task={null}
@@ -119,6 +131,10 @@ export function CompWaypointsMapPage() {
           />
         </Suspense>
       </section>
-    </div>
+      <p className="shrink-0 px-gutter-safe py-2 text-xs text-muted-foreground">
+        {rows.length} waypoint{rows.length === 1 ? "" : "s"} · nothing is saved until you press
+        Save
+      </p>
+    </Page>
   );
 }

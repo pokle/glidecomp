@@ -13,8 +13,9 @@
  *
  * There is NO Cancel. Nothing here is saved: **every change goes straight into
  * the route's draft**, so Done and Back both keep it, and so does a reload;
- * the route editor's Save is what saves it, and its Cancel what throws the lot
- * away. Delete is the only way to lose a turnpoint here. (The sheet held a
+ * the route page's Save is what saves it, and its "Discard changes" what
+ * throws the lot away. Done is in the bar, always live (#863); Delete, at the
+ * foot of the form, is the only way to lose a turnpoint here. (The sheet held a
  * draft of its own and applied it on the way out, because the editor behind
  * it repainted its map on every change; this page has no map, and a page's
  * way out is the browser's Back, which a draft held here would lose.) Done is
@@ -31,13 +32,12 @@ import { useLocation, useParams } from "react-router-dom";
 import { useFilter } from "react-aria-components";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import { NotFound } from "@/react/components/NotFound";
-import { SectionHeader } from "../components/SectionHeader";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button, ToggleButton } from "@/react/rac/button";
 import { ChoiceList } from "@/react/rac/choice-list";
 import { NumberField, SearchField, TextField } from "@/react/rac/field";
 import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { ListBox, ListBoxItem } from "@/react/rac/list-box";
+import { Page, PageBar, commitClass } from "@/react/rac/page-bar";
 import { AltitudeField, CoordsField, coordsProblems } from "../comp/fields";
 import { underTaskRoute } from "../lib/crumbs";
 import { compWaypointsPath, taskRouteTurnpointPath } from "../lib/slug";
@@ -74,7 +74,10 @@ export function TaskRouteTurnpointPage() {
       : null
   );
 
-  const gate = routeEditorGate(editor);
+  const gate = routeEditorGate(editor, {
+    title: "Turnpoint",
+    trail: underTaskRoute(urlId, compName, taskId, taskName),
+  });
   if (gate) return gate;
   // A turnpoint removed since the link was made, or never in this route.
   if (!row) return <NotFound title="Turnpoint not found" />;
@@ -161,27 +164,31 @@ function TurnpointForm({
     return q === "" ? [] : all.filter((it) => contains(it.text, q));
   }, [waypoints, wpQuery, contains]);
 
-  const title = adding ? "Add turnpoint" : "Edit turnpoint";
-
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs
-        items={underTaskRoute(urlId, compName, taskId, taskName)}
-        current={row.name || "Turnpoint"}
-      />
-      <Form
-        validate={() => coordsProblems("coords", String(row.coords))}
-        // Nothing to send: every change is in the draft already.
-        onSuccess={() => editor.leave()}
+    <Form
+      className="contents"
+      validate={() => coordsProblems("coords", String(row.coords))}
+      // Nothing to send: every change is in the draft already.
+      onSuccess={() => editor.leave()}
+    >
+      <Page
+        className="flex flex-col gap-4"
+        bar={
+          <PageBar
+            // The turnpoint's own code is the title; the menu under it says
+            // which of the two pages this is.
+            title={row.name || (adding ? "New turnpoint" : "Turnpoint")}
+            fullTitle={adding ? "Add turnpoint" : `Edit turnpoint ${row.name}`.trim()}
+            trail={underTaskRoute(urlId, compName, taskId, taskName)}
+            // Done only closes: every change is in the draft already.
+            commit={<SubmitButton className={commitClass}>Done</SubmitButton>}
+          />
+        }
       >
-        {/* Done where the sheet had it, top right: in reach without scrolling
-            past the whole form. */}
-        <SectionHeader as="h1" className="mt-2" title={title} action={<SubmitButton>Done</SubmitButton>} />
-        <FormErrorBanner className="mt-3" />
+        <FormErrorBanner />
         <p role="status" aria-live="polite" className="sr-only">
           {moveNote}
         </p>
-        <div className="mt-4 flex flex-col gap-4">
           {/* Load from a preset competition waypoint. */}
           {wpLoading ? (
             <p className="text-xs text-muted-foreground">Loading competition waypoints…</p>
@@ -268,17 +275,16 @@ function TurnpointForm({
             <div
               role="group"
               aria-label={`Radius of ${label} in metres`}
-              className="flex flex-wrap items-center gap-1"
+              className="flex flex-wrap items-center gap-2"
             >
               {RADIUS_PRESETS.map((preset) => (
                 <ToggleButton
                   key={preset}
-                  size="sm"
                   isSelected={radius === preset}
                   // Chips set an absolute value; re-pressing the active one is
                   // a no-op (the toggle-off event re-sets the same value).
                   onChange={() => set({ radius: preset })}
-                  className="h-7 px-2 tabular-nums"
+                  className="h-11 px-4 tabular-nums"
                   aria-label={`Set radius ${preset} metres`}
                 >
                   {radiusChipLabel(preset)}
@@ -352,12 +358,13 @@ function TurnpointForm({
             </section>
           ) : null}
 
-          {/* No confirmation: this removes a turnpoint from a route that is
-              still a draft, and the route editor's Cancel puts the whole saved
-              route back. Not while adding: an Add left empty is dropped. */}
+          {/* At the foot of the form, away from Done. No confirmation: this
+              removes a turnpoint from a route that is still a draft, and
+              "Discard changes" on the route puts the whole saved route back.
+              Not while adding: an Add left empty is dropped. */}
           {!adding ? (
             <div className="mt-4 border-t border-border pt-4">
-              <Button variant="destructive" className="w-fit" onPress={onDelete}>
+              <Button variant="destructive" className="h-11 w-fit px-5" onPress={onDelete}>
                 Delete turnpoint
               </Button>
             </div>
@@ -365,9 +372,8 @@ function TurnpointForm({
           <p className="text-xs text-muted-foreground">
             Nothing is saved until you press Save on the route.
           </p>
-        </div>
-      </Form>
-    </div>
+      </Page>
+    </Form>
   );
 }
 

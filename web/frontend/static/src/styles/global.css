@@ -9,3 +9,19 @@
 @source "../pages/**/*.{astro,mdx}";
 @source "../layouts/**/*.astro";
 @source "../components/**/*.astro";
+
+/*
+ * The page bar is stuck to the top (components/SiteHeader.astro), so a heading
+ * an in-page link jumps to must stop under it, not behind it (WCAG 2.4.11).
+ * The bar is 44 px of control and 16 px of padding, below the status bar; the
+ * rest is air. On a short screen the bar scrolls away with the page.
+ */
+html {
+  scroll-padding-top: calc(4.5rem + env(safe-area-inset-top, 0px));
+}
+
+@media (max-height: 500px) {
+  html {
+    scroll-padding-top: 0.75rem;
+  }
+}

@@ -75,8 +75,9 @@ async function onNewTaskPage(page: Page): Promise<void> {
 async function openFromComp(page: Page, compId: string): Promise<void> {
   await page.goto(`/comp/${compId}`);
   await onCompPage(page);
-  // The Tasks section's header link; an empty comp also has one in the body.
-  await page.locator("#tasks").getByRole("link", { name: "New task", exact: true }).first().click();
+  // "New task" is a row of the comp page's ⋯ menu (issue #863).
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "New task", exact: true }).click();
   await onNewTaskPage(page);
 }
 
@@ -144,21 +145,20 @@ test("a refusal lands under the field it is about", async ({ page }) => {
   await openFromComp(page, compId);
   const name = page.getByRole("textbox", { name: "Name" });
 
-  // The form's own checks, before anything is sent.
+  // Create is in the bar, and live only once the task has a name, a date
+  // and a class (issue #863): there is nothing to send before that.
+  const create = page.getByRole("button", { name: "Create" });
+  await expect(create).toBeDisabled();
   await page.getByRole("main").getByText("open", { exact: true }).click();
   await page.getByRole("main").getByText("sport", { exact: true }).click();
-  await page.getByRole("button", { name: "Create" }).click();
-  await expect(name).toHaveAttribute("aria-invalid", "true");
-  await expect(name).toBeFocused();
-  await expect(page.getByRole("main")).toContainText("Enter a task name");
-  await expect(page.getByRole("main")).toContainText("Select at least one pilot class");
+  await name.fill("Day <1>");
+  await expect(create).toBeDisabled();
   await expect(page).toHaveURL(/\/task\/new$/);
 
   // The server's refusal, under the field it names (`{ error, field }`).
   await page.getByRole("main").getByText("open", { exact: true }).click();
-  await name.fill("Day <1>");
-  await expect(page.getByRole("main")).not.toContainText("Enter a task name");
-  await page.getByRole("button", { name: "Create" }).click();
+  await expect(create).toBeEnabled();
+  await create.click();
   await expect(page.getByRole("main")).toContainText("must not contain < or >");
   await expect(name).toHaveAttribute("aria-invalid", "true");
   await expect(name).toBeFocused();
@@ -185,9 +185,13 @@ test("a hidden comp's share key rides along to the new task", async ({ page }) =
   );
   const keyed = idFromSegment(new URL(page.url()).pathname.split("/")[2]);
 
-  const link = page.locator("#tasks").getByRole("link", { name: "New task", exact: true }).first();
+  // The ⋯ row's link, as the bar leaves it in the markup with the menu closed.
+  const link = page
+    .getByRole("navigation", { name: "Page actions" })
+    .getByRole("link", { name: "New task", exact: true });
   await expect(link).toHaveAttribute("href", new RegExp(`${keyed}/task/new$`));
-  await link.click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "New task", exact: true }).click();
   await onNewTaskPage(page);
   expect(page.url()).toContain(keyed);
 

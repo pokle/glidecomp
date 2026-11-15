@@ -53,6 +53,14 @@ export function compCrumbs(): Crumb[] {
   return [COMPETITIONS];
 }
 
+/**
+ * Ancestors of a page under the account's settings: one of its groups
+ * (/settings/:group), and the site admin pages its index links to.
+ */
+export function underSettings(): Crumb[] {
+  return [{ label: "Settings", to: "/settings" }];
+}
+
 /** Ancestors of a page directly under a competition (waypoints, tasks, analysis). */
 export function underComp(compId: string | undefined, compName: string | null | undefined): Crumb[] {
   return [

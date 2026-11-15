@@ -39,11 +39,20 @@ const notice = (page: Page) => page.getByText(LEGAL_NOTICE.message);
 /** The page has loaded and knows who is reading it. */
 async function settled(page: Page, signedIn: boolean): Promise<void> {
   await expect(page.getByRole("searchbox")).toBeVisible({ timeout: 15_000 });
-  await expect(
-    signedIn
-      ? page.getByRole("button", { name: "Account menu" })
-      : page.getByRole("button", { name: "Sign in", exact: true })
-  ).toBeVisible({ timeout: 15_000 });
+  // The bar of a top-level page (rac/page-bar.tsx): signed out it has a
+  // Sign in button; signed in, the account is in the main menu.
+  if (!signedIn) {
+    await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    return;
+  }
+  await expect(async () => {
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Main menu" }).click();
+    await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
+  await page.keyboard.press("Escape");
 }
 
 test("a signed-in reader sees it once, and not after closing it", async ({ page }) => {

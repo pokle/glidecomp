@@ -33,11 +33,12 @@ import { api } from "../../comp/api";
 import { gunzipResponse } from "../../analysis/storage";
 import { formatTaskDate, ordinal } from "../lib/format";
 import { zoneNameWithOffset } from "../lib/time";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
 import { underTask } from "../lib/crumbs";
 import { retry } from "../lib/retry";
-import { compUrlId, idFromSegment, pilotPath, taskPath } from "../lib/slug";
+import { compUrlId, idFromSegment, manualFlightPath, pilotPath, taskPath } from "../lib/slug";
+import { useAdminView } from "../lib/user";
 import { LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -56,11 +57,7 @@ import {
   TrackValidityDocLink,
 } from "../score-detail/TrackNotes";
 import { ExplanationSection } from "../score-detail/Explanation";
-import {
-  AnalysisMapIcon,
-  MaximizeIcon,
-  MinimizeIcon,
-} from "../score-detail/icons";
+import { MaximizeIcon, MinimizeIcon } from "../score-detail/icons";
 import { ScoringGlossary } from "../components/ScoringGlossary";
 import { MasterDetail } from "../components/MasterDetail";
 import { TaskInCompScores } from "../comp/TaskInCompScores";
@@ -69,9 +66,9 @@ import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
 // The derivation lives in score-detail/report-card.ts, pure and unit-tested.
 import {
-  buildReportCard as buildDetailData,
+  buildReportCard,
   ScorePendingError,
-  type ReportCard as DetailData,
+  type ReportCard,
 } from "../score-detail/report-card";
 import type { PilotScoreLoaderData } from "../loaders";
 
@@ -83,6 +80,31 @@ const ScoreDetailMap = lazy(() => import("../comp/ScoreDetailMap"));
 // ---------------------------------------------------------------------------
 
 
+
+/**
+ * The report card, plus the pilots it sits among: everyone scored in this
+ * pilot's class, in the order the scores publish them. They are the rows of
+ * the title's menu, the way from one pilot's card to the next. Read off the
+ * score payload the page fetched anyway, so it costs no request.
+ */
+type DetailData = ReportCard & { field: Array<{ id: string; name: string }> };
+
+function buildDetailData(
+  comp: CompDetailData,
+  task: TaskDetailData,
+  score: TaskScoreData,
+  analysis: PilotAnalysisData,
+  pilotId: string,
+): DetailData {
+  const card = buildReportCard(comp, task, score, analysis, pilotId);
+  const cls = score.class_scores.find((c) =>
+    c.pilots.some((p) => p.comp_pilot_id === pilotId),
+  );
+  return {
+    ...card,
+    field: (cls?.pilots ?? []).map((p) => ({ id: p.comp_pilot_id, name: p.pilot_name })),
+  };
+}
 
 type DetailState =
   | { kind: "loading" }
@@ -215,6 +237,9 @@ export function PilotScoreDetail() {
   // shape of link without a session (issue #666, `analysis/public-deep-link`)
   // — so it is also static markup, identical on the server and after
   // hydration, rather than something that appears once /api/auth/me answers.
+  //
+  // It is the first row of the bar's ⋯ menu (#863). It was a button over the
+  // map, where it sat on top of the map's own "Find my location".
   const analysisUrl = `/analysis?compId=${encodeURIComponent(
     compId,
   )}&taskId=${encodeURIComponent(taskId)}&pilotId=${encodeURIComponent(pilotId)}`;
@@ -352,23 +377,66 @@ export function PilotScoreDetail() {
       : null
   );
 
+  // Organisers' actions appear once the user resolves, as the page's admin
+  // controls always have: the server and the first client render agree.
+  const isAdmin = useAdminView(!!readyData?.comp.is_admin);
+
   if (!compId || !taskId || !pilotId) return null;
 
-  // Generic labels until the data arrives; the links work either way.
+  // Generic labels until the data arrives; the links work either way. The
+  // bar is there in every state, so the page does not jump when it loads.
   const ready = state.kind === "ready" ? state.data : null;
-  const breadcrumbs = (
-    <Breadcrumbs
-      items={underTask(compId, ready?.comp.name, taskId, ready?.task.name)}
-      current={ready?.entry.pilot_name ?? "Pilot"}
+  // The id every link carries: a hidden comp's share key rides along.
+  const urlId = ready ? compUrlId(ready.comp, compId) : compId;
+  const actions: BarAction[] = [
+    // Plain links out of the SPA, to the vanilla analysis and replay entries.
+    { id: "track", label: "Open the track on the map", to: analysisUrl, target: "_blank" },
+    {
+      id: "replay",
+      label: "3D replay",
+      to: `/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`,
+    },
+  ];
+  if (isAdmin && ready) {
+    actions.push({
+      id: "manual",
+      label: "Record a manual flight",
+      group: true,
+      to: manualFlightPath(
+        urlId,
+        ready.comp.name,
+        taskId,
+        ready.task.name,
+        pilotId,
+        ready.entry.pilot_name
+      ),
+    });
+  }
+  const bar = (
+    <PageBar
+      title={ready?.entry.pilot_name ?? "Pilot"}
+      trail={underTask(compId, ready?.comp.name, taskId, ready?.task.name)}
+      related={
+        ready && ready.field.length > 1
+          ? {
+              as: "siblings",
+              items: ready.field.map((p) => ({
+                label: p.name,
+                to: pilotPath(urlId, ready.comp.name, taskId, ready.task.name, p.id, p.name),
+                current: p.id === pilotId,
+              })),
+            }
+          : undefined
+      }
+      actions={actions}
     />
   );
 
   if (state.kind === "loading") {
     return (
-      <div>
-        {breadcrumbs}
-        <Loading className="mt-4">Loading score card…</Loading>
-      </div>
+      <Page width="wide" bar={bar}>
+        <Loading>Loading score card…</Loading>
+      </Page>
     );
   }
 
@@ -378,9 +446,8 @@ export function PilotScoreDetail() {
     // upload, so "no score found" would read as "your track did not go in".
     const gaveUp = pendingAttempt >= PENDING_MAX_ATTEMPTS;
     return (
-      <div>
-        {breadcrumbs}
-        <div className="mt-4">
+      <Page width="wide" bar={bar}>
+        <div>
           {gaveUp ? (
             <p role="status" className="text-muted-foreground">
               Your track is in. Scores are slow to update — reload in a minute.
@@ -396,22 +463,21 @@ export function PilotScoreDetail() {
             </LinkButton>
           </p>
         </div>
-      </div>
+      </Page>
     );
   }
 
   if (state.kind === "error") {
     // A dead id gets the 404 page, which searches the URL's own slugs for the
     // pilot/task/comp that exist now. Any other failure is a failure, not a
-    // wrong address, so it says what went wrong and keeps the breadcrumbs.
+    // wrong address, so it says what went wrong and keeps the bar.
     if (state.notFound) {
       return <NotFound title="Page not found" message={`${state.message}.`} />;
     }
     return (
-      <div>
-        {breadcrumbs}
-        <p className="mt-4 text-muted-foreground">{state.message}</p>
-      </div>
+      <Page width="wide" bar={bar}>
+        <p className="text-muted-foreground">{state.message}</p>
+      </Page>
     );
   }
 
@@ -433,10 +499,9 @@ export function PilotScoreDetail() {
   };
 
   return (
-    <div>
-      {breadcrumbs}
-      <header className="mt-2">
-        <h1 className="text-xl font-bold">{entry.pilot_name}</h1>
+    <Page width="wide" bar={bar}>
+      {/* The pilot's name is the bar's title, and the page's <h1>. */}
+      <div>
         <p className="text-sm text-muted-foreground">
           {data.comp.name} · {data.task.name} ({formatTaskDate(data.task.task_date)}) ·{" "}
           {data.pilotClass} · ranked #{entry.rank} · times in{" "}
@@ -489,7 +554,7 @@ export function PilotScoreDetail() {
             {explanation.headlineNote}
           </p>
         ) : null}
-      </header>
+      </div>
 
       {/* Explanation and map, paired by the shared MasterDetail in its PINNED
           mode — the map is evidence read ALONGSIDE the explanation, so a step
@@ -525,7 +590,7 @@ export function PilotScoreDetail() {
                 "rounded-none border-0 bg-transparent max-h-none @5xl:max-h-none overflow-y-visible"
           }
           // The wrapper is a sticky z-10 stacking context, so the expanded
-          // overlay above would be trapped under the Shell's z-40 header
+          // overlay above would be trapped under the page bar's z-40 header
           // without this. Raising the wrapper rather than moving the pane
           // keeps the map mounted — a move would re-initialise Mapbox.
           paneWrapClassName={mapExpanded ? "z-50" : undefined}
@@ -562,22 +627,10 @@ export function PilotScoreDetail() {
                   />
                 </Suspense>
                 )}
-                {/* Map controls, styled like the providers' own controls (white
-                    regardless of theme) and kept clear of them: bottom-right, above
-                    the attribution line. The analysis link opens this pilot's track
-                    and the task in the standalone analysis viewer
-                    (`/analysis?compId=…&pilotId=…`), with the deeper glide/thermal
-                    tooling. */}
-                <a
-                  href={analysisUrl}
-                  target="_blank"
-                  rel="noopener"
-                  title="Open full track in the analysis map"
-                  aria-label="Open full track in the analysis map (opens in a new tab)"
-                  className="absolute bottom-20 right-2 z-20 flex size-10 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
-                >
-                  <AnalysisMapIcon />
-                </a>
+                {/* The map's own control, styled like the providers' controls
+                    (white regardless of theme) and kept clear of them:
+                    bottom-right, above the attribution line. Opening this
+                    track in the analysis viewer is in the bar's ⋯ menu. */}
                 <button
                   type="button"
                   onClick={() => setMapExpanded((v) => !v)}
@@ -646,7 +699,7 @@ export function PilotScoreDetail() {
           }
         />
       </div>
-    </div>
+    </Page>
   );
 }
 

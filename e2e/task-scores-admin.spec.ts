@@ -128,7 +128,7 @@ test("the manage list never scrolls sideways, and Add manual flight is in reach"
   }
 
   await add.click();
-  await expect(page.getByRole("heading", { name: "Record manual flight" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Manual flight" })).toBeVisible({
     timeout: 20_000,
   });
 });
@@ -183,7 +183,7 @@ test("manual flight: a missing or refused landing point is said under the field"
 }) => {
   const row = await managedRow(page);
   await row.getByRole("link", { name: "Add manual flight" }).click();
-  await expect(page.getByRole("heading", { name: "Record manual flight" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Manual flight" })).toBeVisible({
     timeout: 20_000,
   });
 
@@ -205,19 +205,16 @@ test("manual flight: a missing or refused landing point is said under the field"
   const { lat: landing, lon: landingLon } = coordsFields(page, "Landing point");
   const record = page.getByRole("button", { name: "Record flight" });
 
-  // Nothing typed: the form's own check, under each half, before any
-  // request — and the first of them has focus.
-  await record.click();
-  await expect(landing).toHaveAttribute("aria-invalid", "true");
-  await expect(landingLon).toHaveAttribute("aria-invalid", "true");
-  await expect(landing).toBeFocused();
-  await expect(page.getByText("Enter a latitude between -90 and 90.")).toBeVisible();
-  await expect(page.getByText("Enter a longitude between -180 and 180.")).toBeVisible();
+  // Record flight is in the bar, with Cancel opposite, and live only once
+  // there is a landing point (issue #863): nothing typed, nothing to send.
+  await expect(record).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
   expect(sent).toBe(0);
 
-  // Typing clears them; the server's refusal of landing_lat lands under
-  // Latitude, without its "landing_lat: " prefix.
+  // The server's refusal of landing_lat lands under Latitude, without its
+  // "landing_lat: " prefix.
   await fillCoords(page, LANDING, "Landing point");
+  await expect(record).toBeEnabled();
   await expect(landing).not.toHaveAttribute("aria-invalid", "true");
   await expect(landingLon).not.toHaveAttribute("aria-invalid", "true");
   await record.click();
@@ -227,7 +224,7 @@ test("manual flight: a missing or refused landing point is said under the field"
   await expect(landing).toBeInViewport();
   expect(sent).toBe(1);
   // Still on the page, with what was typed kept.
-  await expect(page.getByRole("heading", { name: "Record manual flight" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Manual flight" })).toBeVisible();
   await expect(landing).toHaveValue("-36.2212878474");
   await expect(landingLon).toHaveValue("147.729549408");
   await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);

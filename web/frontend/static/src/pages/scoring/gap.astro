@@ -7,7 +7,6 @@
  * time (km() below), so the page ships zero client JS — the math is baked in.
  */
 import Base from "../../layouts/Base.astro";
-import BackLink from "../../components/BackLink.astro";
 import SpecRef from "../../components/SpecRef.astro";
 import katex from "katex";
 import "katex/dist/katex.min.css";
@@ -19,11 +18,10 @@ const S7A_PDF =
   "https://www.fai.org/sites/default/files/civl/documents/sporting_code_s7_a_-_cross_country_2025.pdf";
 ---
 
-<Base title="GlideComp - How GAP Scoring Works">
+<Base page="gap" title="GlideComp - How GAP Scoring Works">
   <div class="min-h-screen bg-background text-foreground py-6 px-page-safe">
     <div class="max-w-2xl mx-auto">
       <header class="mb-10">
-        <BackLink href="/scoring" label="Scoring" />
         <h1 class="text-3xl font-bold flex items-center gap-3">
           <img src="/icon.svg" alt="GlideComp logo" class="w-8 h-8" />
           How GAP Scoring Works
@@ -294,7 +292,7 @@ const S7A_PDF =
           </div>
 
           <div class="ml-2">
-            <h3 id="distance-difficulty" class="flex flex-wrap items-baseline gap-x-2 text-base font-semibold mb-1 scroll-mt-20">
+            <h3 id="distance-difficulty" class="flex flex-wrap items-baseline gap-x-2 text-base font-semibold mb-1">
               Distance Difficulty
               <span class="text-sm font-normal text-muted-foreground">
                 (hang gliding only)
@@ -331,7 +329,7 @@ const S7A_PDF =
           </div>
 
           <div class="ml-2">
-            <h3 id="distance-origin" class="text-base font-semibold mb-1 scroll-mt-20">
+            <h3 id="distance-origin" class="text-base font-semibold mb-1">
               Where distance is measured from
             </h3>
             <p class="text-muted-foreground">
@@ -420,7 +418,7 @@ const S7A_PDF =
             A time trial uses your actual crossing time. Either way, the report card shows the
             gate you took and when you crossed.
           </p>
-          <div id="elevated-goal" class="scroll-mt-20">
+          <div id="elevated-goal">
             <h3 class="text-base font-semibold mb-1">Elevated goal (<SpecRef section="6.2.3.2" />, <SpecRef section="13.1" />)</h3>
             <p class="text-muted-foreground">
               A task can set goal at a height above the goal turnpoint's altitude: 300 m as
@@ -458,7 +456,7 @@ const S7A_PDF =
 
           <div class="ml-2 space-y-4">
             <div>
-              <h3 id="leading-coefficient" class="text-base font-semibold mb-1 scroll-mt-20">
+              <h3 id="leading-coefficient" class="text-base font-semibold mb-1">
                 The Leading Coefficient
               </h3>
               <p class="text-muted-foreground">
@@ -487,7 +485,7 @@ const S7A_PDF =
               </p>
             </div>
             <div>
-              <h3 id="leading-max-time" class="text-base font-semibold mb-1 scroll-mt-20">
+              <h3 id="leading-max-time" class="text-base font-semibold mb-1">
                 Pilots who land out
               </h3>
               <p class="text-muted-foreground">
@@ -531,7 +529,7 @@ const S7A_PDF =
           </p>
 
           <div>
-            <h3 id="leading-weight" class="text-base font-semibold mb-1 scroll-mt-20">
+            <h3 id="leading-weight" class="text-base font-semibold mb-1">
               How much weight goes to leading
             </h3>
             <p class="text-muted-foreground">
@@ -651,7 +649,7 @@ const S7A_PDF =
       </section>
 
       {/* Stopped Tasks */}
-      <section id="stopped-tasks" class="mb-14 scroll-mt-20">
+      <section id="stopped-tasks" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Stopped Tasks</h2>
           <SpecRef section="13.4" label="FAI S7F §13.4" class="text-xs font-medium text-muted-foreground shrink-0" />
@@ -748,7 +746,7 @@ const S7A_PDF =
       </section>
 
       {/* Fixed Total Validity (FTV) */}
-      <section id="ftv" class="mb-14 scroll-mt-20">
+      <section id="ftv" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Series scoring &amp; Fixed Total Validity</h2>
           <SpecRef section="15" label="FAI S7F §15–16" class="text-xs font-medium text-muted-foreground shrink-0" />
@@ -798,7 +796,7 @@ const S7A_PDF =
       </section>
 
       {/* Default Competition Settings */}
-      <section id="defaults" class="mb-14 scroll-mt-20">
+      <section id="defaults" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Default Competition Settings</h2>
           <SpecRef section="5" label="FAI S7F §5" class="text-xs font-medium text-muted-foreground shrink-0" />
@@ -877,7 +875,7 @@ const S7A_PDF =
             time-points exponent, and each sport's leading-coefficient variant.
           </p>
 
-          <div id="defaults-hg" class="ml-2 scroll-mt-20">
+          <div id="defaults-hg" class="ml-2">
             <h3 class="text-base font-semibold mb-1">Hang gliding (HG)</h3>
             <ul class="list-disc list-inside text-muted-foreground space-y-1 ml-2">
               <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>on</strong>. HG scores the order of arrival at ESS (<SpecRef section="12.4" label="§12.4" />).</li>
@@ -888,7 +886,7 @@ const S7A_PDF =
             </ul>
           </div>
 
-          <div id="defaults-pg" class="ml-2 scroll-mt-20">
+          <div id="defaults-pg" class="ml-2">
             <h3 class="text-base font-semibold mb-1">Paragliding (PG)</h3>
             <ul class="list-disc list-inside text-muted-foreground space-y-1 ml-2">
               <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>off</strong>. The specification gives paragliding none.</li>
@@ -1072,7 +1070,7 @@ const S7A_PDF =
       </section>
 
       {/* Differences from the Official Specification */}
-      <section id="spec-differences" class="mb-14 scroll-mt-20">
+      <section id="spec-differences" class="mb-14">
         <h2 class="text-2xl font-bold mb-4">Differences from the Official Specification</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">

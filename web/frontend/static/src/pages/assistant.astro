@@ -10,19 +10,18 @@
  * the only script, and without it the address is still there to select.
  */
 import Base from "../layouts/Base.astro";
-import BackLink from "../components/BackLink.astro";
 
 const MCP_URL = "https://glidecomp.com/mcp";
 ---
 
 <Base
+  page="assistant"
   title="Use GlideComp from your AI assistant"
   description="Connect Claude, ChatGPT or Claude Code to GlideComp, and ask it about your competitions in your own words."
 >
   <div class="min-h-screen bg-background text-foreground py-6 px-page-safe">
     <div class="max-w-2xl mx-auto">
       <header class="mb-10">
-        <BackLink href="/" />
         <h1 class="text-3xl font-bold">Use GlideComp from your AI assistant</h1>
         <p class="mt-4 leading-relaxed text-muted-foreground">
           Connect the AI assistant you already use (Claude, ChatGPT or Claude Code) and ask it about

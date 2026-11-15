@@ -3,8 +3,10 @@
  * (#820, the overlays rule in CLAUDE.md).
  *
  * What this holds, on a phone and on a desktop:
- *  - the task page's Submit track (the action row's and the Scores section's)
- *    goes to `/submit?comp=…&task=…`, and that page names the task;
+ *  - the task page's "Submit your track" — the first row of the bar's ⋯ menu
+ *    (issue #863), and the only one: the action row's button and the Scores
+ *    section's went into it — goes to `/submit?comp=…&task=…`, and that page
+ *    names the task;
  *  - a reload keeps the form on the same task, because the task is in the URL
  *    and not handed over in memory;
  *  - the browser's Back returns to the task page;
@@ -109,6 +111,24 @@ test.afterAll(async () => {
  * The task step, collapsed to the one line that names the linked task (and
  * its class, which the task's title does not).
  */
+/**
+ * "Submit your track" with the bar's ⋯ menu closed: a real link in the
+ * markup (the bar's "Page actions" list), so its href can be read.
+ */
+function submitLink(page: Page) {
+  return page
+    .getByRole("navigation", { name: "Page actions" })
+    .getByRole("link", { name: "Submit your track" });
+}
+
+/** Press it: the FIRST row of the bar's ⋯ menu. */
+async function pressSubmit(page: Page) {
+  await page.getByRole("button", { name: "More actions" }).click();
+  const row = page.getByRole("menuitem").first();
+  await expect(row).toHaveText("Submit your track");
+  await row.click();
+}
+
 function linkedTaskLine(page: Page, f: Fixture) {
   return page.getByText(`Linked Task (open) — ${f.compName}`, { exact: true });
 }
@@ -121,21 +141,19 @@ test("Submit track on the task page is a page of its own: URL, reload and Back",
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Linked Task", {
     timeout: 20_000,
   });
-  // Both of the task page's Submit tracks — the action row's and the Scores
-  // section's — are links to the same page. (Scoped to main: the site
-  // header's own Submit track is a link to the bare /submit.)
-  const links = page.getByRole("main").getByRole("link", { name: "Submit track" });
+  // One way to submit from this page: the first row of the bar's ⋯ menu, a
+  // link to the /submit page with this task chosen.
   // Mount-gated on a server-rendered page, so this waits for hydration.
-  await expect(links.first()).toBeVisible({ timeout: 20_000 });
-  await expect(links).toHaveCount(2);
+  const link = submitLink(page);
+  await expect(link).toHaveCount(1, { timeout: 20_000 });
   const want = `/submit?comp=${open.compId}&task=${open.taskId}`;
-  for (const link of await links.all()) {
-    await expect(link).toHaveAttribute("href", want);
-  }
-  // And no dialog: the old one opened over the page from a button.
-  await expect(page.getByRole("main").getByRole("button", { name: "Submit track" })).toHaveCount(0);
+  await expect(link).toHaveAttribute("href", want);
+  // The page itself is for information: the action row's button and the
+  // Scores section's are gone, and so is the dialog the old one opened.
+  await expect(page.getByRole("link", { name: "Submit track", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Submit track", exact: true })).toHaveCount(0);
 
-  await links.first().click();
+  await pressSubmit(page);
   await expect(page).toHaveURL(`${BASE_URL}${want}`);
   await expect(page.getByRole("heading", { level: 1, name: "Submit your track" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -166,12 +184,12 @@ test("a hidden competition's share key survives the trip to /submit", async ({ p
     timeout: 20_000,
   });
 
-  const link = page.getByRole("main").getByRole("link", { name: "Submit track" }).first();
-  await expect(link).toBeVisible({ timeout: 20_000 });
+  const link = submitLink(page);
+  await expect(link).toHaveCount(1, { timeout: 20_000 });
   const keyed = `${hidden.compId}_${shareKey}`;
   await expect(link).toHaveAttribute("href", `/submit?comp=${keyed}&task=${hidden.taskId}`);
 
-  await link.click();
+  await pressSubmit(page);
   await expect(page).toHaveURL(new RegExp(`/submit\\?comp=${keyed}&task=${hidden.taskId}$`));
   // The keyed id resolves the comp: the task is named, not "Selected task".
   await expect(linkedTaskLine(page, hidden)).toBeVisible({ timeout: 20_000 });

@@ -16,7 +16,6 @@
  */
 import { useState } from "react";
 import { TextField as AriaTextField } from "react-aria-components";
-import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
 import { Description, FieldError, Label, TextArea } from "@/react/rac/field";
 import { api } from "@/comp/api";
@@ -47,48 +46,45 @@ export function TaskWeatherNotes({
   const dirty = draft.trim() !== task.weather_notes.trim();
 
   return (
-    <SettingsPage
+    <SettingsForm
       crumbs={underTask(compId, comp.name, taskId, task.name)}
       title="Weather notes"
+      dirty={dirty}
+      onSubmit={() =>
+        api.api.comp[":comp_id"].task[":task_id"].$patch({
+          param: { comp_id: compId, task_id: taskId },
+          // Trimmed on the way in so "cleared" is unambiguous — a field of
+          // whitespace would otherwise read as notes that render as nothing.
+          json: { weather_notes: draft.trim() },
+        })
+      }
+      onSuccess={() => {
+        toast.success("Weather notes saved");
+        onSaved();
+      }}
     >
-      <SettingsForm
-        dirty={dirty}
-        onSubmit={() =>
-          api.api.comp[":comp_id"].task[":task_id"].$patch({
-            param: { comp_id: compId, task_id: taskId },
-            // Trimmed on the way in so "cleared" is unambiguous — a field of
-            // whitespace would otherwise read as notes that render as nothing.
-            json: { weather_notes: draft.trim() },
-          })
-        }
-        onSuccess={() => {
-          toast.success("Weather notes saved");
-          onSaved();
-        }}
+      <AriaTextField
+        name="weather_notes"
+        value={draft}
+        onChange={setDraft}
+        maxLength={MAX_NOTES}
+        className="flex flex-col gap-2"
       >
-        <AriaTextField
-          name="weather_notes"
-          value={draft}
-          onChange={setDraft}
-          maxLength={MAX_NOTES}
-          className="flex flex-col gap-2"
-        >
-          <Label>What did the day do?</Label>
-          <TextArea
-            rows={8}
-            placeholder={
-              "e.g. Slow start, inversion broke about 12:30.\n" +
-              "Overdeveloped by 2pm over the back range.\n" +
-              "Glass off at 3, most of the field landed short."
-            }
-          />
-          <Description>
-            Public, on the task page and its analysis. Plain text.{" "}
-            {draft.length}/{MAX_NOTES} characters.
-          </Description>
-          <FieldError />
-        </AriaTextField>
-      </SettingsForm>
-    </SettingsPage>
+        <Label>What did the day do?</Label>
+        <TextArea
+          rows={8}
+          placeholder={
+            "e.g. Slow start, inversion broke about 12:30.\n" +
+            "Overdeveloped by 2pm over the back range.\n" +
+            "Glass off at 3, most of the field landed short."
+          }
+        />
+        <Description>
+          Public, on the task page and its analysis. Plain text.{" "}
+          {draft.length}/{MAX_NOTES} characters.
+        </Description>
+        <FieldError />
+      </AriaTextField>
+    </SettingsForm>
   );
 }

@@ -6,12 +6,12 @@
  * This deliberately is NOT the management grid — statuses, uploads on behalf
  * and manual flights live in TaskScoresAdmin, which the task page renders for
  * admins only ("Manage pilots & tracks"). What stays here for signed-in
- * pilots is self-service: the Submit track button and a one-line "your
- * submission" status.
+ * pilots is a one-line "your submission" status; submitting is "Submit your
+ * track" in the task page's ⋯ (#863).
  *
  * SSR-safety: the server renders the control-less podium from the SSR score
- * seed; the Submit track button and the your-submission line mount after
- * hydration (`mounted` gate), exactly like the old scores table did.
+ * seed; the your-submission line mounts after hydration (`mounted` gate),
+ * exactly like the old scores table did.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link as AriaLink } from "react-aria-components";
@@ -81,9 +81,6 @@ export function TaskScoresPublic({
   timezone,
   isOpenDistance,
   isAuthenticated,
-  isClosed,
-  submissionsClosed = false,
-  submitHref,
   refresh,
   onReplayAvailable,
   initialScore,
@@ -96,14 +93,6 @@ export function TaskScoresPublic({
   timezone: string | null;
   isOpenDistance: boolean;
   isAuthenticated: boolean;
-  isClosed: boolean;
-  /** The organiser closed THIS task (migration 0028). The section's own
-   * Submit action has to honour it, or the page offers a button the server
-   * will refuse — this component renders its own header action, so gating the
-   * page's action row is not enough. */
-  submissionsClosed?: boolean;
-  /** The /submit page with this comp and task chosen (submitTrackPath). */
-  submitHref: string;
   /** Parent bump to refetch scores (route edits, admin mutations). */
   refresh: number;
   onReplayAvailable: (available: boolean) => void;
@@ -207,21 +196,11 @@ export function TaskScoresPublic({
   const scoresHref = `/comp/${encodeURIComponent(compId)}/scores?task=${encodeURIComponent(taskId)}`;
 
   return (
-    <Card id="scores" className="scroll-mt-4">
-      <SectionHeader
-        title="Scores"
-        action={
-          // No longer gated on a session: submitting is open to anyone the
-          // comp's roster knows. Still mount-gated, because whether it shows
-          // depends on who is asking (submissionsClosed is false for an
-          // organiser). A link to the /submit page, like the action row's.
-          mounted && !isClosed && !submissionsClosed ? (
-            <LinkButton variant="outline" size="sm" href={submitHref}>
-              Submit track
-            </LinkButton>
-          ) : null
-        }
-      />
+    <Card id="scores" className="scroll-mt-20">
+      {/* No Submit here: "Submit your track" is the first row of the task
+          page's ⋯ (#863), and a second one on the page would be a second way
+          to do one thing. */}
+      <SectionHeader title="Scores" />
 
       {mounted && mySubmission?.registered ? (
         <p className="mt-2 text-sm text-muted-foreground" role="status">

@@ -24,8 +24,9 @@
  * — a wrong identifier, a bad file, a task closed for the day — is shown
  * under that step's field, which is focused, and the step's border turns red.
  * A refusal no field can fix — a sign-in, a wait, a duplicated roster row, a
- * closed comp — is pinned beside Submit with its help: the sign-in, when to
- * try again, the organisers to write to. The form's own checks are read the
+ * closed comp — is in the banner at the top of the page, under the bar Submit
+ * is in (#863), focused and scrolled into view, with its help: the sign-in,
+ * when to try again, the organisers to write to. The form's own checks are read the
  * same way as the server's refusals, so they land by the same rule.
  * docs/track-submission.md, "Errors are repairable".
  */
@@ -41,6 +42,7 @@ import {
   type Refusal,
   type SubmitResponse,
 } from "@/react/rac/form";
+import { Page, PageBar, commitClass } from "@/react/rac/page-bar";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { compressIgc, fetchWithRetry, type PilotListEntry } from "./types";
@@ -80,10 +82,13 @@ import {
 
 const SELF = "self";
 
+/** The bar's title, and the page's `<h1>`. */
+const TITLE = "Submit your track";
+
 /**
  * A refusal the form makes itself, with the code the server would have sent
  * (kit `refusal()`), so it lands by the same rule: under the field that can
- * fix it, or else beside Submit.
+ * fix it, or else in the banner at the top of the page.
  */
 const ownRefusal = (error: string, code: SubmitError["code"]): SubmitResponse =>
   refusal(error, { code });
@@ -521,7 +526,7 @@ export function SubmitTrackForm({
 
   /**
    * Where a refusal is shown: under the field of the step that can fix it, or
-   * else beside Submit with its help. The sentence is the server's, word for
+   * else in the banner with its help. The sentence is the server's, word for
    * word; a body with none still says something.
    */
   function shapeRefusal(_refusal: Refusal, body: unknown): Refusal {
@@ -537,28 +542,65 @@ export function SubmitTrackForm({
     };
   }
 
+  // The result is at the top of the page it replaced the form on: take the
+  // reader there. Its first line is an alert, so it is read out as well.
+  const resultRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!result) return;
+    resultRef.current?.scrollIntoView({ block: "start" });
+    resultRef.current?.focus({ preventScroll: true });
+  }, [result]);
+
   // ── The result replaces the form, and stays until the pilot leaves. Its
   // first action goes to what was made — the pilot's provisional score card.
+  // Nothing is left to submit, so the bar has no commit button.
   if (result) {
     return (
-      <TrackAccepted
-        result={result}
-        onAnother={() => {
-          setResult(null);
-          setFile(null);
-          setIgcPilotName(null);
-        }}
-      />
+      <Page bar={<PageBar title={TITLE} />}>
+        {/* The margin clears the bar the page scrolls under. */}
+        <div ref={resultRef} tabIndex={-1} className="scroll-mt-20 outline-none">
+          <TrackAccepted
+            result={result}
+            onAnother={() => {
+              setResult(null);
+              setFile(null);
+              setIgcPilotName(null);
+            }}
+          />
+        </div>
+      </Page>
     );
   }
 
   return (
+    // The form wraps the page, because Submit is in the bar. `contents`, so
+    // the bar still sticks to the page (components/SettingsForm.tsx).
     <Form
-      className="flex flex-col gap-6"
+      className="contents"
       onSubmit={upload}
       shapeRefusal={shapeRefusal}
       onSuccess={() => setResult(accepted.current)}
     >
+      <Page
+        bar={
+          // A top-level page: the main menu stays where a form under another
+          // page has Cancel. Submit is live once there is a file to send;
+          // everything else it needs is asked for when it is pressed.
+          <PageBar
+            title={TITLE}
+            commit={
+              <SubmitButton className={commitClass} pendingLabel="Submitting" isDisabled={!file}>
+                Submit
+              </SubmitButton>
+            }
+          />
+        }
+        className="flex flex-col gap-6"
+      >
+      {/* First in the column, under the bar Submit is in: the kit form focuses
+          it and scrolls it into view when a refusal lands here. */}
+      <FormErrorBanner title="We could not accept that track" />
+
       <StepBox
         n={1}
         title="Which task did you fly?"
@@ -693,13 +735,7 @@ export function SubmitTrackForm({
           </p>
         ) : null}
       </StepBox>
-
-      {/* Beside Submit, where it cannot scroll away from the button. */}
-      <FormErrorBanner title="We could not accept that track" />
-
-      <div className="flex flex-wrap items-center gap-2">
-        <SubmitButton pendingLabel="Submitting">Submit track</SubmitButton>
-      </div>
+      </Page>
     </Form>
   );
 }

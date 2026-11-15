@@ -311,7 +311,7 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     await addFlight.click();
 
     await expect(
-      page.getByRole("heading", { name: "Record manual flight" })
+      page.getByRole("heading", { name: "Manual flight" })
     ).toBeVisible({ timeout: 20_000 });
 
     // Pick a turnpoint short of goal and land at it: the made-good distance
@@ -329,7 +329,7 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
 
     // Saving returns to the task page, where the grid reflects the flight.
     await expect(
-      page.getByRole("heading", { name: "Record manual flight" })
+      page.getByRole("heading", { name: "Manual flight" })
     ).toHaveCount(0, { timeout: 20_000 });
 
     await expectAuditEntry(

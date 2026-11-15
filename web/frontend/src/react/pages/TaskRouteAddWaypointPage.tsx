@@ -18,6 +18,7 @@
  * away throws it away too. Back is Cancel, and so is the Cancel button.
  */
 import { useSearchParams } from "react-router-dom";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
 import { underTaskRoute } from "../lib/crumbs";
 import { taskRouteAddWaypointPath } from "../lib/slug";
@@ -36,13 +37,20 @@ export function TaskRouteAddWaypointPage() {
       ? taskRouteAddWaypointPath(urlId, compName, taskId, taskName)
       : null
   );
-  const gate = routeEditorGate(editor);
+  const crumbs = underTaskRoute(urlId, compName, taskId, taskName);
+  const gate = routeEditorGate(editor, { title: "Add waypoint", trail: crumbs });
   if (gate) return gate;
   // Wait for the waypoints, so the code it suggests is unique among them.
-  if (editor.wpLoading) return <Loading>Loading waypoints…</Loading>;
+  if (editor.wpLoading) {
+    return (
+      <Page bar={<PageBar title="Add waypoint" trail={crumbs} />}>
+        <Loading>Loading waypoints…</Loading>
+      </Page>
+    );
+  }
   return (
     <NewWaypointPage
-      crumbs={underTaskRoute(urlId, compName, taskId, taskName)}
+      crumbs={crumbs}
       seed={readNewWaypointSeed(searchParams)}
       codes={() => editor.waypoints.map((w) => w.code)}
       onAdd={(record) => {

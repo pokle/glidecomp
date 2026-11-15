@@ -14,7 +14,6 @@
  */
 import { useId, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { SettingsPage } from "@/react/components/SettingsPage";
 import { Button } from "@/react/rac/button";
 import { SettingsForm } from "@/react/components/SettingsForm";
 import { Label, TextField } from "@/react/rac/field";
@@ -26,7 +25,11 @@ import { underCompSettings } from "@/react/lib/crumbs";
 import { useConfirm } from "@/react/lib/confirm";
 import { bareCompId, compSettingsPath, compUrlId } from "@/react/lib/slug";
 import { SwitchField, SwitchList } from "@/react/rac/switch";
-import type { SettingsGroupProps } from "./CompSettingsIndex";
+import {
+  SETTINGS_GROUP_TITLES,
+  canSaveSettings,
+  type SettingsGroupProps,
+} from "./CompSettingsIndex";
 
 export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   const closeDateId = useId();
@@ -85,100 +88,102 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   }
 
   return (
-    <SettingsPage crumbs={underCompSettings(compId, comp.name)} title="Access">
-      <SettingsForm
-        dirty={dirty}
-        validate={() => ({
-          admin_emails: adminEmails.length === 0 && "At least one admin email is required",
-        })}
-        onSubmit={() =>
-          api.api.comp[":comp_id"].$patch({
-            param: { comp_id: compId },
-            json: {
-              test,
-              open_registration: openRegistration,
-              open_igc_upload: openUpload,
-              close_date: closeDate || null,
-              admin_emails: adminEmails,
-            },
-          })
-        }
-        onSuccess={onSaved}
-      >
-        {/* The three booleans share one card, as consecutive settings rows do
-            on a phone. "Hidden?" is the only place a comp's visibility is
-            set: a new comp starts hidden, and the setup guide's "Make public"
-            step links here. */}
-        <SwitchList>
-          <SwitchField
-            name="test"
-            checked={test}
-            onChange={setTest}
-            label="Hidden?"
-            hint="Not in the competition list or search. Only admins, and people you send this competition’s link to, can see it."
-          />
-          <SwitchField
-            name="open_registration"
-            checked={openRegistration}
-            onChange={setOpenRegistration}
-            label="Let pilots register themselves by submitting a track"
-            hint="When off, only admins add pilots. Registered pilots can always submit."
-          />
-          <SwitchField
-            name="open_igc_upload"
-            checked={openUpload}
-            onChange={setOpenUpload}
-            label="Let registered pilots record flights and statuses for each other"
-            hint="Uploading tracks, recording manual flights, and marking Absent / Did Not Fly. Admins always can."
-          />
-        </SwitchList>
+    <SettingsForm
+      crumbs={underCompSettings(compId, comp.name)}
+      title={SETTINGS_GROUP_TITLES.access}
+      fullTitle={`${SETTINGS_GROUP_TITLES.access} settings`}
+      dirty={dirty}
+      canCommit={canSaveSettings(comp, dirty)}
+      validate={() => ({
+        admin_emails: adminEmails.length === 0 && "At least one admin email is required",
+      })}
+      onSubmit={() =>
+        api.api.comp[":comp_id"].$patch({
+          param: { comp_id: compId },
+          json: {
+            test,
+            open_registration: openRegistration,
+            open_igc_upload: openUpload,
+            close_date: closeDate || null,
+            admin_emails: adminEmails,
+          },
+        })
+      }
+      onSuccess={onSaved}
+    >
+      {/* The three booleans share one card, as consecutive settings rows do
+          on a phone. "Hidden?" is the only place a comp's visibility is
+          set: a new comp starts hidden, and the setup guide's "Make public"
+          step links here. */}
+      <SwitchList>
+        <SwitchField
+          name="test"
+          checked={test}
+          onChange={setTest}
+          label="Hidden?"
+          hint="Not in the competition list or search. Only admins, and people you send this competition’s link to, can see it."
+        />
+        <SwitchField
+          name="open_registration"
+          checked={openRegistration}
+          onChange={setOpenRegistration}
+          label="Let pilots register themselves by submitting a track"
+          hint="When off, only admins add pilots. Registered pilots can always submit."
+        />
+        <SwitchField
+          name="open_igc_upload"
+          checked={openUpload}
+          onChange={setOpenUpload}
+          label="Let registered pilots record flights and statuses for each other"
+          hint="Uploading tracks, recording manual flights, and marking Absent / Did Not Fly. Admins always can."
+        />
+      </SwitchList>
 
-        {/* Only a hidden comp has a link to take back: a public one is open
-            to everyone at its plain URL. */}
-        {comp.test ? (
-          <div className="flex flex-col items-start gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={() => void resetLink()}
-              isPending={reset.pending}
-              pendingLabel="Resetting link"
-            >
-              Reset link
-            </Button>
-            <ActionErrorBanner action={reset} />
-            <p className="text-xs text-muted-foreground">
-              Every link you’ve shared so far stops working.
-            </p>
-          </div>
-        ) : null}
-
-        <div className="flex flex-col gap-2">
-          <Label id={closeDateId}>Close date</Label>
-          <DatePicker
-            inline
-            clearable
-            name="close_date"
-            aria-labelledby={closeDateId}
-            value={closeDate}
-            onChange={setCloseDate}
-          />
+      {/* Only a hidden comp has a link to take back: a public one is open
+          to everyone at its plain URL. */}
+      {comp.test ? (
+        <div className="flex flex-col items-start gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() => void resetLink()}
+            isPending={reset.pending}
+            pendingLabel="Resetting link"
+          >
+            Reset link
+          </Button>
+          <ActionErrorBanner action={reset} />
           <p className="text-xs text-muted-foreground">
-            Tracks are refused after this date. Leave empty for no limit.
+            Every link you’ve shared so far stops working.
           </p>
         </div>
+      ) : null}
 
-        {/* A refusal about one address ("admin_emails.1") lands here: the
-            kit form reads a list item's refusal as its list's. */}
-        <TextField
-          label="Admin emails"
-          name="admin_emails"
-          placeholder="admin1@example.com, admin2@example.com"
-          value={adminsText}
-          onChange={setAdminsText}
-          description="Comma-separated. At least one required."
+      <div className="flex flex-col gap-2">
+        <Label id={closeDateId}>Close date</Label>
+        <DatePicker
+          inline
+          clearable
+          name="close_date"
+          aria-labelledby={closeDateId}
+          value={closeDate}
+          onChange={setCloseDate}
         />
-      </SettingsForm>
-    </SettingsPage>
+        <p className="text-xs text-muted-foreground">
+          Tracks are refused after this date. Leave empty for no limit.
+        </p>
+      </div>
+
+      {/* A refusal about one address ("admin_emails.1") lands here: the
+          kit form reads a list item's refusal as its list's. */}
+      <TextField
+        label="Admin emails"
+        name="admin_emails"
+        placeholder="admin1@example.com, admin2@example.com"
+        value={adminsText}
+        onChange={setAdminsText}
+        description="Comma-separated. At least one required."
+      />
+    </SettingsForm>
   );
 }

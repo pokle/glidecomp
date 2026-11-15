@@ -4,19 +4,18 @@
  * open-distance scoring pages. The example figures are generated from real
  * archive tracklogs by web/scripts/generate-data-cleaning-charts.ts. */
 import Base from "../../layouts/Base.astro";
-import BackLink from "../../components/BackLink.astro";
 import DataCleaningCharts from "../../components/DataCleaningCharts.astro";
 import DataCleaningChartsSynthetic from "../../components/DataCleaningChartsSynthetic.astro";
 ---
 
 <Base
+  page="data-cleaning"
   title="GlideComp - How Track Data Cleaning Works"
   description="How GlideComp detects and repairs GPS altitude glitches in tracklogs — cross-checking the barometric channel, physical plausibility limits, and full disclosure of every repair."
 >
   <div class="min-h-screen bg-background text-foreground py-6 px-page-safe">
     <div class="max-w-2xl mx-auto">
       <header class="mb-10">
-        <BackLink href="/scoring" label="Scoring" />
         <h1 class="text-3xl font-bold flex items-center gap-3">
           <img src="/icon.svg" alt="GlideComp logo" class="w-8 h-8" />
           How Track Data Cleaning Works

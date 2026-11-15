@@ -23,7 +23,7 @@
  */
 import { useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
 import { TaskDiagram } from "../comp/TaskDiagram";
 import { underTask } from "../lib/crumbs";
@@ -32,7 +32,7 @@ import { idFromSegment, taskDiagramPath } from "../lib/slug";
 import { useTaskPage } from "../lib/use-task-page";
 import type { TaskDiagramLoaderData } from "../loaders";
 
-/** The page's crumb — the name the task page already gives its diagram. */
+/** The page's title — the name the task page already gives its diagram. */
 const LABEL = "Route diagram";
 
 export function TaskDiagramPage() {
@@ -53,22 +53,36 @@ export function TaskDiagramPage() {
   });
 
   if (notFound) return <NotFound title="Task not found" />;
-  if (!task || !comp) return <Loading>Loading task…</Loading>;
+
+  // A read page with nothing to do on it: Back, the title, and no ⋯ (#863).
+  // The bar is there before the task is, so the page does not jump.
+  const bar = (
+    <PageBar
+      title={LABEL}
+      fullTitle={task ? `Route for ${task.name}` : undefined}
+      trail={underTask(urlId, comp?.name, taskId, task?.name)}
+    />
+  );
+  if (!task || !comp) {
+    return (
+      <Page bar={bar}>
+        <Loading>Loading task…</Loading>
+      </Page>
+    );
+  }
 
   return (
-    <div>
-      <Breadcrumbs items={underTask(urlId, comp.name, taskId, task.name)} current={LABEL} />
-      <h1 className="mt-2 text-2xl font-bold">{`Route for ${task.name}`}</h1>
+    <Page bar={bar}>
       {task.xctsk ? (
         // Capped against the viewport's HEIGHT as well as the column's width,
         // so a landscape phone shows the whole route without scrolling: the
         // `lg` preset is 540×380, so 110vh of width keeps it under ~78vh tall.
-        <div className="mx-auto mt-4 w-[min(100%,110vh)]">
+        <div className="mx-auto w-[min(100%,110vh)]">
           <TaskDiagram task={task.xctsk} size="lg" className="h-auto w-full" />
         </div>
       ) : (
-        <p className="mt-2 text-muted-foreground">No route defined yet</p>
+        <p className="text-muted-foreground">No route defined yet</p>
       )}
-    </div>
+    </Page>
   );
 }

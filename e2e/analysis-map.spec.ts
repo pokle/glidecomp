@@ -195,7 +195,10 @@ test("place search reaches the Mapbox geocoder", async ({ page, context }) => {
   const compId = await findOrSeedSampleComp(page);
 
   await page.goto(`/comp/${compId}/waypoints`);
-  await expect(page.getByRole("button", { name: "Upload file" })).toBeVisible({ timeout: 15_000 });
+  // The organiser's editor is up: Save is in the bar once the waypoints are in.
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
 
   // The geocoder is keyed by the query string, so a recording of "Corryong"
   // answers this for ever — see lib/geocode.ts for why v6 and why nothing it

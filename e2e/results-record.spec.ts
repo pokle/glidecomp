@@ -6,7 +6,7 @@
  * What this pins, against the real Workers:
  *  - anyone, signed in or not, gets a real PDF whose attachments carry every
  *    flying pilot, and a ZIP of the same files;
- *  - the scores page's Download menu offers both to every reader;
+ *  - the scores page's ⋯ menu offers both to every reader;
  *  - after the close date the comp page prompts the ADMIN to keep it (that
  *    card stays admin-only), the download checks the step off, and the
  *    prompt is gone on the next visit.
@@ -83,7 +83,9 @@ test("anyone downloads the record and its data, signed in or not", async ({ play
 test("the scores page offers the record and its data to every reader", async ({ page, browser }) => {
   await devLogin(page);
   await page.goto(`/comp/${fixture.compId}/scores`);
-  const download = page.getByRole("button", { name: "Download" });
+  // The downloads are rows of the bar's ⋯ menu, which is there once the
+  // scores are.
+  const download = page.getByRole("button", { name: "More actions" });
   await expect(download).toBeVisible({ timeout: 15_000 });
   await download.click();
   const [file] = await Promise.all([
@@ -96,7 +98,7 @@ test("the scores page offers the record and its data to every reader", async ({ 
   // Signed out: the same two items, and the ZIP is a real download.
   const anon = await browser.newPage();
   await anon.goto(`${BASE_URL}/comp/${fixture.compId}/scores`);
-  const anonDownload = anon.getByRole("button", { name: "Download" });
+  const anonDownload = anon.getByRole("button", { name: "More actions" });
   await expect(anonDownload).toBeVisible({ timeout: 15_000 });
   await anonDownload.click();
   await expect(anon.getByRole("menuitem", { name: "Results record (PDF)" })).toBeVisible();

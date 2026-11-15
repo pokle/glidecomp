@@ -268,10 +268,11 @@ test("an organiser connects an assistant, it reads their comp and sets a route, 
   }
 
   // Disconnect, the way the organiser would: Settings → Connected AI Assistants.
-  // Arriving the way /assistant's "Disconnect" link sends you: straight to
-  // the section, which sits well below the fold on a phone.
+  // Arriving the way /assistant's "Disconnect" link sends you: the anchor of
+  // what was a section of one long page lands on the group's own page (#863).
   await page.goto("/settings#connected-ai-assistants");
-  await expect(page.locator("#connected-ai-assistants")).toBeInViewport();
+  await expect(page).toHaveURL(/\/settings\/assistants$/);
+  await expect(page.getByRole("heading", { name: "Connected AI Assistants", level: 1 })).toBeVisible();
   const row = page.getByRole("list", { name: "Connected AI Assistants" }).getByRole("listitem").filter({ hasText: CLIENT_NAME });
   await expect(row).toContainText("can change tasks");
   await row.getByRole("button", { name: "Disconnect" }).click();

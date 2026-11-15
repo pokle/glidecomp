@@ -82,6 +82,10 @@ export const MOBILE_SPEC_FILES = [
   // on the screen — which is exactly what a phone's height, its keyboard and
   // a sheet's fixed header change.
   "forms.spec.ts",
+  // The bar every page has (#863): its 44 px targets exist only on a coarse
+  // pointer for the kit's own controls, and Back, a refused Save and Cancel
+  // are what a phone with no browser chrome (the installed app) depends on.
+  "page-bar.spec.ts",
   // Where a refusal lands on the task's management tools — the manage grid's
   // row actions and the manual-flight page (#808). A task is run from a hill,
   // and a phone is where a refusal can land off-screen.

@@ -1,7 +1,6 @@
 ---
 /** Privacy Policy & Terms page. Ported from react/pages/Legal.tsx. */
 import Base from "../layouts/Base.astro";
-import BackLink from "../components/BackLink.astro";
 import {
   LEGAL_NOTICE,
   formatLegalDate,
@@ -14,11 +13,10 @@ const published = formatLegalDate(LEGAL_NOTICE.version);
 const effective = formatLegalDate(legalNoticeEffectiveDate(LEGAL_NOTICE));
 ---
 
-<Base title="GlideComp - Privacy Policy & Terms">
+<Base page="legal" title="GlideComp - Privacy Policy & Terms">
   <div class="min-h-screen bg-background text-foreground py-6 px-page-safe">
     <div class="max-w-2xl mx-auto">
       <header class="mb-10">
-        <BackLink href="/" />
         <h1 class="text-3xl font-bold flex items-center gap-3">
           <img src="/icon.svg" alt="GlideComp logo" class="w-8 h-8" />
           Privacy Policy &amp; Terms
