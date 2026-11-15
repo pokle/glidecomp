@@ -77,6 +77,9 @@ test.beforeEach(async ({ page }) => {
 const bar = (page: Page) => page.locator("main#main-content header").first();
 
 async function expectTarget(control: Locator, what: string): Promise<void> {
+  // Waited for: the bar is drawn before the page's data and again with it,
+  // and a control measured between the two has no box at all.
+  await expect(control, `${what} must be on screen`).toBeVisible();
   const box = await control.boundingBox();
   expect(box, `${what} must be on screen`).not.toBeNull();
   expect(box!.width, `${what} must be 44 px wide or more`).toBeGreaterThanOrEqual(TARGET);
@@ -104,6 +107,8 @@ test.describe("the page bar", () => {
   test("every control in the bar and its menus is a 44 px target", async ({ page }) => {
     await page.goto(`/comp/${compId}/pilots`);
     await expect(page.getByRole("heading", { level: 1, name: "Pilots" })).toBeVisible();
+    // The roster is in: the bar is the page's own now, not the loading one.
+    await expect(page.getByRole("row", { name: /Pilot 01/ })).toBeVisible();
 
     // The three slots: back, the title's menu, + and ⋯.
     const back = bar(page).getByRole("link", { name: /^Back to / });
