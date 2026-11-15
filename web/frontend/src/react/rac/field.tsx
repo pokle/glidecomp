@@ -88,7 +88,14 @@ export function TextArea({
   return (
     <AriaTextArea
       ref={ref}
-      className={cn(inputClass, "h-auto resize-y", className as string)}
+      // `pointer-coarse:h-auto` too: the 44 px a one-line input has on a phone
+      // must not flatten a text area to one line. `min-h-20` is about three
+      // lines, so a reader always sees what they are writing in.
+      className={cn(
+        inputClass,
+        "h-auto min-h-20 resize-y pointer-coarse:h-auto",
+        className as string
+      )}
       {...props}
     />
   );
