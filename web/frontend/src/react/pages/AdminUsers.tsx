@@ -108,7 +108,7 @@ export function AdminUsers() {
                 <div className="font-medium">
                   {u.name}
                   {u.is_super_admin ? (
-                    <Badge className="ml-2 bg-primary/10 text-primary">super admin</Badge>
+                    <Badge className="ml-2 bg-primary/10 text-link">super admin</Badge>
                   ) : null}
                 </div>
                 <div className="text-xs text-muted-foreground">

@@ -538,7 +538,7 @@ function TasksList({
                   ) : null}{" "}
                   {row.task.line_goal ? (
                     <span
-                      className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary"
+                      className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-link"
                       title="This task ends at a goal line perpendicular to the final leg"
                     >
                       Goal line

@@ -224,7 +224,7 @@ export function PageBar({
                     style={{ paddingLeft: 12 + trail.length * 14 }}
                   >
                     <span className="min-w-0 flex-1">{fullTitle ?? title}</span>
-                    <CheckIcon className="size-4 shrink-0 text-primary" aria-hidden />
+                    <CheckIcon className="size-4 shrink-0 text-link" aria-hidden />
                   </MenuItem>
                 )}
                 {(related?.items ?? []).map((it) => (
@@ -240,7 +240,7 @@ export function PageBar({
                   >
                     <span className="min-w-0 flex-1">{it.label}</span>
                     {it.current ? (
-                      <CheckIcon className="size-4 shrink-0 text-primary" aria-hidden />
+                      <CheckIcon className="size-4 shrink-0 text-link" aria-hidden />
                     ) : null}
                   </MenuItem>
                 ))}

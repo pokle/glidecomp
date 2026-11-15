@@ -152,7 +152,7 @@ export function CompWrapUp({ compId, comp }: { compId: string; comp: CompDetailD
           {steps.map((step) => (
             <li key={step.key} className="flex items-center gap-2">
               {step.complete ? (
-                <Check aria-hidden className="size-4 shrink-0 text-primary" />
+                <Check aria-hidden className="size-4 shrink-0 text-link" />
               ) : (
                 <Circle aria-hidden className="size-4 shrink-0 text-muted-foreground" />
               )}

@@ -4,8 +4,8 @@
  * src/react/rac/ (the sole kit since 2026-07-27; see one-kit.test.ts).
  *
  * Tokens follow the Apple design language (inspired by get-inscribe.com):
- * white cards on an #f2f2f7 grouped ground, #1d1d1f labels, iOS system blue as
- * the primary, hairline separators, two elevations, and Atkinson Hyperlegible
+ * white cards on an #f2f2f7 grouped ground, #1d1d1f labels, a blue one step
+ * darker than iOS system blue as the primary (so that it holds a white label), hairline separators, two elevations, and Atkinson Hyperlegible
  * Next (falling back to the SF Pro system stack) as the app face. Loaded by the
  * React
  * entry (react/entry-client.tsx) and imported by src/analysis.css so the
@@ -58,9 +58,22 @@
   --card-foreground: #1d1d1f;
   --popover: #ffffff;
   --popover-foreground: #1d1d1f;
-  /* iOS system blue */
-  --primary: #007aff;
+  /* The accent as a FILL: a button, a selected day, a switch that is on.
+     This was iOS system blue (#007aff), which carries a white label at
+     4.02:1, under the 4.5:1 the accessibility standard asks of text. This
+     blue carries it at 4.70:1 and is one step darker, not a different
+     colour. The focus ring and the chart tone below stay system blue: they
+     are marks, not text, and need 3:1. */
+  --primary: #0071e3;
   --primary-foreground: #ffffff;
+  /* The accent as TEXT: a link, a chip's label, a tick. A fill and a label
+     cannot be one colour. A blue light enough to fill a button is too light
+     to read as text on the grey ground (the fill above is 4.21:1 there), so
+     text gets a darker one: 6.46:1 on a card, 5.79:1 on the ground, and no
+     less than 4.89:1 on any surface the app puts it on, a 20% wash of the
+     fill included. In a class it is `text-link`; the fill's own token is never
+     text (accent-text.test.ts). */
+  --link: #005bbf;
   /* Fills that sit ON a surface (hover states, wells, inline code). They have
      to read as recessed against BOTH the white card and the grey ground, so
      they are a step darker than the ground rather than a step lighter — the
@@ -115,9 +128,16 @@
   --card-foreground: #f5f5f7;
   --popover: #1c1c1e;
   --popover-foreground: #f5f5f7;
-  /* iOS system blue (dark variant) */
-  --primary: #0a84ff;
+  /* The same fill as light. Dark's system blue (#0a84ff) is brighter so that
+     it reads as text on black, and for that reason it carries a white label
+     at only 3.65:1. As a fill it needs the opposite, so the brighter blue
+     moved to --link below and the fill is the one that holds a white label. */
+  --primary: #0071e3;
   --primary-foreground: #ffffff;
+  /* The accent as text on dark: 6.93:1 on a card, 8.55:1 on the canvas, and
+     no less than 4.62:1 on any surface, a hovered row included. The fill
+     above is 3.62:1 on a card, which is enough for a mark and not for text. */
+  --link: #5aa9ff;
   /* Dark already had its figure/ground (#000 canvas, #1c1c1e card), so only
      the fills move: they were the SAME #1c1c1e as the card, which made every
      hover state on a card invisible. */
@@ -149,6 +169,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-link: var(--link);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);

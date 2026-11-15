@@ -311,7 +311,7 @@
 
   /* Filter button active state */
   .filter-btn.active {
-    @apply bg-primary/20 text-primary;
+    @apply bg-primary/20 text-link;
   }
 
   /* Glide item in the panel */
@@ -330,7 +330,7 @@
 
   .glide-rank {
     @apply flex items-center justify-center w-8 h-8 shrink-0;
-    @apply bg-primary/10 text-primary font-bold text-sm rounded-full;
+    @apply bg-primary/10 text-link font-bold text-sm rounded-full;
   }
 
   .glide-details {
@@ -583,7 +583,7 @@
   }
 
   #glide-legend .glide-legend-title {
-    @apply font-semibold text-sm mb-2 text-primary border-b border-border pb-1.5;
+    @apply font-semibold text-sm mb-2 text-link border-b border-border pb-1.5;
   }
 
   #glide-legend .glide-legend-item {
@@ -591,7 +591,7 @@
   }
 
   #glide-legend .glide-legend-item strong {
-    @apply text-primary;
+    @apply text-link;
   }
 
   /* Track-point HUD overlay — translucent dark card with accordion groups */

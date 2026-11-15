@@ -327,7 +327,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         <!-- A sample loader: it reloads with ?track=, which is not the public
              competition deep link, so main.ts hides it from an anonymous
              reader rather than bounce them to sign-in (issue #666). -->
-        <button type="button" id="try-sample-flight" data-requires-account class="text-sm text-primary hover:underline cursor-pointer bg-transparent border-0">Try a sample flight</button>
+        <button type="button" id="try-sample-flight" data-requires-account class="text-sm text-link hover:underline cursor-pointer bg-transparent border-0">Try a sample flight</button>
       </div>
     </div>
 
