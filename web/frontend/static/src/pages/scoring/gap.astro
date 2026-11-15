@@ -189,9 +189,9 @@ const S7A_PDF =
           </div>
 
           <p class="text-muted-foreground">Overall task validity is:</p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Task Validity} = \text{Launch Validity} \times \text{Distance Validity} \times \text{Time Validity}`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{Task Validity} = \text{Launch Validity} \times \text{Distance Validity} \times \text{Time Validity}`)}></p>
           <p class="text-muted-foreground">and the points available for the task are:</p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Available Points} = 1000 \times \text{Task Validity}`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{Available Points} = 1000 \times \text{Task Validity}`)}></p>
           <p class="text-muted-foreground">
             On a good day, task validity is close to 1.0 and the task offers nearly 1000 points.
             On a poor day it might offer only 200 to 400.
@@ -268,7 +268,7 @@ const S7A_PDF =
             typical score. In <strong>paragliding</strong>, they are simply proportional to the
             distance you flew:
           </p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Distance Points} = \dfrac{\text{Your Distance}}{\text{Best Distance}} \times \text{Available Distance Points}`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{Distance Points} = \dfrac{\text{Your Distance}}{\text{Best Distance}} \times \text{Available Distance Points}`)}></p>
           <p class="text-muted-foreground">
             The pilot who flew furthest gets all the distance points, and everyone else gets a
             share in proportion. In <strong>hang gliding</strong>, only half the points work this
@@ -302,7 +302,7 @@ const S7A_PDF =
               In hang gliding, distance points come in two halves
               (<SpecRef section="12.1.1" label="S7F §12.1.1" />):
             </p>
-            <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Distance Points} = \left( \tfrac{1}{2}\,\text{Linear} + \tfrac{1}{2}\,\text{Difficulty} \right) \times \text{Available Distance Points}`)}></p>
+            <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{Distance Points} = \left( \tfrac{1}{2}\,\text{Linear} + \tfrac{1}{2}\,\text{Difficulty} \right) \times \text{Available Distance Points}`)}></p>
             <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2 mt-2">
               <li>
                 <strong>The linear half</strong> is the same proportion of the best distance as
@@ -390,7 +390,7 @@ const S7A_PDF =
             If you qualify, your time points depend on your <strong>speed fraction</strong>, a
             number between 0 and 1 for how close you came to the fastest time:
           </p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{SF} = \max\!\left(0,\; 1 - \left(\dfrac{\Delta t}{\sqrt{t_{\text{best}}}}\right)^{5/6} \right)`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{SF} = \max\!\left(0,\; 1 - \left(\dfrac{\Delta t}{\sqrt{t_{\text{best}}}}\right)^{5/6} \right)`)}></p>
           <p class="text-muted-foreground">
             Here <Fragment set:html={km(String.raw`\Delta t`)} /> is how much slower you were than
             the best time, and <Fragment set:html={km(String.raw`t_{\text{best}}`)} /> is the best
@@ -407,7 +407,7 @@ const S7A_PDF =
             the drop-off is gradual, so finishing 10 minutes behind the winner still earns a
             large share.
           </p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Time Points} = \text{SF} \times \text{Available Time Points}`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{Time Points} = \text{SF} \times \text{Available Time Points}`)}></p>
           <p class="text-muted-foreground">
             In a race with start gates, your clock runs from the <strong>start gate</strong> you
             took (<SpecRef section="9.2.4.1" />): the last gate at or before your start-cylinder
@@ -427,8 +427,8 @@ const S7A_PDF =
               section. Crossing at any altitude still reaches goal, but crossing below the set
               height costs you some of your time points. Your other points are unaffected.
             </p>
-            <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{AR} = \frac{\text{crossing altitude} - \text{goal altitude}}{\text{elevation}}`)}></p>
-            <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{GoalAltitudeFactor} = 0.8 + 0.6\,\text{AR} - 0.6\,\text{AR}^2 + 0.2\,\text{AR}^3`)}></p>
+            <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{AR} = \frac{\text{crossing altitude} - \text{goal altitude}}{\text{elevation}}`)}></p>
+            <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{GoalAltitudeFactor} = 0.8 + 0.6\,\text{AR} - 0.6\,\text{AR}^2 + 0.2\,\text{AR}^3`)}></p>
             <p class="text-muted-foreground">
               The factor is 0.8 at or below the goal turnpoint's altitude and 1 at or above the
               set height, and your time points are multiplied by it. For example, crossing 60 m
@@ -494,7 +494,7 @@ const S7A_PDF =
                 reached and extends the curve to <em>maxTime</em>
                 (<SpecRef section="12.3.1" />):
               </p>
-              <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{maxTime} = \min\!\left(\max(\text{lastOutlandingTime},\; \text{lastESSTime}),\; \text{taskDeadline}\right)`)}></p>
+              <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{maxTime} = \min\!\left(\max(\text{lastOutlandingTime},\; \text{lastESSTime}),\; \text{taskDeadline}\right)`)}></p>
               <p class="text-muted-foreground">
                 That is, whichever came later, the last pilot landing out or the last pilot
                 reaching ESS, but never after the task deadline. In a stopped task, the curve ends
@@ -513,7 +513,7 @@ const S7A_PDF =
                 Leading points follow a curve shaped like the time-points curve, using LC values
                 in place of times:
               </p>
-              <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{LF} = \max\!\left(0,\; 1 - \left(\dfrac{\text{LC} - \text{LC}_{\min}}{\sqrt{\text{LC}_{\min}}}\right)^{2/3} \right)`)}></p>
+              <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{LF} = \max\!\left(0,\; 1 - \left(\dfrac{\text{LC} - \text{LC}_{\min}}{\sqrt{\text{LC}_{\min}}}\right)^{2/3} \right)`)}></p>
               <p class="text-muted-foreground">
                 The pilot with the best (lowest) LC gets full leading points, and everyone else
                 gets less the further their LC is from the best.
@@ -538,7 +538,7 @@ const S7A_PDF =
               weight. The ratio can be set anywhere from 0% to 26%; the default is 26% for
               paragliding and 17.5% for hang gliding.
             </p>
-            <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{LeadingWeight} = (1 - \text{DistanceWeight}) \times \text{LeadingTimeRatio}`)}></p>
+            <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{LeadingWeight} = (1 - \text{DistanceWeight}) \times \text{LeadingTimeRatio}`)}></p>
             <p class="text-muted-foreground">
               <strong>Paragliding</strong> has one extra rule: if nobody makes goal, leading gets
               <strong>all</strong> of the non-distance weight, since no one can earn time points
@@ -593,8 +593,8 @@ const S7A_PDF =
             Here <em>ArrivalRatio</em> is the fraction of the pilots reaching ESS that you arrived
             ahead of:
           </p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{ArrivalRatio} = 1 - \frac{\text{PositionAtESS} - 1}{\text{PilotsAtESS}}`)}></p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{ArrivalFactor} = 0.2 + 0.037\,r + 0.13\,r^2 + 0.633\,r^3`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{ArrivalRatio} = 1 - \frac{\text{PositionAtESS} - 1}{\text{PilotsAtESS}}`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{ArrivalFactor} = 0.2 + 0.037\,r + 0.13\,r^2 + 0.633\,r^3`)}></p>
           <p class="text-muted-foreground">
             The four coefficients add up to exactly 1, so the first arrival gets the full
             points. Each pilot's report card shows their position, ESS time and the arithmetic,
@@ -621,7 +621,7 @@ const S7A_PDF =
             <em>before</em> rounding (<SpecRef section="13.5" />), so rounding is always the last
             step:
           </p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Total} = \text{round}_{0.1}\!\left(\text{Distance} + \text{Time} + \text{Leading} + \text{Arrival} - \text{Penalties}\right)`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{Total} = \text{round}_{0.1}\!\left(\text{Distance} + \text{Time} + \text{Leading} + \text{Arrival} - \text{Penalties}\right)`)}></p>
           <p class="text-muted-foreground">
             A score never goes below zero, however large the penalty. Pilots are ranked by total,
             highest first, and a tie goes to the pilot who flew further. The scoreboard shows

@@ -200,7 +200,7 @@ const SEARCH_GROUP = {
 } as const;
 const SEARCH_CLEAR = {
   default: "touch-target size-5 rounded",
-  floating: "-mr-2 size-10 rounded-full",
+  floating: "-mr-2 size-11 rounded-full",
 } as const;
 
 /** Search input with the built-in clear (Esc / ✕) behaviour. */
