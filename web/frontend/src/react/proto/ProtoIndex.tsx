@@ -27,7 +27,7 @@ const SCENARIOS: Array<{ group: string; rows: Array<{ to: string; label: string;
       {
         to: `${P}/submit`,
         label: "Submit track",
-        look: "A page that runs one action and shows the result beneath it. Its button stays under the fields, not in the bar.",
+        look: "A top-level page that is a form: its commit button is still top right.",
       },
     ],
   },
