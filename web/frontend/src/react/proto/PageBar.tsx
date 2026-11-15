@@ -38,7 +38,7 @@ import { Menu, MenuHeader, MenuItem, MenuSection, MenuSeparator } from "@/react/
 import { cn } from "@/react/lib/utils";
 import { openedHere, useLeave } from "../lib/leave";
 import { P } from "./fixtures";
-import { useProtoOptions } from "./options";
+import { useProtoOptions, type DoneLook } from "./options";
 
 export interface Crumb {
   label: string;
@@ -95,21 +95,73 @@ const ICON = "pointer-events-auto size-11 rounded-full";
 export const commitClass = "h-11 rounded-full px-5 text-[0.9375rem]";
 
 /**
+ * A blue dark enough to be text. The accent itself is 3.9:1 on the glass and
+ * 3.0:1 on its own tint, under the 4.5:1 the accessibility standard asks for;
+ * this is 6.3:1 on the glass and 5.0:1 on the tint in light, and 6.7:1 on the
+ * glass in dark. (The tint sets a lighter blue of its own in dark.)
+ */
+const ACCENT_TEXT = "text-[#005bbf] dark:text-[#409cff]";
+
+/**
+ * The looks Done can have (the `done` switch on /proto). None is the solid
+ * blue of Save: Done writes nothing to the server.
+ */
+const DONE_LOOK: Record<DoneLook, { pills: string; solid: string }> = {
+  // As Cancel is drawn. The quietest: it can be lost against the page.
+  glass: { pills: GLASS, solid: "border-border bg-background" },
+  // The glass pill, with the label in the accent. As iOS draws Done in a bar.
+  text: {
+    pills: cn(GLASS, ACCENT_TEXT, "font-semibold"),
+    solid: cn(ACCENT_TEXT, "font-semibold"),
+  },
+  // A wash of the accent under an accent label: plainly a button, and
+  // plainly lighter than Save. Opaque, because the page scrolls beneath it.
+  tint: {
+    pills: cn(
+      ACCENT_TEXT,
+      "border-primary/25 bg-[color-mix(in_oklab,var(--primary)_14%,var(--background))] font-semibold shadow-card",
+      "data-hovered:bg-[color-mix(in_oklab,var(--primary)_22%,var(--background))] data-hovered:text-[#005bbf]",
+      // On black a wash over the page is nearly black: mix into the card's grey.
+      "dark:border-primary/40 dark:bg-[color-mix(in_oklab,var(--primary)_34%,var(--card))] dark:text-[#7dbbff] dark:data-hovered:bg-[color-mix(in_oklab,var(--primary)_42%,var(--card))] dark:data-hovered:text-[#7dbbff]"
+    ),
+    solid: "",
+  },
+  // The glass pill with an accent border and label.
+  outline: {
+    pills: cn(GLASS, ACCENT_TEXT, "border-[1.5px] border-primary font-semibold dark:border-primary"),
+    solid: cn(ACCENT_TEXT, "border-[1.5px] border-primary font-semibold"),
+  },
+  // Solid, in the text colour and not the accent: as heavy as Save, but not
+  // blue, so blue still means "this writes to the server".
+  dark: {
+    pills:
+      "bg-foreground font-semibold text-background shadow-card data-hovered:bg-foreground/85 data-hovered:text-background dark:data-hovered:bg-foreground/85",
+    solid: "",
+  },
+};
+// Under the solid bar these two are drawn as they are over the page.
+DONE_LOOK.tint.solid = DONE_LOOK.tint.pills;
+DONE_LOOK.dark.solid = DONE_LOOK.dark.pills;
+
+/**
  * Done, in the trailing slot. Done writes nothing to the server: it finishes
  * one part of a draft that its page saves later, or leaves a mode. So it is
- * never the prominent button (the wording rule in issue #863) and is drawn
- * like Cancel, with Back or Cancel always in the leading slot beside it.
- * `submit` runs the form's checks first.
+ * never drawn as Save is (the wording rule in issue #863), and Back or Cancel
+ * is always in the leading slot beside it. `submit` runs the form's checks
+ * first.
  */
 export function DoneButton({ submit, onPress }: { submit?: boolean; onPress?: () => void }) {
   const { options } = useProtoOptions();
-  const solid = options.chrome === "solid";
+  const look = DONE_LOOK[options.done] ?? DONE_LOOK.tint;
   return (
     <Button
       type={submit ? "submit" : "button"}
-      variant={solid ? "outline" : "ghost"}
+      variant="ghost"
       onPress={onPress}
-      className={cn("h-11 rounded-full px-4 text-[0.9375rem]", !solid && GLASS)}
+      className={cn(
+        "h-11 rounded-full px-4 text-[0.9375rem]",
+        options.chrome === "solid" ? look.solid : look.pills
+      )}
     >
       Done
     </Button>

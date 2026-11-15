@@ -6,7 +6,6 @@
  */
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
 import { ChoiceList } from "@/react/rac/choice-list";
 import { TextField } from "@/react/rac/field";
@@ -69,9 +68,11 @@ export function CompHub() {
           trail={[COMPETITIONS]}
           related={filled ? compPages() : undefined}
           actions={[
+            { id: "submit", label: "Submit your track", to: `${P}/submit` },
             {
               id: "record",
               label: "Download the results record (PDF)",
+              group: true,
               onAction: stub("Results record"),
             },
             { id: "task", label: "New task", admin: true, group: true, onAction: stub("New task") },
@@ -213,7 +214,10 @@ export function Task() {
             })),
           }}
           actions={[
-            { id: "share", label: "Share task", onAction: stub("Share task") },
+            // First, for the pilot who came to do exactly this; and in ⋯, with
+            // every other action, so the page itself is the task and its results.
+            { id: "submit", label: "Submit your track", to: `${P}/submit` },
+            { id: "share", label: "Share task", group: true, onAction: stub("Share task") },
             { id: "qr", label: "QR code", onAction: stub("QR code") },
             { id: "map", label: "View on map", onAction: stub("View on map") },
             { id: "replay", label: "3D replay", onAction: stub("3D replay") },
@@ -226,10 +230,6 @@ export function Task() {
       }
     >
       <p className="px-1 text-muted-foreground">{task.day} · open · race to goal</p>
-      {/* The one thing a pilot came for stays on the page, not in ⋯. */}
-      <LinkButton href={`${P}/submit`} className="h-11 self-start px-5">
-        Submit your track
-      </LinkButton>
       <Block title="Route">
         <Card className="gap-1">
           <p className="font-medium">ELLIOT → KANGCK → BIGARA → TOOMA → LIGHTH → DWYERS → KHANCO</p>
