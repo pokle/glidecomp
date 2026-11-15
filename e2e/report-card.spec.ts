@@ -289,7 +289,7 @@ test.describe("the pilot report card", () => {
       await expect(more).toBeVisible({ timeout: 30_000 });
       await more.click();
       await expect(
-        page.getByRole("menuitem", { name: "Flight analysis" })
+        page.getByRole("menuitem", { name: "Climbs and glides" })
       ).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(
@@ -300,7 +300,7 @@ test.describe("the pilot report card", () => {
       // visually hidden "Page actions" list), which is where its href is read.
       const link = page
         .getByRole("navigation", { name: "Page actions" })
-        .getByRole("link", { name: "Flight analysis" });
+        .getByRole("link", { name: "Climbs and glides" });
       await expect(link).toHaveCount(1);
       // `pilotId` is what narrows the viewer to this one track, which is what
       // keeps its panel in single-track mode. Without it the reader lands on
@@ -339,13 +339,13 @@ test.describe("the pilot report card", () => {
 
       // All six single-track tabs — the tooling the report card does not have.
       // The panel is a sidebar over the map, collapsed to zero width until the
-      // reader opens it from "Analysis" in the page bar. Collapsed is not the same
+      // reader opens it from "Lists" in the page bar. Collapsed is not the same
       // as absent: it keeps its markup (and enough of a box to look "visible"
       // to a bounding-box check), so its own `aria-hidden` is what says
       // whether it is open.
       const panel = page.locator("#waypoint-sidebar");
       if ((await panel.getAttribute("aria-hidden")) !== "false") {
-        await page.getByRole("button", { name: "Analysis", exact: true }).click();
+        await page.getByRole("button", { name: "Lists", exact: true }).click();
       }
       await expect(panel).toHaveAttribute("aria-hidden", "false");
       const tabs = page.locator("#tab-row-single");
@@ -428,7 +428,7 @@ test.describe("the pilot report card", () => {
         // And nothing about the competition leaked on the way to saying so:
         // the bar's trail keeps its generic names until the task resolves,
         // and the title is the page's own.
-        await expect(page.locator("#breadcrumbs li")).toHaveText(["Competitions", "Competition", "Task", "Flight analysis"]);
+        await expect(page.locator("#breadcrumbs li")).toHaveText(["Competitions", "Competition", "Task", "All tracks"]);
         expect(await page.locator("body").innerText()).not.toContain(name);
         expect(await page.title()).not.toContain(name);
         expect(await page.title()).not.toContain("Secret task");

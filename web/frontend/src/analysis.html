@@ -5,7 +5,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GlideComp - Flight analysis</title>
+    <title>GlideComp - Climbs and glides</title>
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.webmanifest">
@@ -53,7 +53,9 @@
              the content pages' twin is static/src/components/SiteHeader.astro,
              the replay's replay.html), as pills floating over the map.
                leading   Back to the page above
-               centre    "Flight analysis" over a menu of where this page is
+               centre    the page's name over a menu of where this page is:
+                         "Climbs and glides" for one track, "All tracks" for
+                         several (setPageMode in page-bar.ts)
                trailing  Analysis (the side panel), then ⋯ for the page's actions
              main.ts (page-bar.ts) fills the trail from the URL; the markup is
              the My Flights trail, so the bar works before any fetch. The
@@ -61,16 +63,16 @@
              the pills. On a wide screen its right edge follows the panel's
              left edge, so the panel never covers ⋯. -->
         <header id="page-bar" data-page-bar
-            class="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-2 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+            class="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-2 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] max-[400px]:gap-1.5 max-[400px]:px-2">
             <a id="bar-back" href="/u/me" aria-label="Back to My Flights" class="bar-icon">
                 <!-- lucide chevron-left -->
                 <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
             </a>
 
             <details id="bar-title-menu" data-bar-menu class="pointer-events-auto relative mx-auto min-w-0 max-w-md flex-1">
-                <summary id="bar-title" aria-label="Flight analysis: go to another page" class="bar-glass bar-summary flex h-11 cursor-pointer flex-col justify-center rounded-full px-4 text-center">
+                <summary id="bar-title" aria-label="Climbs and glides: go to another page" class="bar-glass bar-summary flex h-11 cursor-pointer flex-col justify-center rounded-full px-4 text-center max-[400px]:px-3">
                     <!-- Spans, not paragraphs: a <summary> holds phrasing content. -->
-                    <span class="block truncate text-[0.9375rem] leading-5 font-semibold">Flight analysis</span>
+                    <span data-page-name class="block truncate text-[0.9375rem] leading-5 font-semibold">Climbs and glides</span>
                     <span aria-hidden="true" class="flex min-w-0 items-center justify-center gap-0.5 text-xs leading-4 text-muted-foreground">
                         <span id="bar-trail" class="truncate">My Flights</span>
                         <!-- lucide chevron-down -->
@@ -84,7 +86,7 @@
                         <li><a href="/u/me" class="bar-row" style="padding-left:12px">My Flights</a></li>
                         <li id="bar-current">
                             <span aria-current="page" class="bar-row font-semibold" style="padding-left:26px">
-                                <span class="min-w-0 flex-1">Flight analysis</span>
+                                <span data-page-name class="min-w-0 flex-1">Climbs and glides</span>
                                 <svg aria-hidden="true" class="shrink-0 text-link" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
                             </span>
                         </li>
@@ -100,13 +102,14 @@
             </details>
 
             <!-- The side panel: the page's main thing beside ⋯ (owner decision, #869).
-                 Under 400 px it is a round icon, its name kept for a screen
-                 reader, so "Flight analysis" has room in the centre. -->
+                 "Lists" for one track (Events, Glides, Climbs, Sinks), "Scores"
+                 for several (setPageMode). Under 400 px it is a round icon,
+                 its name kept for a screen reader, so the title has room. -->
             <button type="button" id="analysis-toggle" aria-expanded="false" aria-controls="waypoint-sidebar"
                 class="bar-glass pointer-events-auto relative flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full px-4 text-[0.9375rem] font-medium hover:bg-muted max-[400px]:w-11 max-[400px]:px-0">
                 <!-- lucide chart-no-axes-column -->
                 <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg>
-                <span class="max-[400px]:sr-only">Analysis</span>
+                <span id="analysis-toggle-label" class="max-[400px]:sr-only">Lists</span>
             </button>
 
             <details id="bar-more" data-bar-menu class="pointer-events-auto relative shrink-0">
@@ -169,11 +172,11 @@
         <!-- The page's one <h1>, and the trail as real links with the menus
              closed (accessibility standard §4.3). Out of the Tab order: the
              title menu is the way to them by keyboard. -->
-        <h1 class="sr-only">Flight analysis</h1>
+        <h1 data-page-name class="sr-only">Climbs and glides</h1>
         <nav aria-label="Breadcrumb" class="sr-only">
             <ol id="breadcrumbs">
                 <li><a href="/u/me" tabindex="-1">My Flights</a></li>
-                <li><span aria-current="page">Flight analysis</span></li>
+                <li><span aria-current="page" data-page-name>Climbs and glides</span></li>
             </ol>
         </nav>
 

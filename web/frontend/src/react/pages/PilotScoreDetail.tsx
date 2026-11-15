@@ -390,10 +390,10 @@ export function PilotScoreDetail() {
   const urlId = ready ? compUrlId(ready.comp, compId) : compId;
   const actions: BarAction[] = [
     // Plain links out of the SPA, to the vanilla analysis and replay entries.
-    { id: "track", label: "Flight analysis", to: analysisUrl, target: "_blank" },
+    { id: "track", label: "Climbs and glides", to: analysisUrl, target: "_blank" },
     {
       id: "replay",
-      label: "3D replay",
+      label: "Replay the task in 3D",
       to: `/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`,
     },
   ];

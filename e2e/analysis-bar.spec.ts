@@ -7,10 +7,12 @@
  * MOBILE_SPEC_FILES, e2e/fixtures/mobile.ts):
  * - from a report card's link, Back is that pilot's report card, and the
  *   trail names the competition, the task and the pilot;
- * - the page has one <h1>, "Flight analysis", and the trail is in the markup as links;
+ * - the page is named for what it shows: "Climbs and glides" for one pilot's
+ *   track (its <h1>, the tab, and "Lists" on the panel button), "All tracks"
+ *   for the whole field ("Scores"); the trail is in the markup as links;
  * - ⋯ is a plain menu: a Show row ticks and unticks, writes the URL, and
  *   closes the menu; ⌘K opens it; Escape closes it and gives focus back;
- * - "Analysis" opens the side panel and says so, and on a wide screen the
+ * - the panel button opens the side panel and says so, and on a wide screen the
  *   bar keeps clear of the open panel;
  * - an anonymous reader is not offered the rows that would send them to sign
  *   in (the samples, My Flights in ⋯);
@@ -97,7 +99,8 @@ test.describe("the analysis page's bar", () => {
     );
 
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Flight analysis");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Climbs and glides");
+    await expect(page).toHaveTitle("GlideComp - Climbs and glides");
     const crumbs = page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link");
     await expect(crumbs).toHaveText(["Competitions", SAMPLE_COMP_NAME, taskName, pilotName]);
 
@@ -105,7 +108,7 @@ test.describe("the analysis page's bar", () => {
     const pages = page.getByRole("navigation", { name: "Pages" });
     await expect(pages).toBeVisible();
     await expect(pages.getByRole("link", { name: pilotName })).toBeVisible();
-    await expect(pages.locator('[aria-current="page"]')).toHaveText("Flight analysis");
+    await expect(pages.locator('[aria-current="page"]')).toHaveText("Climbs and glides");
     // Competitions is in the trail, so "Elsewhere" does not repeat it.
     await expect(pages.getByRole("link", { name: "Competitions" })).toHaveCount(1);
     await page.keyboard.press("Escape");
@@ -145,10 +148,27 @@ test.describe("the analysis page's bar", () => {
     await expect(page.locator("#menu-open-igc")).toBeVisible();
   });
 
-  test("Analysis opens the panel, and the bar keeps clear of it", async ({ page, context }) => {
+  test("the whole field is \"All tracks\", and its panel button is \"Scores\"", async ({ page, context }) => {
+    await installMapbox(context);
+    // Only the one-pilot link opens signed out (isPublicCompLink); the task
+    // page's link is for a reader with a session.
+    const login = await page.request.post("/api/auth/dev-login", {
+      data: { name: "E2E Analysis Bar", email: "e2e-analysis-bar@test.local" },
+    });
+    expect(login.ok()).toBeTruthy();
+    await page.goto(`/analysis?compId=${compId}&taskId=${taskId}`);
+    await expect(page.locator("#bar-back")).toHaveAttribute("aria-label", `Back to ${taskName}`, {
+      timeout: 60_000,
+    });
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("All tracks");
+    await expect(page).toHaveTitle("GlideComp - All tracks");
+    await expect(page.getByRole("button", { name: "Scores", exact: true })).toBeVisible();
+  });
+
+  test("the panel button opens the panel, and the bar keeps clear of it", async ({ page, context }) => {
     await installMapbox(context);
     await openFromReportCard(page);
-    const toggle = page.getByRole("button", { name: "Analysis", exact: true });
+    const toggle = page.getByRole("button", { name: "Lists", exact: true });
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await toggle.click();
     await expect(page.locator("#waypoint-sidebar")).toHaveAttribute("aria-hidden", "false");
@@ -172,7 +192,7 @@ test.describe("the analysis page's bar", () => {
     await openFromReportCard(page);
     await expectTarget(page.locator("#bar-back"), "Back");
     await expectTarget(title(page), "The title");
-    await expectTarget(page.getByRole("button", { name: "Analysis", exact: true }), "Analysis");
+    await expectTarget(page.getByRole("button", { name: "Lists", exact: true }), "Lists");
     await expectTarget(dots(page), "⋯");
 
     await dots(page).click();
@@ -195,7 +215,7 @@ test.describe("the analysis page's bar", () => {
     await installMapbox(context);
     await openFromReportCard(page);
     expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches), "a coarse pointer").toBe(true);
-    await page.getByRole("button", { name: "Analysis", exact: true }).click();
+    await page.getByRole("button", { name: "Lists", exact: true }).click();
     await expect(page.locator("#waypoint-sidebar")).toHaveAttribute("aria-hidden", "false");
     await expect(page.locator(".mapboxgl-ctrl-zoom-in")).toBeVisible({ timeout: 30_000 });
     // The panel slides open (a width transition): measure what it holds once it

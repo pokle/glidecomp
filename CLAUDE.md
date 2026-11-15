@@ -528,8 +528,11 @@ These are the standing imperatives. Each links to the reference that explains it
     OAuth consent page stand outside the Shell and have none. The 3D replay
     and the analysis page have the same bar in plain markup too (#869), as
     pills floating over the scene or the map: the replay's ⋯ opens its control
-    drawer (`replay.html`); the analysis page's title is "Flight analysis" (the name the task page's and the report card's ⋯ rows use too), "Analysis"
-    beside ⋯ opens its side panel, and ⋯ is a plain menu that replaced the
+    drawer (`replay.html`); the analysis page is named for what it shows, in its title and in the ⋯
+    rows that open it: "Climbs and glides" for one pilot's track (the report
+    card's row), "All tracks" for a task's whole field (the task page's row),
+    so "analysis" stays the task's and the comp's word; the button beside ⋯
+    ("Lists" / "Scores") opens its side panel, and ⋯ is a plain menu that replaced the
     searchable command list (`analysis.html`, `analysis/page-bar.ts`). On a
     wide screen the analysis page's bar ends at the open panel's edge.
   - Coverage: `e2e/page-bar.spec.ts`, on a desktop and a phone, and

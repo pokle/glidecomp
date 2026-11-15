@@ -4,7 +4,8 @@
  *
  *   leading   Back to the page above: a pilot's report card, a task, or
  *             My Flights
- *   centre    "Flight analysis" over a menu of where this page is
+ *   centre    the page's name over a menu of where this page is: "Climbs
+ *             and glides" for one track, "All tracks" for several (setPageMode)
  *   trailing  Analysis (the side panel), then ⋯ for the page's actions
  *
  * Both menus are native `<details>`, so they open with no script and every
@@ -55,9 +56,40 @@ const byId = <T extends HTMLElement = HTMLElement>(id: string): T | null =>
 /** The title menu's indent: 12 px, and 14 px more for each level down (the app's bar). */
 const indent = (depth: number): string => `padding-left:${12 + depth * 14}px`;
 
+/**
+ * What the page is called, by what it shows (owner decision, #869). One
+ * track: its climbs, glides and sinks, and the panel button opens those lists.
+ * Several (a task's whole field): the tracks on one map, and the panel button
+ * opens the score table. The ⋯ rows that open the page use the same names
+ * (TaskDetail.tsx, PilotScoreDetail.tsx), so the row tapped and the title
+ * landed on agree.
+ */
+export type PageMode = 'one' | 'field';
+const PAGE_NAMES: Record<PageMode, { title: string; panel: string }> = {
+  one: { title: 'Climbs and glides', panel: 'Lists' },
+  field: { title: 'All tracks', panel: 'Scores' },
+};
+let pageName = PAGE_NAMES.one.title;
+/** The trail last drawn, so a change of name can redraw it. */
+let lastTrail: BarCrumb[] = [];
+
+/** Name the page for what it shows: the title, its <h1>, the tab, the panel button. */
+export function setPageMode(mode: PageMode): void {
+  const { title, panel } = PAGE_NAMES[mode];
+  pageName = title;
+  for (const el of document.querySelectorAll<HTMLElement>('[data-page-name]')) el.textContent = title;
+  // The hidden breadcrumb and the title menu are drawn with the trail.
+  if (lastTrail.length > 0) setTrail(lastTrail);
+  byId('bar-title')?.setAttribute('aria-label', `${title}: go to another page`);
+  const panelLabel = byId('analysis-toggle-label');
+  if (panelLabel) panelLabel.textContent = panel;
+  document.title = `GlideComp - ${title}`;
+}
+
 /** Draw the bar's links for the pages above this one. */
 export function setTrail(trail: BarCrumb[]): void {
   if (trail.length === 0) return;
+  lastTrail = trail;
   const parent = trail[trail.length - 1];
   const back = byId<HTMLAnchorElement>('bar-back');
   if (back) {
@@ -102,7 +134,7 @@ export function setTrail(trail: BarCrumb[]): void {
     renderInto(
       crumbs,
       html`${trail.map((c) => html`<li><a href=${c.href} tabindex="-1">${c.label}</a></li>`)}
-        <li><span aria-current="page">Flight analysis</span></li>`,
+        <li><span aria-current="page" data-page-name>${pageName}</span></li>`,
     );
   }
 }

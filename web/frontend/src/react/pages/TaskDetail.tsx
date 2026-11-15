@@ -231,7 +231,7 @@ export function TaskDetail() {
         // routes: the router bridge loads them for real (rac/router.tsx).
         {
           id: "map",
-          label: "Flight analysis",
+          label: "All tracks",
           to: `/analysis.html?compId=${encodeURIComponent(compId)}&taskId=${encodeURIComponent(taskId)}`,
         }
       );
@@ -239,7 +239,7 @@ export function TaskDetail() {
     if (replayAvailable) {
       share.push({
         id: "replay",
-        label: "3D replay",
+        label: "Replay the task in 3D",
         to: `/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`,
       });
     }

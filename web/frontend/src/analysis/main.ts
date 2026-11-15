@@ -28,7 +28,7 @@ import { downloadTask } from './task-editor';
 import '../analysis.css';
 
 // Command palette behavior (vanilla, local)
-import { compTrail, followPanel, MY_FLIGHTS, pulse, setPressed, setTrail, setupBarMenus } from './page-bar';
+import { compTrail, followPanel, MY_FLIGHTS, pulse, setPageMode, setPressed, setTrail, setupBarMenus } from './page-bar';
 import { installStaleDeployReload } from '../react/lib/stale-deploy';
 import { html, renderInto } from '../render-html';
 import { installDefaultTrustedTypesPolicy } from '../trusted-types';
@@ -639,6 +639,7 @@ async function init(): Promise<void> {
 
     // Clear analysis panel
     analysisPanel?.setMultiTrackMode(false);
+    setPageMode('one');
     analysisPanel?.setEvents([], { glides: [], climbs: [] });
     analysisPanel?.setAltitudes([]);
     analysisPanel?.setFlightInfo({});
@@ -1371,6 +1372,7 @@ async function init(): Promise<void> {
     // Clear any multi-track rendering
     mapRenderer?.clearMultiTrack();
     analysisPanel?.setMultiTrackMode(false);
+    setPageMode('one');
 
     mapRenderer?.setTrack(igcFile.fixes);
     updateOpenDistanceMapLines(state.tracks);
@@ -1545,6 +1547,7 @@ async function init(): Promise<void> {
 
     // Update analysis panel for single-track mode
     analysisPanel?.setMultiTrackMode(false);
+    setPageMode('one');
     analysisPanel?.setEvents(track.events, track.segments);
     analysisPanel?.setAltitudes(track.fixes.map(f => f.gnssAltitude), track.fixes.map(f => f.time));
 
@@ -1596,6 +1599,7 @@ async function init(): Promise<void> {
     // the comp-score tab and renders it.
     pushCompetitionScoreToPanel();
     analysisPanel?.setMultiTrackMode(true);
+    setPageMode('field');
 
     // Update flight info for all tracks
     const info: FlightInfo = {};
@@ -1774,6 +1778,9 @@ async function init(): Promise<void> {
     // The bar's links work at once, under generic names that name nothing:
     // a hidden comp's task says not-found below without naming the comp.
     const pilot = pilotId ? { id: pilotId, name: null } : undefined;
+    // Named for what the link asks for before any track arrives: one pilot's,
+    // or the whole field's.
+    setPageMode(pilot ? 'one' : 'field');
     setTrail(compTrail(compId, null, taskId, null, pilot));
     try {
       showStatus('Loading competition task...', 'info');
