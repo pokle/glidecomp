@@ -25,10 +25,6 @@
 /oauth/consent  /app  200
 /admin/users  /app  200
 /admin/cache  /app  200
-# The page-bar prototype (src/react/proto/ProtoApp.tsx): unlinked sample pages,
-# here until the recommendation it is for is settled (#860).
-/proto  /app  200
-/proto/*  /app  200
 
 # Old static-page URLs (linked from bookmarks and the vanilla analysis/replay pages)
 /about.html  /about  301

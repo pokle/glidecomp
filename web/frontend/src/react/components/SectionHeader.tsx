@@ -13,28 +13,19 @@ export function SectionHeader({
   title,
   action,
   className,
-  as: Heading = "h2",
 }: {
   title: React.ReactNode;
   /** Right-aligned action, typically a small outline Button. */
   action?: React.ReactNode;
   className?: string;
-  /** Heading level — "h1" when the section IS the page (e.g. /comp/:id/pilots). */
-  as?: "h1" | "h2";
 }) {
   return (
     // No top margin of its own. Sections live inside `rac/card`'s Card now, and
     // the gap between cards is the stack's job — a component that reserves its
     // own external space fights whatever contains it.
     <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-2", className)}>
-      <Heading
-        className={cn(
-          "min-w-0 flex-1 font-bold",
-          Heading === "h1" ? "text-2xl" : "text-lg"
-        )}
-      >
-        {title}
-      </Heading>
+      {/* Always an h2: the page's h1 is its bar's title (rac/page-bar.tsx). */}
+      <h2 className="min-w-0 flex-1 text-lg font-bold">{title}</h2>
       {action}
     </div>
   );
