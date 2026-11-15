@@ -1105,8 +1105,10 @@ export function QuickEntryPage() {
               leave(s.routePath);
             }}
             commit={
+              // Done, not Save: this puts the text into the draft, and only
+              // Save on the route page writes to the server.
               <SubmitButton className={commitClass} isDisabled={parsed.picks.length === 0}>
-                Use route
+                Done
               </SubmitButton>
             }
           />
