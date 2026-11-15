@@ -38,17 +38,27 @@ const rowClass = navRowClass;
 
 export function NavList({
   label,
+  labelAs,
   children,
   className,
 }: {
   /** Optional group heading rendered above the list surface. */
   label?: string;
+  /**
+   * The heading's level. `h3` where the lists are groups UNDER a section that
+   * already has an `h2` (the comp page's Tasks, one list per flying day).
+   */
+  labelAs?: "h2" | "h3";
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={className}>
-      {label ? <CardTitle className="mb-2">{label}</CardTitle> : null}
+      {label ? (
+        <CardTitle as={labelAs} className="mb-2">
+          {label}
+        </CardTitle>
+      ) : null}
       <ul className={cn(cardSurface, "divide-y divide-border overflow-hidden")}>
         {children}
       </ul>
@@ -65,7 +75,7 @@ function RowBody({
 }: {
   label: string;
   value?: React.ReactNode;
-  description?: string;
+  description?: React.ReactNode;
   icon?: React.ReactNode;
   chevron?: boolean;
 }) {
@@ -113,8 +123,12 @@ export function NavRow({
   label: string;
   /** Current-value summary, right-aligned, muted, truncated. */
   value?: React.ReactNode;
-  /** Secondary line under the label. */
-  description?: string;
+  /**
+   * Secondary line under the label. A node, so a row can carry a status
+   * badge beside its facts (the comp page's task rows).
+   */
+  description?: React.ReactNode;
+  /** Left of the label: an icon, or a small figure that identifies the row. */
   icon?: React.ReactNode;
   className?: string;
 }) {

@@ -40,7 +40,7 @@
  *
  * An offset is saved against the page as the reader left it, and restored
  * against the page as it is DURING its reload. Back to the comp page from a
- * task's diagram restored while the scores above the task list still said
+ * task restored while the scores above the task list still said
  * "Loading scores…", a line shorter than the table that replaced it. Two
  * things then put the reader short of where they were:
  * - the browser's scroll anchoring (CSS `overflow-anchor`) keeps the content

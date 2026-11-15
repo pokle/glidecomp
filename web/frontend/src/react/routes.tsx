@@ -47,7 +47,6 @@ import { CompDetail } from "./pages/CompDetail";
 import { CompScoresPage } from "./pages/CompScoresPage";
 import { CompWaypoints } from "./pages/CompWaypoints";
 import { TaskDetail } from "./pages/TaskDetail";
-import { TaskDiagramPage } from "./pages/TaskDiagramPage";
 import { PilotScoreDetail } from "./pages/PilotScoreDetail";
 import { CompAnalysis } from "./pages/CompAnalysis";
 import { TaskAnalysis } from "./pages/TaskAnalysis";
@@ -241,6 +240,19 @@ function TaskAnalysisRedirect({ similar = false }: { similar?: boolean }) {
   );
 }
 
+/**
+ * The task's route at full size was a page under the task for two weeks of
+ * November 2026 (#814), opened from the glyph beside each task on the
+ * competition page. That glyph became the picture on the task's row, which
+ * left the page with no way in, and it showed nothing the task page does
+ * not. Its URL goes to the task. A hard load is redirected by the Pages
+ * Function; this covers a link followed in the app.
+ */
+function TaskDiagramRedirect() {
+  const { compId, taskId } = useParams();
+  return <Navigate replace to={`/comp/${compId}/task/${taskId}`} />;
+}
+
 export function AppRoutes() {
   return (
     // An error thrown by any route lands here rather than blanking the page.
@@ -333,13 +345,11 @@ export function AppRoutes() {
                 router ranks the static `new` above `:taskId` by itself. */}
             <Route path="/comp/:compId/task/new" element={<CompNewTaskPage />} />
             <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
-            {/* The task's route at full size, opened from the glyph beside
-                each task on the competition page (#814; it was an overlay).
-                Public and server-rendered, but noindexed: the task page is
-                the indexable form of the same route. */}
+            {/* Where the task's route had a page of its own (November 2026).
+                The task page draws the same route, so the URL goes there. */}
             <Route
               path="/comp/:compId/task/:taskId/diagram"
-              element={<TaskDiagramPage />}
+              element={<TaskDiagramRedirect />}
             />
             {/* The task's three admin-only editors, all SIBLINGS: each is
                 reached from the part of the task page it edits, so none nests

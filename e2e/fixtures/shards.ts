@@ -164,7 +164,7 @@ export const E2E_SHARDS = {
     "share-target.spec.ts", // new — a track shared to the installed app (#800) (chromium + mobile)
     "task-submit-link.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "task-qr-page.spec.ts", // new — measure on its first CI run (chromium + mobile)
-    "task-diagram-page.spec.ts", // new — measure on its first CI run (chromium + mobile)
+    "comp-tasks-list.spec.ts", // Back to the comp's task list at the same scroll (chromium + mobile)
     "legal-notice.spec.ts", // 12.9s
     "settings-save-ux.spec.ts", // 7.2s
     "settings-api-keys.spec.ts", // new — creating an API key (chromium + mobile)

@@ -8,11 +8,13 @@
  * Built on the RAC kit (src/react/rac/) like the task detail page.
  */
 import { Fragment, useEffect } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { EyeOffIcon } from "lucide-react";
 import { NotFound } from "@/react/components/NotFound";
 import { LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
+import { NavList, NavRow } from "@/react/rac/nav-list";
+import { cn } from "@/react/lib/utils";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useAdminView } from "../lib/user";
@@ -34,7 +36,6 @@ import {
   compPath,
   compSettingsPath,
   submitTrackPath,
-  taskDiagramPath,
   taskPath,
 } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -425,18 +426,25 @@ function ClassWarnings({
  * task, so the same destination is reachable from whichever class the reader
  * came looking for.
  *
- * A day is a Disclosure over a plain list of links, NOT a RAC Tree. The tree
- * was the first cut and it fit badly: a `treegrid` is one tab stop, so Tab
- * skipped every task on the page and reaching one meant knowing to press Down
- * then Right; its rows read as data cells rather than as navigation; and focus
- * returning from a dialog landed on the row instead of the control that opened
- * it. Those are all correct treegrid behaviours — the pattern is for
- * hierarchical DATA GRIDS and for selection, and this is neither. It is six
- * links with headings over them, so it is a list, and the links are in the tab
- * order where a reader expects to find them.
+ * Each day is the kit's NavList — the grouped list a phone uses for its
+ * settings, and the shape the comp settings index already has: the date is
+ * the group's heading and every task under it is ONE row that is the link,
+ * edge to edge and at least 44px tall. The rows used to be text links 32px
+ * tall in a row twice that height, with the route glyph as a second target
+ * beside them and the day's fold chevron as a third; on a phone a reader had
+ * to aim at the words.
  *
- * Rows carry only the link, the setup badges and the route glyph; every action
- * (submit, share, replay, map) lives on the task page one tap away.
+ * It is NOT a RAC Tree, which was the first cut and fit badly: a `treegrid`
+ * is one tab stop, so Tab skipped every task on the page, and its rows read
+ * as data cells rather than as navigation. These are links with headings over
+ * them, so each is in the tab order where a reader expects to find it. And a
+ * day does not fold: every day was open anyway, and a control that hides two
+ * rows costs more than scrolling past them.
+ *
+ * The route glyph is the row's picture, not a link of its own — enough to
+ * tell one day's task from another's at a glance. The readable route is on
+ * the task page the row opens, with every other action (submit, share,
+ * replay, map).
  */
 function TasksList({
   tasks,
@@ -472,120 +480,88 @@ function TasksList({
   }
 
   const days = groupTasksByDateAndClass(tasks, pilotClasses);
+  // The glyph column is reserved only when some task has a route to draw. A
+  // task without one then keeps an empty frame, so the names still line up;
+  // a comp with no routes at all (or a comp-api that predates the `route`
+  // field) gets no column, which would otherwise be dead space on every row.
+  const showGlyphs = tasks.some((task) => task.route);
 
   return (
-    <div className="divide-y rounded-lg border">
+    <div className="flex flex-col gap-5">
       {days.map((day) => (
-        <Disclosure
-          key={day.date}
-          // Open by default: the grouping is here to make a long list of days
-          // scannable, not to hide any of them — and a day folded away takes
-          // its task links out of the printed page. (Print re-expands them
-          // anyway; see the kit's Disclosure.)
-          defaultExpanded
-          title={formatTaskDate(day.date)}
-          badge={
-            <span className="text-sm text-muted-foreground">
-              {day.taskCount} {day.taskCount === 1 ? "task" : "tasks"}
-            </span>
-          }
-          // The container draws the dividers, so each day drops its own top
-          // border; px/py put the trigger and its panel on one inset.
-          className="border-t-0 px-3 py-2.5"
-        >
-          {/* No `text-sm`: the task list is what this card is FOR, so it
-              reads at the card's body size (issue #704). */}
-          <ul className="mt-1 space-y-0.5">
-            {day.rows.map((row) => (
-              <li key={row.key} className="flex items-center gap-4">
-                <Link
-                  className="group/task min-w-0 flex-1 py-1"
-                  to={taskPath(compId, compName, row.task.task_id, row.task.name)}
-                >
-                  {row.pilotClass ? (
-                    <>
-                      <strong>{row.pilotClass}</strong>{" "}
-                      <span className="text-muted-foreground">·</span>{" "}
-                    </>
-                  ) : null}
-                  {/* The task name is underlined AT REST, not just on hover:
-                      hover-only underlining says nothing at all on a phone,
-                      where there is no hover, and this list is the page's main
-                      way into a task. The class prefix and the badges stay
-                      unmarked so one thing per row looks like the link, though
-                      the whole row-width anchor is the target. */}
-                  <span className="font-medium underline decoration-muted-foreground/40 underline-offset-4 group-hover/task:decoration-current">
-                    {row.task.name}
-                  </span>{" "}
-                  {!row.task.has_xctsk ? (
-                    <span className="text-muted-foreground">Route not set yet</span>
-                  ) : null}{" "}
-                  {row.task.missing_sss ? (
-                    <span
-                      className="inline-flex items-center rounded-md bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-caution"
-                      title="Scoring falls back — see Task warnings above"
-                    >
-                      No SSS
-                    </span>
-                  ) : null}{" "}
-                  {row.task.missing_ess ? (
-                    <span
-                      className="inline-flex items-center rounded-md bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-caution"
-                      title="Scoring falls back — see Task warnings above"
-                    >
-                      No ESS
-                    </span>
-                  ) : null}{" "}
-                  {row.task.line_goal ? (
-                    <span
-                      className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-link"
-                      title="This task ends at a goal line perpendicular to the final leg"
-                    >
-                      Goal line
-                    </span>
-                  ) : null}
-                </Link>
-                {/* Tiny route glyph: enough to tell one day's task from
-                    another's at a glance, and a link to the readable version
-                    — at this size the shape is all it can carry, so "which
-                    turnpoints is that?" is one press away. A page of its own
-                    (#814), left with Back, which returns here at the same
-                    scroll; it was a full-screen overlay. It is the row's
-                    SECOND target, beside the task link rather than inside it,
-                    so opening the diagram never takes the row's main action.
-                    Nothing is reserved when a task has no route: the glyphs
-                    are right-aligned, so an empty box buys no alignment and
-                    only pads the row — which on a phone (or against a
-                    comp-api that predates the `route` field) turns the whole
-                    list into dead space. */}
-                {row.task.route ? (
-                  <LinkButton
-                    variant="ghost"
-                    // h-auto + tight padding: a frame around the glyph, not a
-                    // chrome-bearing control — about 80×58 px, well past the
-                    // pointer-target floor (WCAG 2.5.8).
-                    className="h-auto shrink-0 p-1"
-                    href={taskDiagramPath(compId, compName, row.task.task_id, row.task.name)}
-                    aria-label={`Show the route for ${row.task.name}`}
-                  >
-                    {/* size-auto is load-bearing: the button's base style
-                        crushes an SVG without a `size-` class to 16px. The
-                        glyph is decorative — the link's name says what it
-                        opens. */}
-                    <TaskDiagram
-                      task={row.task.route}
-                      size="xs"
-                      label={null}
-                      className="size-auto"
-                    />
-                  </LinkButton>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </Disclosure>
+        <NavList key={day.date} label={formatTaskDate(day.date)} labelAs="h3">
+          {day.rows.map((row) => (
+            <NavRow
+              key={row.key}
+              to={taskPath(compId, compName, row.task.task_id, row.task.name)}
+              label={row.task.name}
+              icon={showGlyphs ? <TaskGlyph task={row.task} /> : undefined}
+              description={taskRowFacts(row)}
+            />
+          ))}
+        </NavList>
       ))}
     </div>
+  );
+}
+
+/**
+ * The route, as the row's picture. Decorative: the row's link already names
+ * the task, and at this size the shape is all the drawing can carry.
+ */
+function TaskGlyph({ task }: { task: TaskSummary }) {
+  return (
+    // `text-foreground`: the row's icon slot is muted, which suits an icon and
+    // would grey out a drawing whose lines are already hairlines.
+    <span className="flex h-11 w-14 items-center justify-center text-foreground">
+      {task.route ? (
+        <TaskDiagram task={task.route} size="xs" label={null} className="h-auto w-full" />
+      ) : (
+        <span className="size-full rounded-md border border-dashed" />
+      )}
+    </span>
+  );
+}
+
+const taskBadgeClass =
+  "ml-1.5 inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium";
+
+/** The row's second line: the class, then anything the task's setup lacks. */
+function taskRowFacts(row: TaskClassRow) {
+  const { task, pilotClass } = row;
+  const facts = [pilotClass, task.has_xctsk ? null : "Route not set yet"].filter(
+    (fact): fact is string => fact != null
+  );
+  const badged = task.missing_sss || task.missing_ess || task.line_goal;
+  if (facts.length === 0 && !badged) return null;
+  return (
+    <>
+      {facts.join(" · ")}
+      {task.missing_sss ? (
+        <span
+          className={cn(taskBadgeClass, "bg-warning/10 text-caution")}
+          title="Scoring falls back — see Task warnings above"
+        >
+          No SSS
+        </span>
+      ) : null}
+      {task.missing_ess ? (
+        <span
+          className={cn(taskBadgeClass, "bg-warning/10 text-caution")}
+          title="Scoring falls back — see Task warnings above"
+        >
+          No ESS
+        </span>
+      ) : null}
+      {task.line_goal ? (
+        <span
+          className={cn(taskBadgeClass, "bg-primary/10 text-link")}
+          title="This task ends at a goal line perpendicular to the final leg"
+        >
+          Goal line
+        </span>
+      ) : null}
+    </>
   );
 }
 
