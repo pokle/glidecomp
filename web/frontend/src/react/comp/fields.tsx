@@ -6,7 +6,7 @@
  */
 import { PILOT_CLASS_EXAMPLES } from "./comp-fields";
 import { parseCoords } from "./route-editor";
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   Button as AriaButton,
   TextField as AriaTextField,
@@ -24,6 +24,7 @@ import {
 } from "@/react/rac/field";
 import { ChoiceList } from "@/react/rac/choice-list";
 import { useOptionalFormState } from "@/react/rac/form";
+import { cn } from "@/react/lib/utils";
 import {
   fromAltitudeInput,
   getUnitLabel,
@@ -33,61 +34,201 @@ import {
 
 export { SimpleSelect } from "@/react/rac/select";
 
-/** What is wrong with coordinates that do not read as "lat, lon". */
-export const COORDS_HINT = 'Enter "lat, lon" decimal degrees';
-/** What is wrong with coordinates a form needs and was not given. */
-export const COORDS_MISSING = 'Enter the coordinates as "lat, lon"';
+/** What is wrong with a latitude: missing, not a number, or out of range. */
+export const LAT_HINT = "Enter a latitude between -90 and 90.";
+/** What is wrong with a longitude: missing, not a number, or out of range. */
+export const LON_HINT = "Enter a longitude between -180 and 180.";
+/** Under both halves of a {@link CoordsField}: how to keep pasting a pair. */
+export const COORDS_PASTE_HINT = 'Paste a "lat, lon" pair into either field to fill both.';
 
-/**
- * The problem with `text` as coordinates, or null: blank is fine unless the
- * form needs them. For a kit form's `validate`, which is what refuses a submit;
- * {@link CoordsField} shows the malformed case live as well.
- */
-export function coordsProblem(text: string, required = false): string | null {
-  if (String(text).trim() === "") return required ? COORDS_MISSING : null;
-  return parseCoords(String(text)) ? null : COORDS_HINT;
+/** The `name` of a {@link CoordsField}'s longitude, beside `name` for its latitude. */
+export function lonFieldName(name: string): string {
+  return `${name}_lon`;
+}
+
+/** A plain decimal number, as `parseCoords` reads each half of a pair. */
+const DECIMAL = /^[+-]?\d+(\.\d+)?$/;
+
+function partProblem(text: string, limit: number, hint: string): string | null {
+  const t = text.trim();
+  if (!DECIMAL.test(t)) return hint;
+  return Math.abs(Number(t)) <= limit ? null : hint;
 }
 
 /**
- * One "lat, lon" field — the waypoint, the turnpoint, a new waypoint, the
- * altitude review and a manual flight's landing point. A malformed pair is
- * flagged as it is typed. A missing one is flagged as it is typed only where
- * the field is `required` and starts filled in (a waypoint's own page, where
- * clearing it is the mistake); elsewhere only when the form is submitted (its
- * `validate`, with {@link coordsProblem}), so a page does not open with an
+ * The two halves of a stored "lat, lon": split at the first comma, which is
+ * how {@link joinCoords} writes them, so a half typed so far ("-36.5, ")
+ * comes back where it was. A pair separated only by a space ("-36.5 147.9")
+ * is read too. Anything else is all latitude.
+ */
+export function splitCoords(text: string): { lat: string; lon: string } {
+  const t = String(text ?? "").trim();
+  const comma = t.indexOf(",");
+  if (comma >= 0) return { lat: t.slice(0, comma).trim(), lon: t.slice(comma + 1).trim() };
+  const words = t.split(/\s+/);
+  if (words.length === 2) return { lat: words[0], lon: words[1] };
+  return { lat: t, lon: "" };
+}
+
+/** The stored "lat, lon" for two halves; blank when both are. */
+export function joinCoords(lat: string, lon: string): string {
+  const a = lat.trim();
+  const b = lon.trim();
+  return a === "" && b === "" ? "" : `${a}, ${b}`;
+}
+
+/**
+ * The two numbers in a pasted or typed pair ("-36.55, 147.89", or with only
+ * a space between them), as written — not reformatted, so a pasted
+ * coordinate keeps every digit it came with. Null when it is not a pair.
+ */
+function pairIn(text: string): { lat: string; lon: string } | null {
+  if (!parseCoords(text)) return null;
+  const [lat, lon] = text.trim().split(/[,\s]+/);
+  return { lat, lon };
+}
+
+/**
+ * The problems with `text` as coordinates, keyed by the field each belongs
+ * under — a {@link CoordsField} named `name` — for a kit form's `validate`,
+ * which is what refuses a submit. Blank is fine unless the form needs them;
+ * half a pair never is. {@link CoordsField} shows a malformed half live as
+ * well.
+ */
+export function coordsProblems(
+  name: string,
+  text: string,
+  required = false
+): Record<string, string | null> {
+  const { lat, lon } = splitCoords(text);
+  if (lat === "" && lon === "") {
+    return required ? { [name]: LAT_HINT, [lonFieldName(name)]: LON_HINT } : {};
+  }
+  return {
+    [name]: partProblem(lat, 90, LAT_HINT),
+    [lonFieldName(name)]: partProblem(lon, 180, LON_HINT),
+  };
+}
+
+/**
+ * A point's coordinates — the waypoint, the turnpoint, a new waypoint, the
+ * altitude review and a manual flight's landing point — as two stacked
+ * fields, Latitude and Longitude, holding one "lat, lon" value.
+ *
+ * Two fields because editing one half of "-36.550979, 147.890395" on a phone
+ * meant placing a cursor inside a 22-character string with a thumb, without
+ * disturbing the other half. One value because a pair is still what everyone
+ * has to hand: pasting one from Google Maps into EITHER field fills both, and
+ * a pair typed or dropped into one is split when the field is left (not as
+ * it is typed: "-36.5, 147" would split before the 9 of 147.9 arrived, and
+ * the 9 would land in the latitude). The keyboard stays the full one: the
+ * only numeric pad a web page can ask an iPhone for has no minus key, and
+ * every latitude in Australia is negative.
+ *
+ * The latitude is named `name`, so a form's error for the point lands on
+ * it; the longitude is {@link lonFieldName}. A malformed half is flagged as
+ * it is typed. A missing one is flagged as it is typed only where the field
+ * is `required` and starts filled in (a waypoint's own page, where clearing
+ * it is the mistake); elsewhere only when the form is submitted (its
+ * `validate`, with {@link coordsProblems}), so a page does not open with an
  * error on it.
  */
 export function CoordsField({
-  label = "Coordinates (lat, lon)",
+  label,
   name = "coords",
   value,
   onChange,
-  description,
   placeholder = "-36.550979, 147.890395",
   required = false,
   className,
 }: {
+  /** A heading over the pair, for a point that is not simply "the" point. */
   label?: string;
   name?: string;
   value: string;
   onChange: (value: string) => void;
-  description?: string;
+  /** An example pair; each field shows its half. */
   placeholder?: string;
   required?: boolean;
   className?: string;
 }) {
+  // The halves as typed are this field's own: a stored "lat, lon" cannot
+  // say where a half-typed latitude ends. A value that changes from outside
+  // (a waypoint loaded, the map, a reload) replaces them.
+  const [parts, setParts] = useState(() => splitCoords(value));
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    setParts(splitCoords(value));
+  }
+  const write = (next: { lat: string; lon: string }) => {
+    const joined = joinCoords(next.lat, next.lon);
+    setParts(next);
+    setSeen(joined);
+    onChange(joined);
+  };
+
+  const groupId = useId();
+  const hintId = useId();
+  const example = splitCoords(placeholder);
+  const half = (which: "lat" | "lon") => {
+    const limit = which === "lat" ? 90 : 180;
+    const hint = which === "lat" ? LAT_HINT : LON_HINT;
+    const pasteInto = (e: React.ClipboardEvent<HTMLInputElement>) => {
+      const pair = pairIn(e.clipboardData.getData("text"));
+      if (!pair) return;
+      e.preventDefault();
+      write(pair);
+    };
+    return (
+      <AriaTextField
+        className="group flex flex-col gap-2"
+        name={which === "lat" ? name : lonFieldName(name)}
+        value={parts[which]}
+        onChange={(v) => write({ ...parts, [which]: v })}
+        onBlur={() => {
+          const pair = pairIn(parts[which]);
+          if (pair) write(pair);
+        }}
+        validate={(v) =>
+          v.trim() === "" ? (required ? hint : null) : partProblem(v, limit, hint)
+        }
+        aria-describedby={hintId}
+      >
+        <Label>{which === "lat" ? "Latitude" : "Longitude"}</Label>
+        <RacInput
+          placeholder={example[which]}
+          spellCheck="false"
+          autoCorrect="off"
+          autoCapitalize="off"
+          onPaste={pasteInto}
+        />
+        <FieldError />
+      </AriaTextField>
+    );
+  };
+
   return (
-    <TextField
-      label={label}
-      name={name}
-      value={value}
-      onChange={onChange}
-      description={description}
-      placeholder={placeholder}
-      spellCheck="false"
-      className={className}
-      validate={(v) => coordsProblem(v, required)}
-    />
+    <div
+      role="group"
+      {...(label ? { "aria-labelledby": groupId } : { "aria-label": "Coordinates" })}
+      className={cn("flex flex-col gap-4", className)}
+    >
+      {label ? (
+        <span id={groupId} className="text-sm font-semibold">
+          {label}
+        </span>
+      ) : null}
+      {half("lat")}
+      <div className="flex flex-col gap-2">
+        {half("lon")}
+        {/* A plain paragraph rather than the kit's Description: that is a
+            RAC slot of ONE field, and this describes both. */}
+        <p id={hintId} className="text-xs text-muted-foreground">
+          {COORDS_PASTE_HINT}
+        </p>
+      </div>
+    </div>
   );
 }
 

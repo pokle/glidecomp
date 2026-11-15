@@ -34,7 +34,7 @@ import { SectionHeader } from "../components/SectionHeader";
 import type { Crumb } from "../lib/crumbs";
 import { toast } from "../lib/toast";
 import { useUnits } from "../lib/units";
-import { AltitudeField, CoordsField, coordsProblem } from "./fields";
+import { AltitudeField, CoordsField, coordsProblems } from "./fields";
 import {
   formatCoords,
   formatSnapDistance,
@@ -170,7 +170,7 @@ export type NewWaypoint = ReturnType<typeof useNewWaypoint>;
 
 /** The form's own check: coordinates that parse. */
 export function newWaypointProblems(state: NewWaypointState): Record<string, string | null> {
-  return { [NEW_WAYPOINT_FIELD.coords]: coordsProblem(state.coords, true) };
+  return coordsProblems(NEW_WAYPOINT_FIELD.coords, state.coords, true);
 }
 
 /**
