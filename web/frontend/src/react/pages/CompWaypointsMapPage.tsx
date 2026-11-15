@@ -42,6 +42,7 @@ import {
 } from "../comp/use-waypoints-editor";
 import { openedHere } from "../lib/leave";
 import { waypointsEditorGate } from "../comp/WaypointsEditorGate";
+import { MapPinPlusIcon, MapPinXIcon } from "lucide-react";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
 
@@ -87,6 +88,7 @@ export function CompWaypointsMapPage() {
           actions={[
             {
               id: "add-from-map",
+              icon: addMode ? MapPinXIcon : MapPinPlusIcon,
               label: addMode ? "Stop adding from map" : "Add from map",
               onAction: () => setAddMode(!addMode),
             },

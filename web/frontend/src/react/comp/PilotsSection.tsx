@@ -56,6 +56,13 @@ import { filterPilots, queryWords } from "./pilot-search";
 import { groupByTeam, rosterTeams } from "./team-names";
 import { PilotList } from "./PilotList";
 import { rosterImportDraft } from "./RosterActions";
+import {
+  CopyIcon,
+  FileSpreadsheetIcon,
+  FlaskConicalIcon,
+  IdCardIcon,
+  ImportIcon,
+} from "lucide-react";
 
 type SortBy = "name" | "wprs_points" | "team";
 const SORTS: SortBy[] = ["name", "wprs_points", "team"];
@@ -228,16 +235,19 @@ export function PilotsSection({
     ? [
         {
           id: "copy",
+          icon: CopyIcon,
           label: "Copy from another competition…",
           to: compPilotsCopyPath(compId, compName),
         },
         {
           id: "civl-fill",
+          icon: IdCardIcon,
           label: "Fill from CIVL…",
           to: compPilotsCivlFillPath(compId, compName),
         },
         {
           id: "import",
+          icon: ImportIcon,
           label: "Import CSV…",
           group: true,
           onAction: () => {
@@ -247,9 +257,10 @@ export function PilotsSection({
             navigate(compPilotsImportPath(compId, compName), openedHere());
           },
         },
-        { id: "export", label: "Export CSV", onAction: exportCsv },
+        { id: "export", icon: FileSpreadsheetIcon, label: "Export CSV", onAction: exportCsv },
         {
           id: "test-pilots",
+          icon: FlaskConicalIcon,
           label: "Add test pilots",
           group: true,
           disabled: addTestAction.pending,

@@ -7,6 +7,7 @@ import { underSettings } from "../lib/crumbs";
 import { toast } from "../lib/toast";
 import { useGoToSignIn, useUser } from "../lib/user";
 import { Card } from "@/react/rac/card";
+import { RefreshCwIcon, Trash2Icon } from "lucide-react";
 
 interface NamespaceStats {
   name: string;
@@ -155,12 +156,14 @@ export function AdminCache() {
       ? [
           {
             id: "reindex",
+            icon: RefreshCwIcon,
             label: "Rebuild search index",
             onAction: () => void handleReindex(),
             disabled: busy,
           },
           {
             id: "clear",
+            icon: Trash2Icon,
             label: "Clear entire cache",
             onAction: () => void handleClear(),
             destructive: true,

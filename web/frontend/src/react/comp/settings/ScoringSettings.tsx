@@ -28,6 +28,7 @@ import {
   canSaveSettings,
   type SettingsGroupProps,
 } from "./CompSettingsIndex";
+import { RotateCcwIcon } from "lucide-react";
 
 /**
  * The server's name for each field → the field's `name` on this page, so a
@@ -134,7 +135,14 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
       // The GAP parameters are all it resets, and open distance has none.
       actions={
         scoringFormat !== "open_distance"
-          ? [{ id: "reset", label: "Reset to defaults", onAction: resetToDefaults }]
+          ? [
+              {
+                id: "reset",
+                icon: RotateCcwIcon,
+                label: "Reset to defaults",
+                onAction: resetToDefaults,
+              },
+            ]
           : []
       }
       fieldNames={SERVER_FIELDS}

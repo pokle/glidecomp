@@ -28,6 +28,7 @@ import { Dialog, DialogFooter, DialogHeader, DialogTitle, Modal } from "@/react/
 import type { BarAction } from "@/react/rac/page-bar";
 import { compScoresCsvPath, compScoresPdfPath, compScoresZipPath } from "../lib/slug";
 import { toast } from "../lib/toast";
+import { FileArchiveIcon, FileSpreadsheetIcon, FileTextIcon, SheetIcon } from "lucide-react";
 
 /**
  * The four download rows for the bar's ⋯, and the Google Sheets dialog one of
@@ -65,16 +66,23 @@ export function useScoresDownload({
   // `download` (no value) forces a save and takes the server's
   // Content-Disposition filename.
   const actions: BarAction[] = [
-    { id: "csv", label: "CSV spreadsheet", to: csvPath, download: true },
-    { id: "sheets", label: "Open in Google Sheets…", onAction: () => setSheetsOpen(true) },
+    { id: "csv", icon: FileSpreadsheetIcon, label: "CSV spreadsheet", to: csvPath, download: true },
+    {
+      id: "sheets",
+      icon: SheetIcon,
+      label: "Open in Google Sheets…",
+      onAction: () => setSheetsOpen(true),
+    },
     {
       id: "pdf",
+      icon: FileTextIcon,
       label: "Results record (PDF)",
       to: compScoresPdfPath(compId, compName),
       download: true,
     },
     {
       id: "zip",
+      icon: FileArchiveIcon,
       label: "Results data (ZIP)",
       to: compScoresZipPath(compId, compName),
       download: true,

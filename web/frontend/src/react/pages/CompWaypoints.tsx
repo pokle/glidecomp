@@ -64,7 +64,15 @@ import { cn } from "@/react/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useInView } from "../lib/use-in-view";
 import { NotFound } from "@/react/components/NotFound";
-import { Maximize2Icon } from "lucide-react";
+import {
+  ImportIcon,
+  MapPinPlusIcon,
+  MapPinXIcon,
+  Maximize2Icon,
+  MountainIcon,
+  PlusIcon,
+  Undo2Icon,
+} from "lucide-react";
 import { cleanWaypointCodes, describeCodeChanges, parseWaypointFile } from "@glidecomp/engine";
 import type { MapWaypoint } from "../../analysis/map-provider";
 import { Button, LinkButton } from "@/react/rac/button";
@@ -309,13 +317,24 @@ export function CompWaypoints() {
   const actions: BarAction[] = [
     ...(editing
       ? [
-          { id: "add", label: "Add waypoint", to: compWaypointsNewPath(urlId, compName) },
+          {
+            id: "add",
+            icon: PlusIcon,
+            label: "Add waypoint",
+            to: compWaypointsNewPath(urlId, compName),
+          },
           {
             id: "add-from-map",
+            icon: addMode ? MapPinXIcon : MapPinPlusIcon,
             label: addMode ? "Stop adding from map" : "Add from map",
             onAction: toggleAddFromMap,
           },
-          { id: "upload", label: "Upload file", onAction: () => fileInput.current?.click() },
+          {
+            id: "upload",
+            icon: ImportIcon,
+            label: "Upload file",
+            onAction: () => fileInput.current?.click(),
+          },
           // ONE altitude action, and it reports nothing until it is pressed.
           // There used to be a "Fill altitudes from map" beside it — an
           // action that answered blanks without asking — and a status line
@@ -324,6 +343,7 @@ export function CompWaypoints() {
           // the status line was a verdict on a set nobody had asked about.
           {
             id: "check-altitudes",
+            icon: MountainIcon,
             label: "Check altitudes",
             disabled: rows.length === 0 || altitudeCheck.checking,
             onAction: () => void checkAltitudes(),
@@ -335,6 +355,7 @@ export function CompWaypoints() {
       ? [
           {
             id: "discard",
+            icon: Undo2Icon,
             label: "Discard changes",
             destructive: true,
             group: true,

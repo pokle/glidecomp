@@ -104,11 +104,13 @@ export interface BarAction {
   /** A group of actions behind this row, opened as a second menu. */
   children?: BarAction[];
   /**
-   * A line icon at the start of the row (Lucide). `MapIcon` for a page that
-   * shows tracks on a map (the 3D replay included), `ChartColumnIcon` for an
-   * analysis, `ShareIcon` for sharing, `QrCodeIcon` for a QR code. In a menu
-   * where any row has one, a row without keeps an empty slot, so the labels
-   * line up.
+   * A line icon at the start of the row (Lucide). Every ⋯ row has one, and
+   * one icon means one thing across the app (CLAUDE.md, "Every ⋯ row carries
+   * a line icon"): `MapIcon` for a page that shows tracks on a map (the 3D
+   * replay included), `ChartColumnIcon` for an analysis and nothing else,
+   * `MountainIcon` for anything about altitudes, `Trash2Icon` for clearing,
+   * and so on. In a menu where any row has one, a row without keeps an empty
+   * slot, so the labels line up.
    */
   icon?: LucideIcon;
 }
@@ -512,9 +514,16 @@ function flatten(actions: BarAction[]): BarAction[] {
 
 /** The rows of an actions menu: rules between groups, a second menu behind a row with children. */
 /** A row's icon, or the empty slot that keeps its label in line with one. */
-function RowIcon({ icon: Icon }: { icon?: LucideIcon }) {
+function RowIcon({ icon: Icon, destructive }: { icon?: LucideIcon; destructive?: boolean }) {
   return (
-    <span aria-hidden className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
+    <span
+      aria-hidden
+      className={cn(
+        "flex size-5 shrink-0 items-center justify-center",
+        // A destructive row is red throughout, its icon included.
+        destructive ? "text-current" : "text-muted-foreground"
+      )}
+    >
       {Icon ? <Icon className="size-5" /> : null}
     </span>
   );
@@ -555,7 +564,7 @@ function menuItems(actions: BarAction[]): ReactNode[] {
         isDisabled={a.disabled}
         className={cn(ROW, a.destructive && "text-danger data-focused:text-danger")}
       >
-        {slot ? <RowIcon icon={a.icon} /> : null}
+        {slot ? <RowIcon icon={a.icon} destructive={a.destructive} /> : null}
         {slot ? <span className="min-w-0 flex-1">{a.label}</span> : a.label}
       </MenuItem>
     );
