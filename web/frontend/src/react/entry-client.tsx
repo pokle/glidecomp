@@ -22,10 +22,16 @@ import { getCurrentUserOnce } from "../auth/client";
 import { InitialDataProvider, type InitialData } from "./lib/initial-data";
 import { AppProviders, AppRoutes } from "./routes";
 import { readSsrData } from "../ssr-data";
+import { registerServiceWorker } from "../register-sw";
 
 // A tab that outlived a deploy asks for chunks that no longer exist: reload it
 // onto the new deploy, once (./lib/stale-deploy).
 installStaleDeployReload();
+
+// The worker that receives a track shared to the installed app (Android's
+// share sheet → /submit). It must be in place before the first share, and the
+// app may have been installed from any page that links the manifest (#800).
+registerServiceWorker();
 
 // shadcn theming keys dark mode off a `.dark` class on <html>; apply the user's
 // Light/Dark/Auto preference (Auto follows the OS). See ./lib/theme.

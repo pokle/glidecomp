@@ -79,6 +79,48 @@ On success the form is replaced by what was received, and stays there until the
 pilot leaves. Its first action, **View provisional score card**, goes to what
 was made; Back still returns to the page they came from.
 
+### Sharing a track to the installed app (Android)
+
+On Android, GlideComp installed from Chrome (a WebAPK) appears in the share
+sheet, so a pilot can share the IGC straight out of XCTrack, SeeYou Navigator
+or the Files app. It opens `/submit?shared=1` with that file already chosen;
+the task and identifier steps work exactly as they do on any visit. iOS Safari
+cannot be a share target, so on an iPhone the file picker is the way in
+([#801](https://github.com/pokle/glidecomp/issues/801)).
+
+How a share gets there ([#800](https://github.com/pokle/glidecomp/issues/800)):
+
+1. The manifest (`public/manifest.webmanifest`) declares a `share_target` that
+   POSTs the files to `/share-target`. Android offers the app for a share by
+   **MIME type**, and ignores the `.igc` entry in `accept`: XCTrack shares an
+   IGC as `application/igc`, and SeeYou and the Files app as
+   `application/octet-stream`. Each type a flight app uses must be listed, or
+   GlideComp is not in that app's share sheet at all.
+2. Nothing on the server answers `/share-target` (Pages says 405). The service
+   worker (`public/sw.js`) does, so it must already be registered when the
+   first share arrives. The SPA and the analysis page both register it
+   (`src/register-sw.ts`), because the app may have been installed from any page
+   that links the manifest. Static routing sends every other request straight
+   to the network without waking it.
+3. The worker stashes the files in Cache Storage and redirects. One file that
+   is not a task goes to `/submit?shared=1`. A task (`.xctsk`) or several files
+   go to the analysis page, which needs an account.
+4. `SubmitTrackForm` reads the file from that cache (`src/share-target.ts`).
+   The cache outlives the page, so a reload finds the file again. A submitted
+   track empties it, and so does the next share. A file the pilot chooses by
+   hand wins over the share.
+
+The manifest pins its `id` to `/analysis.html`. Without an `id`, Chrome
+identifies the app by its `start_url`, and every install before #800 was made
+while that was `/analysis.html`. Moving `start_url` to `/comp` without the pin
+would have made those installs a different app, which would never receive this
+manifest's updates, including the new `accept` types. The home-screen icon opens
+`/comp`, which a signed-out pilot can use.
+
+Coverage: `e2e/share-target.spec.ts` (the POST, the redirect and the chosen
+file), and `src/share-target.test.ts` (the cache reader, and the manifest's
+`id`, `start_url` and `accept` list).
+
 ### The admin grid, and the size rule
 
 `comp/TaskScoresAdmin.tsx` — the admin manage grid — deliberately does **not**
@@ -707,6 +749,7 @@ everyone else's bundle.
 | Its DOM-free logic + tests | `src/react/comp/submit-track.ts` |
 | Admin per-row upload | `src/react/comp/TaskScoresAdmin.tsx` |
 | The page | `src/react/pages/SubmitTrack.tsx` |
+| Share target (Android) | `public/manifest.webmanifest`, `public/sw.js`, `src/share-target.ts`, `src/register-sw.ts` |
 | Anonymous route | `web/workers/competition-api/src/routes/igc-anon.ts` |
 | Shared upload half | `web/workers/competition-api/src/track-upload.ts` |
 | Roster matcher | `web/workers/competition-api/src/pilot-linker.ts` |
@@ -720,4 +763,4 @@ everyone else's bundle.
 | Forging a test tracklog | `web/engine/src/forge-igc.ts` |
 | IGC Forge page | `src/react/pages/TaskTestIgcPage.tsx`, `src/react/comp/ForgeIgcForm.tsx` |
 | IGC Forge CLI | `web/scripts/forge-igc.ts` |
-| Coverage | `test/igc-anon.test.ts`, `test/igc-routes.test.ts`, `test/registration-resolve.test.ts`, `test/open-comps.test.ts`, `e2e/track-submission.spec.ts` |
+| Coverage | `test/igc-anon.test.ts`, `test/igc-routes.test.ts`, `test/registration-resolve.test.ts`, `test/open-comps.test.ts`, `e2e/track-submission.spec.ts`, `e2e/share-target.spec.ts`, `src/share-target.test.ts` |

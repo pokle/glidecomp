@@ -44,6 +44,7 @@ import {
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { compressIgc, fetchWithRetry, type PilotListEntry } from "./types";
+import { clearSharedFiles, readSharedFiles } from "../../share-target";
 import {
   IDENTIFIER_KINDS,
   NOT_AN_IGC_MESSAGE,
@@ -113,7 +114,17 @@ export interface SubmitTrackResult {
 // importable from here.
 export { igcPilotNameFromText };
 
-export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
+export function SubmitTrackForm({
+  prefill,
+  shared = false,
+}: {
+  prefill?: SubmitTrackPrefill;
+  /**
+   * The page was opened by a share from another app (`/submit?shared=1`):
+   * start with the shared file chosen. See src/share-target.ts.
+   */
+  shared?: boolean;
+}) {
   const { user } = useUser();
 
   // ── What we are submitting to
@@ -380,8 +391,23 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
     [selectedComp, taskId]
   );
 
-  async function onFilePicked(files: FileList | null) {
-    const picked = files?.[0] ?? null;
+  // A track shared from another app (Android's share sheet) arrives already
+  // chosen. Unless the pilot has chosen one by hand in the meantime: theirs
+  // wins over the share.
+  const chosenByHand = useRef(false);
+  useEffect(() => {
+    if (!shared) return;
+    let cancelled = false;
+    void readSharedFiles().then((files) => {
+      if (cancelled || chosenByHand.current || files.length === 0) return;
+      void chooseFile(files[0]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shared]);
+
+  async function chooseFile(picked: File | null) {
     setFile(picked);
     if (!picked) {
       setIgcPilotName(null);
@@ -474,6 +500,10 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
       notified: data.notified,
       timezone: selectedComp?.timezone ?? null,
     };
+
+    // Submitted: the share has done its job, and must not come back chosen
+    // the next time this page is opened from history.
+    if (shared) await clearSharedFiles();
 
     if (!user) {
       writeLastSubmission(
@@ -650,7 +680,13 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
       </StepBox>
 
       <StepBox n={3} title="Your IGC file" fields={[SUBMIT_FIELD.file]}>
-        <IgcFileField file={file} onPick={(files) => void onFilePicked(files)} />
+        <IgcFileField
+          file={file}
+          onPick={(files) => {
+            chosenByHand.current = true;
+            void chooseFile(files?.[0] ?? null);
+          }}
+        />
         {igcPilotName ? (
           <p className="mt-2 text-sm text-muted-foreground">
             Pilot named in the file: <strong>{igcPilotName}</strong>
