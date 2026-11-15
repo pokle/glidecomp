@@ -13,6 +13,7 @@
  *
  * SSR-safe: `document` is touched only inside an effect.
  */
+import { ChartColumnIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
@@ -239,6 +240,7 @@ export function TaskAnalysisFrame({
     actions.push({
       id: "comp-analysis",
       label: COMP_ANALYSIS_LABEL,
+      icon: ChartColumnIcon,
       to: compAnalysisPath(compUrlId(comp, compId), comp?.name),
     });
   }

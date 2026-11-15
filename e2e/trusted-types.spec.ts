@@ -70,11 +70,12 @@ async function enforceTrustedTypes(context: BrowserContext, page: Page): Promise
   ];
 }
 
-/** The analysis panel starts collapsed at this viewport; open it from its map control. */
+/** The analysis panel starts collapsed at this viewport; open it from the page bar. */
 async function openPanel(page: Page): Promise<void> {
   const sidebar = page.locator("#waypoint-sidebar");
   if ((await sidebar.getAttribute("aria-hidden")) !== "false") {
-    await page.getByRole("button", { name: "Toggle analysis panel" }).click();
+    // "Lists" for one track, "Scores" for a competition (page-bar.ts setPageMode).
+    await page.locator("#analysis-toggle").click();
   }
   await expect(sidebar).toHaveAttribute("aria-hidden", "false");
 }

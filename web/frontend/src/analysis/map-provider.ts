@@ -211,12 +211,6 @@ export interface MapProvider {
     /** Hide the track point HUD overlay */
     hideTrackPointHUD(): void;
 
-    /** Register callback for menu button click (native map control) */
-    onMenuButtonClick(callback: () => void): void;
-
-    /** Register callback for panel toggle button click (native map control) */
-    onPanelToggleClick(callback: () => void): void;
-
     /** Register callback for map click (used by task editor to add waypoints).
      *  `details` carries best-effort extra context (ground elevation, nearby
      *  place name) — see MapPickDetails; undefined when none is available. */
@@ -247,12 +241,6 @@ export interface MapProvider {
 
     /** Register callback for when the user clicks a pickable waypoint marker */
     onWaypointClick(callback: (waypoint: MapWaypoint) => void): void;
-
-    /** Pulse/glow the panel toggle button to draw attention (e.g. after flight load) */
-    highlightPanelToggle(): void;
-
-    /** Throb the menu button to draw attention (e.g. on initial page load) */
-    highlightMenuButton(): void;
 
     /** Get the annotation layer for direct control (Mapbox only) */
     getAnnotationLayer(): MapAnnotationLayer | null;

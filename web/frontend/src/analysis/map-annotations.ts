@@ -281,15 +281,15 @@ export function createMapAnnotationLayer(
     user-select: none;
   `;
   renderInto(toolbar, html`
-    <button data-ann-tool="draw" title="Draw (D)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#9998; <u>D</u>raw</button>
-    <button data-ann-tool="erase" title="Erase (E)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#9003; <u>E</u>rase</button>
+    <button class="ann-tool" data-ann-tool="draw" title="Draw (D)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#9998; <u>D</u>raw</button>
+    <button class="ann-tool" data-ann-tool="erase" title="Erase (E)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#9003; <u>E</u>rase</button>
     <span style="width:1px;height:20px;background:#ccc;margin:0 4px;"></span>
-    <button data-ann-tool="undo" title="Undo (Ctrl+Z)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#8630;</button>
-    <button data-ann-tool="redo" title="Redo (Ctrl+Shift+Z)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#8631;</button>
+    <button class="ann-tool" data-ann-tool="undo" title="Undo (Ctrl+Z)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#8630;</button>
+    <button class="ann-tool" data-ann-tool="redo" title="Redo (Ctrl+Shift+Z)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#8631;</button>
     <span style="width:1px;height:20px;background:#ccc;margin:0 4px;"></span>
-    <button data-ann-tool="clear" title="Clear all" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;color:#e03131;">&#128465;</button>
+    <button class="ann-tool" data-ann-tool="clear" title="Clear all" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;color:#e03131;">&#128465;</button>
     <span style="width:1px;height:20px;background:#ccc;margin:0 4px;"></span>
-    <button data-ann-tool="close" title="Close (Esc)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#10005; <span style="font-size:11px;opacity:0.6;">esc</span></button>
+    <button class="ann-tool" data-ann-tool="close" title="Close (Esc)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#10005; <span style="font-size:11px;opacity:0.6;">esc</span></button>
   `);
   container.appendChild(toolbar);
 
@@ -298,6 +298,7 @@ export function createMapAnnotationLayer(
 
   const toggleBtn = document.createElement('button');
   toggleBtn.title = 'Toggle annotations (D)';
+  toggleBtn.className = 'ann-toggle'; // 44 px on a coarse pointer (analysis.css)
   toggleBtn.style.cssText = `
     position: absolute; bottom: 64px; left: 10px; z-index: 10;
     cursor: pointer; border: none; background: rgba(255,255,255,0.92);

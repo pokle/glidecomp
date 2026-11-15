@@ -38,7 +38,7 @@ This feature allows users to configure display units for various measurements in
 
 ### Command Menu Integration
 
-A "Settings..." menu item (`menu-configure-settings`) is available under the "Settings" group in the command dialog (Cmd+K):
+A "Settings…" row (`menu-configure-settings`) is under "Settings" in the page bar's ⋯ menu (⌘K opens ⋯; Cmd+, opens the dialog directly). Until #869 it was in the searchable command dialog, as drawn here:
 
 ```
 ─────────────────────────────────────

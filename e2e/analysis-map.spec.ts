@@ -148,7 +148,8 @@ test("the track layer can be turned off from the URL", async ({ page, context })
   // The map still flies to the task — the task layers place the camera even
   // with the track hidden — so the page is alive and the toggle was read.
   await expect(scaleBar(page)).toHaveText(TASK_SCALE, { timeout: 30_000 });
-  await expect(page.locator("#track-visibility-status")).toHaveText("(off)");
+  // The Track row of ⋯ shows no tick.
+  await expect(page.locator("#menu-toggle-track")).toHaveAttribute("aria-pressed", "false");
 
   mapbox.assertComplete();
 });

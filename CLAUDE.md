@@ -510,6 +510,12 @@ These are the standing imperatives. Each links to the reference that explains it
     task pages. An action stays on the page only when its place says
     something: "Add turnpoint" under the list. Pass the bar only the actions
     this reader may use.
+  - **A ⋯ row may carry a line icon** (`icon` on `BarAction`, from Lucide,
+    the app's one icon set): `MapIcon` for every row that opens tracks on a
+    map, the 3D replay included; `ChartColumnIcon` for task and comp
+    analysis, and for nothing else, so the bar chart always means analysis;
+    `ShareIcon` and `QrCodeIcon` for sharing. In a menu where any row has
+    one, the rest keep an empty slot so the labels line up.
   - **A second layer may stick with the bar** (`below`): a search field,
     tabs, a class select. Nothing else sticks.
   - **Every control in the bar and its menus is 44 px**, at every pointer;
@@ -526,10 +532,18 @@ These are the standing imperatives. Each links to the reference that explains it
   - **The content pages have the same bar** in plain markup
     (`static/src/components/SiteHeader.astro`). Sign in, Onboarding and the
     OAuth consent page stand outside the Shell and have none. The 3D replay
-    has the same bar in plain markup too (`replay.html`, #869), as pills
-    floating over the scene, with ⋯ opening its control drawer. The analysis
-    page keeps its own chrome for now.
-  - Coverage: `e2e/page-bar.spec.ts`, on a desktop and a phone.
+    and the analysis page have the same bar in plain markup too (#869), as
+    pills floating over the scene or the map: the replay's ⋯ opens its control
+    drawer (`replay.html`); the analysis page is named for what it shows, in its title and in the ⋯
+    rows that open it: "Climbs and glides" for one pilot's track (the report
+    card's row), "All tracks" for a task's whole field (the task page's row),
+    so "analysis" stays the task's and the comp's word; the button beside ⋯
+    ("Lists" / "Scores") opens its side panel, and ⋯ is a plain menu that replaced the
+    searchable command list (`analysis.html`, `analysis/page-bar.ts`). On a
+    wide screen the analysis page's bar ends at the open panel's edge.
+  - Coverage: `e2e/page-bar.spec.ts`, on a desktop and a phone, and
+    `e2e/replay-bar.spec.ts` and `e2e/analysis-bar.spec.ts` for the two
+    vanilla pages.
 - **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
   dialog and piece of shared chrome uses it. Read
   [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)

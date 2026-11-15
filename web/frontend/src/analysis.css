@@ -90,11 +90,11 @@
   .btn-primary,
   .btn-secondary,
   .btn-ghost {
-    @apply gap-2 h-9 px-4 py-2 has-[>svg]:px-3;
+    @apply gap-2 h-9 px-4 py-2 has-[>svg]:px-3 pointer-coarse:h-11;
   }
 
   .btn-icon {
-    @apply size-9;
+    @apply size-9 pointer-coarse:size-11;
   }
 
   .btn,
@@ -114,8 +114,19 @@
   /* Text-style inputs (the page uses type=text and type=number) */
   .input[type='text'],
   .input[type='number'] {
-    @apply appearance-none placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground border-input flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm;
+    @apply appearance-none placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground border-input flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pointer-coarse:h-11;
     @apply focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px];
+  }
+
+  /* The settings dialog's unit selects: the field's box, with the native arrow */
+  select.input {
+    @apply border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-2 text-base shadow-xs outline-none md:text-sm pointer-coarse:h-11;
+    @apply focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px];
+  }
+
+  /* The drawing toolbar's tools (map-annotations.ts): 44 px on a coarse pointer */
+  .ann-tool {
+    @apply pointer-coarse:min-h-11 pointer-coarse:min-w-11;
   }
 
   /* Alert (the on-map status banner). Only the destructive variant is
@@ -139,7 +150,7 @@
     @apply flex flex-col gap-2;
 
     [role='tablist'] {
-      @apply bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px];
+      @apply bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px] pointer-coarse:h-[3.25rem];
 
       [role='tab'] {
         @apply focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring text-foreground inline-flex h-[calc(100%_-_1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 cursor-pointer;
@@ -155,8 +166,11 @@
     }
   }
 
-  /* Collapsible <details>/<summary> (settings accordion, HUD groups) */
-  details {
+  /* Collapsible <details>/<summary> (settings accordion, HUD groups). Not the
+     page bar's menus: they drop down rather than unfold, and while the
+     opening transition runs the content counts as hidden, so a row cannot
+     take focus (⌘K focuses the first row of ⋯). */
+  details:not([data-bar-menu]) {
     &::details-content {
       block-size: 0;
       @apply block opacity-0 transition-discrete transition-all;
@@ -256,6 +270,56 @@
       @apply hidden;
     }
   }
+
+  /* ── The page bar (#869) ─────────────────────────────────────────────── */
+  /* The app's bar in plain markup: the same recipes as
+     static/src/components/SiteHeader.astro (GLASS, ICON, PANEL, ROW, HEAD,
+     RULE there), as classes because page-bar.ts builds rows too. Every
+     control in the bar and every row of its menus is 44 px, at every pointer
+     (accessibility standard §4.5). */
+
+  /* The glass a floating control is made of (react/rac/page-bar.tsx, GLASS) */
+  .bar-glass {
+    @apply border border-border/70 bg-card/75 shadow-card backdrop-blur-xl backdrop-saturate-150;
+    @apply outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50;
+  }
+
+  /* A round 44 px control */
+  .bar-icon {
+    @apply border border-border/70 bg-card/75 shadow-card backdrop-blur-xl backdrop-saturate-150;
+    @apply outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50;
+    @apply pointer-events-auto flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full hover:bg-muted;
+  }
+
+  /* <summary> draws a marker unless it is told not to */
+  .bar-summary {
+    @apply list-none select-none;
+    &::-webkit-details-marker { display: none; }
+  }
+
+  /* A menu's panel: under its control, never wider or taller than the screen */
+  .bar-panel {
+    @apply absolute top-full z-50 mt-1 max-h-[calc(100dvh-5rem)] w-max max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl bg-popover p-1 text-left text-popover-foreground shadow-md ring-1 ring-foreground/10;
+  }
+
+  /* A menu row a finger can hit: 44 px, body size, and it may wrap */
+  .bar-row {
+    @apply flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left text-base outline-none;
+    @apply hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground;
+    &[aria-current] { @apply cursor-default hover:bg-transparent; }
+  }
+  .bar-head { @apply px-3 pt-2 pb-1 text-xs font-medium text-muted-foreground; }
+  .bar-rule { @apply -mx-1 my-1 h-px bg-border; }
+
+  /* A toggle row's tick, shown while the thing it names is on */
+  .bar-check { @apply shrink-0 text-link; }
+  [aria-pressed='false'] > .bar-check { visibility: hidden; }
+
+  /* The shortcut a row also answers to */
+  .bar-kbd { @apply shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground; }
+
+  /* "Samples…" opens in place */
+  details[open] > summary .bar-disclosure { @apply rotate-90; }
 
   /* ── Analysis-specific styles ───────────────────────────────────────── */
 
@@ -518,23 +582,6 @@
     animation: throb-attention 0.4s ease-in-out 3;
   }
 
-  /* Allow throb to scale beyond the control group boundary */
-  .mapboxgl-ctrl-group:has(.pulse-attention) {
-    overflow: visible !important;
-  }
-
-  /* Allow labeled map control buttons to expand beyond default fixed width */
-  .mapboxgl-ctrl-group button:has(.mapctl-label) {
-    width: auto !important;
-  }
-
-  /* Hide text labels on map control buttons on mobile, keep icon-only at 36px */
-  @media (max-width: 639px) {
-    .mapctl-label {
-      display: none !important;
-    }
-  }
-
   /* First-visit tooltip for Analysis button */
   .analysis-tooltip {
     position: absolute;
@@ -603,12 +650,15 @@
     @apply text-link;
   }
 
-  /* Track-point HUD overlay — translucent dark card with accordion groups */
+  /* Track-point HUD overlay — a dark card with accordion groups. Near-opaque
+     (#868): at 0.55 its white text measured about 2.5:1 over a light map, and
+     the dimmest of it (white/60) needs the card at 0.9 to clear 4.5:1 whatever
+     the map shows (accessibility standard §3.1). */
   #track-point-hud {
     @apply absolute;
     @apply rounded-lg px-3 py-2;
     z-index: 1100;
-    background: rgba(15, 23, 42, 0.55);
+    background: rgba(15, 23, 42, 0.92);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     font-family: 'Atkinson Hyperlegible Next', ui-monospace, monospace;
@@ -630,7 +680,7 @@
   }
 
   #track-point-hud .hud-toggle {
-    @apply text-white/60 hover:text-white cursor-pointer;
+    @apply touch-target text-white/60 hover:text-white cursor-pointer;
     @apply rounded leading-none text-sm w-5 h-5 flex items-center justify-center ml-auto;
     background: none;
     border: none;
@@ -688,4 +738,47 @@
   #track-point-hud .hud-wind {
     @apply text-white/75 text-sm leading-tight pl-3;
   }
+}
+
+/* The map's own controls sit under the page bar, not behind it. Unlayered on
+   purpose: mapbox-gl.css is unlayered too, and an unlayered rule beats any
+   rule in a layer whatever its specificity. */
+#map .mapboxgl-ctrl-top-left,
+#map .mapboxgl-ctrl-top-right {
+  top: calc(3.75rem + env(safe-area-inset-top));
+}
+
+/* On a coarse pointer the floor is 44 px (accessibility standard §4.5,
+   #860 §1): Mapbox's own buttons (zoom, compass, locate, fullscreen), the map
+   style select and the draw button. Unlayered, as above, to beat
+   mapbox-gl.css; the select's inline style needs !important. */
+@media (pointer: coarse) {
+  #map .mapboxgl-ctrl-group button {
+    width: 44px;
+    height: 44px;
+  }
+  #map .mapboxgl-ctrl-group select {
+    min-height: 44px;
+    font-size: 16px !important;
+  }
+  #map .ann-toggle {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  /* The attribution's ⓘ sits in the corner beside the scale bar: a bigger hit
+     area that paints nothing, rather than a bigger Mapbox button. */
+  #map .mapboxgl-ctrl-attrib-button::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* The scale bar's text is 10 px out of the box: the 11 px floor (#860 §5). */
+#map .mapboxgl-ctrl-scale {
+  font-size: 12px;
 }

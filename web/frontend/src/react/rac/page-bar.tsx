@@ -63,6 +63,7 @@ import {
   EllipsisIcon,
   MenuIcon,
   PlusIcon,
+  type LucideIcon,
 } from "lucide-react";
 import { Button, LinkButton, buttonVariants } from "./button";
 import { Menu, MenuHeader, MenuItem, MenuSection, MenuSeparator } from "./menu";
@@ -102,6 +103,14 @@ export interface BarAction {
   disabled?: boolean;
   /** A group of actions behind this row, opened as a second menu. */
   children?: BarAction[];
+  /**
+   * A line icon at the start of the row (Lucide). `MapIcon` for a page that
+   * shows tracks on a map (the 3D replay included), `ChartColumnIcon` for an
+   * analysis, `ShareIcon` for sharing, `QrCodeIcon` for a QR code. In a menu
+   * where any row has one, a row without keeps an empty slot, so the labels
+   * line up.
+   */
+  icon?: LucideIcon;
 }
 
 export interface Related {
@@ -502,14 +511,26 @@ function flatten(actions: BarAction[]): BarAction[] {
 }
 
 /** The rows of an actions menu: rules between groups, a second menu behind a row with children. */
+/** A row's icon, or the empty slot that keeps its label in line with one. */
+function RowIcon({ icon: Icon }: { icon?: LucideIcon }) {
+  return (
+    <span aria-hidden className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
+      {Icon ? <Icon className="size-5" /> : null}
+    </span>
+  );
+}
+
 function menuItems(actions: BarAction[]): ReactNode[] {
   const items: ReactNode[] = [];
+  // Only a menu that has an icon makes room for one on every row.
+  const slot = actions.some((a) => a.icon);
   for (const a of actions) {
     if (a.group && items.length > 0) items.push(<MenuSeparator key={`${a.id}-rule`} />);
     if (a.children) {
       items.push(
         <SubmenuTrigger key={a.id}>
           <MenuItem id={a.id} className={ROW}>
+            {slot ? <RowIcon icon={a.icon} /> : null}
             <span className="min-w-0 flex-1">{a.label}</span>
             <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           </MenuItem>
@@ -534,7 +555,8 @@ function menuItems(actions: BarAction[]): ReactNode[] {
         isDisabled={a.disabled}
         className={cn(ROW, a.destructive && "text-danger data-focused:text-danger")}
       >
-        {a.label}
+        {slot ? <RowIcon icon={a.icon} /> : null}
+        {slot ? <span className="min-w-0 flex-1">{a.label}</span> : a.label}
       </MenuItem>
     );
   }
