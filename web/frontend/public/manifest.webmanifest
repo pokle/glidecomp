@@ -1,8 +1,9 @@
 {
+  "id": "/analysis.html",
   "name": "GlideComp",
   "short_name": "GlideComp",
-  "description": "Competition scoring and track log analysis for hanggliding and paragliding",
-  "start_url": "/analysis.html",
+  "description": "Scores hang gliding and paragliding competitions with GAP or open distance, every point explained, and analyses every track flown.",
+  "start_url": "/comp",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#007aff",
@@ -25,6 +26,9 @@
           "accept": [
             ".igc",
             ".xctsk",
+            "application/igc",
+            "application/x-igc",
+            "application/xctsk",
             "application/octet-stream",
             "text/plain",
             "application/json"

@@ -161,6 +161,7 @@ export const E2E_SHARDS = {
    */
   "public-and-pilot": [
     "track-submission.spec.ts", // 25.9s (chromium + mobile)
+    "share-target.spec.ts", // new — a track shared to the installed app (#800) (chromium + mobile)
     "task-submit-link.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "task-qr-page.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "task-diagram-page.spec.ts", // new — measure on its first CI run (chromium + mobile)

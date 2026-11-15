@@ -34,6 +34,9 @@ export const MOBILE_SPEC_FILES = [
   // Submitting a track — the flow whose whole premise is a pilot who has just
   // landed, standing on a hill, holding a phone.
   "track-submission.spec.ts",
+  // Sharing a track to the installed app (#800): Android's share sheet is a
+  // phone's way in to the same form.
+  "share-target.spec.ts",
   // The task page's Submit track, a link to /submit rather than a dialog
   // (#820): Back, reload and the keyboard are the browser's, which is the
   // whole reason it moved, and a phone is where a dialog's went wrong.
