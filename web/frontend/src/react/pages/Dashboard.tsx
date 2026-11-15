@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
+import { Tabs, TabList, Tab, TabPanel, TabsContent } from "@/react/rac/tabs";
 import { ProportionMeter } from "@/react/rac/meter";
 import { Button, buttonVariants } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
@@ -200,6 +200,7 @@ export function Dashboard() {
         // A stack of panels, like every other page.
         className="flex flex-col gap-6"
       >
+        <TabsContent>
         {/* The file picker + opens. Cleared after each pick, so choosing the
             same file twice still fires. */}
         <input
@@ -399,6 +400,7 @@ export function Dashboard() {
           <p className="text-sm font-normal text-muted-foreground">.igc and .xctsk files</p>
         </div>
       ) : null}
+        </TabsContent>
       </Page>
     </Tabs>
   );

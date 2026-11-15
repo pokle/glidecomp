@@ -21,7 +21,7 @@ import { ActionErrorBanner } from "@/react/rac/form";
 import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
 import { Loading, Spinner } from "@/react/rac/progress";
 import { Card } from "@/react/rac/card";
-import { Tabs } from "@/react/rac/tabs";
+import { Tabs, TabsContent } from "@/react/rac/tabs";
 import { api } from "../../comp/api";
 import { useAdminView } from "../lib/user";
 import { compPages, underComp } from "../lib/crumbs";
@@ -124,6 +124,7 @@ export function CompScoresPage() {
           />
         }
       >
+        <TabsContent>
         <ActionErrorBanner action={rescoring} className="mb-3" />
         {download.dialog}
 
@@ -179,6 +180,7 @@ export function CompScoresPage() {
             )}
           </Card>
         )}
+        </TabsContent>
       </Page>
     </Tabs>
   );

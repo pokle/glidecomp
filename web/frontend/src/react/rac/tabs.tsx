@@ -193,3 +193,21 @@ export function TabPanel({
     />
   );
 }
+
+/**
+ * Whatever is inside `<Tabs>` that is neither the tab list nor a panel: the
+ * rest of a page whose tab strip is the page bar's second layer, so that
+ * `Tabs` has to wrap the whole page (rac/page-bar.tsx, `below`).
+ *
+ * RAC renders the children of `Tabs` TWICE: once in a hidden tree, only to
+ * collect the tabs, and once for real. A `Tab` and a `TabPanel` know to do
+ * nothing in the hidden pass; ordinary content does not, so it mounted twice,
+ * ran its effects twice (a freshness poll, a fetch) and portalled a second
+ * copy of any open dialog into the document. This renders its children in the
+ * real pass only. The tab list's state exists only there, which is how the
+ * two passes are told apart with nothing but RAC's public API.
+ */
+export function TabsContent({ children }: { children: React.ReactNode }) {
+  const real = useContext(TabListStateContext) !== null;
+  return real ? <>{children}</> : null;
+}

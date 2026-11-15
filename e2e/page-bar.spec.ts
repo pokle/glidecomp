@@ -68,7 +68,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 /** The bar: the header inside <main>, which holds the page's <h1>. */
-const bar = (page: Page) => page.locator("main#main-content > header").first();
+// Not a direct child of <main>: a form wraps its page, and so do tabs.
+const bar = (page: Page) => page.locator("main#main-content header").first();
 
 async function expectTarget(control: Locator, what: string): Promise<void> {
   const box = await control.boundingBox();
