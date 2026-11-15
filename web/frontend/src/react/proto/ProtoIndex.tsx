@@ -112,7 +112,7 @@ const SCENARIOS: Array<{ group: string; rows: Array<{ to: string; label: string;
       {
         to: `${TASK}/route/3`,
         label: "A turnpoint",
-        look: "A page of the draft. Done is quiet, because it saves nothing: it checks the coordinates and goes back. Only Save on Route saves.",
+        look: "A page of the draft. Done checks the coordinates and goes back; nothing is saved until Save on Route.",
       },
       {
         to: `${TASK}/route/quick`,
@@ -178,27 +178,6 @@ export function ProtoIndex() {
             { value: "solid", label: "One solid bar", description: "Full width, with a hairline under it." },
           ]}
         />
-        <ChoiceList
-          label="How Done looks"
-          value={options.done}
-          onChange={(v) => setOption("done", v as typeof options.done)}
-          options={[
-            { value: "tint", label: "Blue tint", description: "A wash of blue under a blue label. Lighter than Save." },
-            { value: "text", label: "Blue label", description: "The glass pill, with the label in blue." },
-            { value: "outline", label: "Blue outline", description: "The glass pill, with a blue border and label." },
-            { value: "dark", label: "Dark fill", description: "Solid, but not blue: blue stays for Save." },
-            { value: "glass", label: "Plain glass", description: "As Cancel is drawn. The quietest." },
-          ]}
-        />
-        <div className="flex flex-col gap-2">
-          <LinkButton href={`${TASK}/route/3`} variant="outline" className="h-11 self-start px-5">
-            See Done on a turnpoint
-          </LinkButton>
-          <p className="px-1 text-sm text-muted-foreground">
-            Done is also the bar's button in Reorder mode: ⋯ on the route page, then Reorder
-            turnpoints.
-          </p>
-        </div>
       </section>
     </ProtoPage>
   );

@@ -13,20 +13,12 @@ export interface ProtoOptions {
   formLeading: "cancel" | "back";
   /** Separate glass pills over the page, or one solid bar across it. */
   chrome: "pills" | "solid";
-  /**
-   * How Done is drawn. It must not look like Save, which is the only button
-   * that writes to the server; the question is how far short of that to stop.
-   */
-  done: DoneLook;
 }
-
-export type DoneLook = "glass" | "text" | "tint" | "outline" | "dark";
 
 export const DEFAULT_OPTIONS: ProtoOptions = {
   signedIn: true,
   formLeading: "cancel",
   chrome: "pills",
-  done: "tint",
 };
 
 const KEY = "glidecomp.proto.options";
