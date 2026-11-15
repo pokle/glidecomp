@@ -14,7 +14,9 @@
  * - The row of eleven buttons under the list is ⋯, with import and export
  *   behind one row. "Add turnpoint" stays under the list, where the new
  *   turnpoint goes.
- * - Reorder is a mode of the bar: the commit button becomes Done.
+ * - Reorder is a mode of the bar: the title names the mode and the trailing
+ *   slot holds Done. Done is quiet, here and on a turnpoint's page, because it
+ *   writes nothing: only Save does.
  *
  * Nothing is sent anywhere: Save remembers the route for this visit. Load
  * from XContest and Copy from another competition need the API and only say
@@ -94,6 +96,7 @@ import { openedHere, useLeave } from "../lib/leave";
 import { toast } from "../lib/toast";
 import { COMP, P, TASKS, accepted } from "./fixtures";
 import {
+  DoneButton,
   PageBar,
   ProtoPage,
   commitClass,
@@ -578,15 +581,12 @@ export function RoutePage() {
           actions={reordering ? [] : actions}
           commit={
             reordering ? (
-              <Button
-                className={commitClass}
+              <DoneButton
                 onPress={() => {
                   setReordering(false);
                   setMoved(null);
                 }}
-              >
-                Done
-              </Button>
+              />
             ) : (
               <SubmitButton className={commitClass} isDisabled={!dirty || errors.length > 0}>
                 Save
@@ -840,7 +840,7 @@ function TurnpointForm({ s, row, onDelete }: { s: Scenario; row: RouteRow; onDel
             title={row.name || (adding ? "New turnpoint" : "Turnpoint")}
             fullTitle={adding ? "Add turnpoint" : `Edit turnpoint ${row.name}`.trim()}
             trail={s.routeTrail}
-            commit={<SubmitButton className={commitClass}>Done</SubmitButton>}
+            commit={<DoneButton submit />}
           />
         }
       >

@@ -94,6 +94,28 @@ const ICON = "pointer-events-auto size-11 rounded-full";
 /** Classes for a form's commit button in the trailing slot. */
 export const commitClass = "h-11 rounded-full px-5 text-[0.9375rem]";
 
+/**
+ * Done, in the trailing slot. Done writes nothing to the server: it finishes
+ * one part of a draft that its page saves later, or leaves a mode. So it is
+ * never the prominent button (the wording rule in issue #863) and is drawn
+ * like Cancel, with Back or Cancel always in the leading slot beside it.
+ * `submit` runs the form's checks first.
+ */
+export function DoneButton({ submit, onPress }: { submit?: boolean; onPress?: () => void }) {
+  const { options } = useProtoOptions();
+  const solid = options.chrome === "solid";
+  return (
+    <Button
+      type={submit ? "submit" : "button"}
+      variant={solid ? "outline" : "ghost"}
+      onPress={onPress}
+      className={cn("h-11 rounded-full px-4 text-[0.9375rem]", !solid && GLASS)}
+    >
+      Done
+    </Button>
+  );
+}
+
 export function PageBar({
   title,
   fullTitle,

@@ -112,7 +112,7 @@ const SCENARIOS: Array<{ group: string; rows: Array<{ to: string; label: string;
       {
         to: `${TASK}/route/3`,
         label: "A turnpoint",
-        look: "A page of the draft. Done checks the coordinates and goes back; nothing is saved until Save on Route.",
+        look: "A page of the draft. Done is quiet, because it saves nothing: it checks the coordinates and goes back. Only Save on Route saves.",
       },
       {
         to: `${TASK}/route/quick`,
