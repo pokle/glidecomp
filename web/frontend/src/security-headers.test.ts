@@ -70,6 +70,17 @@ describe("security headers", () => {
     expect(SECURITY_HEADERS["Content-Security-Policy"]).not.toMatch(/trusted-types/);
   });
 
+  test("geolocation is allowed to this origin alone, microphone and camera to nobody", () => {
+    // `geolocation=()` denies our own pages too. Chrome then answers "denied"
+    // without asking the reader, and every map's Find my location button is
+    // dead (see PERMISSIONS_POLICY). The whole policy is listed here, so a
+    // feature opened later is opened on purpose.
+    const policy = Object.fromEntries(
+      SECURITY_HEADERS["Permissions-Policy"].split(",").map((directive) => directive.trim().split("="))
+    );
+    expect(policy).toEqual({ geolocation: "(self)", microphone: "()", camera: "()" });
+  });
+
   test("the CSP is enforced, not report-only", () => {
     expect(SECURITY_HEADERS["Content-Security-Policy"]).toMatch(/script-src 'self'/);
     expect(SECURITY_HEADERS).not.toHaveProperty("Content-Security-Policy-Report-Only");
