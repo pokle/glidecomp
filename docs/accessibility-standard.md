@@ -217,9 +217,11 @@ differs. Know which surface you're touching:
 - **Landmarks**: one `<main>` and one `<footer>` per page. In the app the page
   bar is a `<header>` INSIDE `<main>` (`rac/page-bar.tsx`): it holds the
   page's `<h1>`, which is where focus goes on arrival (`lib/route-focus.ts`),
-  so it cannot sit outside the landmark. The full-screen tools
-  (`/analysis.html`, `/replay`) use their top-center breadcrumb bar (IA v2 §3)
-  as the nav landmark.
+  so it cannot sit outside the landmark. The analysis page
+  (`/analysis.html`) uses its top-center breadcrumb bar (IA v2 §3) as the nav
+  landmark. The 3D replay (`/replay`) has the page bar in plain markup
+  (#869): a visually hidden `<h1>` and `<nav aria-label="Breadcrumb">`, the
+  title menu as a native `<details>`, and every control in the bar 44px.
 - **One bar on every page, with three slots that always mean the same thing**
   (issue #863): the way out on the left (back to the page above, Cancel on a
   form, the main menu on a top-level page), where you are in the centre (the
