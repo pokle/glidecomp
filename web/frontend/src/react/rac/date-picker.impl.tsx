@@ -82,7 +82,7 @@ const LOCALE = "en-GB";
 
 // The field box mirrors rac/field.tsx's input so pickers sit flush with text inputs.
 const fieldBox = cn(
-  "flex h-8 w-full min-w-0 items-center rounded-lg border border-input bg-card px-2.5 py-1 text-base transition-colors md:text-sm dark:bg-input/30",
+  "flex h-8 w-full min-w-0 items-center rounded-lg border border-input bg-card px-2.5 py-1 text-base pointer-coarse:h-11 transition-colors md:text-sm dark:bg-input/30",
   "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 data-[invalid]:border-destructive",
   "data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
 );

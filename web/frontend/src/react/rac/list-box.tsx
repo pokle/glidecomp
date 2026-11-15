@@ -35,7 +35,7 @@ export function ListBoxItem({
   return (
     <AriaListBoxItem
       className={cn(
-        "flex w-full cursor-default items-baseline gap-2 rounded px-1.5 py-1 text-left text-sm outline-none select-none",
+        "flex w-full cursor-default items-baseline gap-2 rounded px-1.5 py-1 text-left text-sm outline-none select-none pointer-coarse:min-h-11 pointer-coarse:items-center pointer-coarse:px-3 pointer-coarse:text-base",
         "data-hovered:bg-accent data-focused:bg-accent data-focused:text-accent-foreground",
         className
       )}

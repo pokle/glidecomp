@@ -121,7 +121,7 @@ export function TabList<T extends object>({
           // only ever applies once it overflows — and centred overflow spills
           // equally off BOTH ends, putting the first tab behind a scroll
           // origin that scrollLeft can never reach.
-          "inline-flex h-8 w-fit max-w-full items-center justify-start rounded-lg bg-muted p-[3px] text-muted-foreground",
+          "inline-flex h-8 w-fit max-w-full items-center justify-start rounded-lg bg-muted p-[3px] text-muted-foreground pointer-coarse:h-[3.1875rem]",
           // The scrollbar is hidden because it would eat half of an h-8 pill
           // on platforms that reserve space for one; the fades below and the
           // clipped tab edge are the affordance instead.
@@ -164,7 +164,7 @@ export function Tab({
         // light it was the foreground at 60% opacity, 4.16:1 on the strip's
         // --muted, under the 4.5:1 that text needs. accent-text.test.ts
         // measures any text dimmed by opacity now.
-        "relative inline-flex h-[calc(100%-1px)] flex-1 cursor-default items-center justify-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-all outline-none select-none",
+        "relative inline-flex h-[calc(100%-1px)] flex-1 cursor-default items-center justify-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-all outline-none select-none pointer-coarse:px-5 pointer-coarse:text-base",
         "data-hovered:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
         "data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50",
         "data-selected:bg-background data-selected:text-foreground data-selected:shadow-sm dark:data-selected:border-input dark:data-selected:bg-input/30 dark:data-selected:text-foreground",
