@@ -66,6 +66,7 @@ import {
 } from "lucide-react";
 import { Button, LinkButton, buttonVariants } from "./button";
 import { Menu, MenuHeader, MenuItem, MenuSection, MenuSeparator } from "./menu";
+import { useTabsCollectionPass } from "./tabs";
 import { cn } from "@/react/lib/utils";
 import { openedHere, useLeave } from "@/react/lib/leave";
 import {
@@ -131,7 +132,17 @@ export type PageWidth = "narrow" | "wide";
 const WIDTH: Record<PageWidth, string> = { narrow: "max-w-3xl", wide: "max-w-6xl" };
 const PageWidthContext = createContext<PageWidth>("narrow");
 
-export function PageBar({
+/**
+ * The bar. Under `Tabs` (a tab strip in `below`), RAC renders the page once
+ * more only to collect the tabs: in that pass this is the tab strip and
+ * nothing else, so there is one bar, and one `<h1>`, in the document
+ * (`useTabsCollectionPass` in rac/tabs.tsx).
+ */
+export function PageBar(props: Parameters<typeof Bar>[0]) {
+  return useTabsCollectionPass() ? <>{props.below}</> : <Bar {...props} />;
+}
+
+function Bar({
   title,
   fullTitle,
   trail = [],

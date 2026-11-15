@@ -289,8 +289,12 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     // The table content is in the raw server HTML.
     expect(html).toContain(waypoints[0].code);
     expect(html).toContain(`<title>Waypoints — ${compName} — GlideComp</title>`);
-    expect(html).toContain('aria-label="Sections"');
-    expect(html).toContain("Comp analysis");
+    // The strip of section links went into the bar's title menu (issue #863).
+    // What the server's HTML keeps is the way back: the trail, as real links.
+    expect(html).not.toContain('aria-label="Sections"');
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).toContain(`href="${compPath(compId, compName)}"`);
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
     // The map stays client-only — its Suspense fallback is what the server streams.
     expect(html).not.toContain("mapboxgl-canvas");
   });

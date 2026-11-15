@@ -12,7 +12,7 @@
  * "Scores by task" overflows a phone — issue #640), with a fade at whichever
  * end still has tabs behind it.
  */
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   Tabs as AriaTabs,
   TabList as AriaTabList,
@@ -27,11 +27,34 @@ import {
 
 import { cn } from "@/react/lib/utils";
 
+/** Set under the kit `Tabs`, so its two render passes can be told apart. */
+const InsideTabsContext = createContext(false);
+
 export function Tabs({
   className,
+  children,
   ...props
-}: Omit<TabsProps, "className"> & { className?: string }) {
-  return <AriaTabs className={cn("flex flex-col gap-2", className)} {...props} />;
+}: Omit<TabsProps, "className" | "children"> & {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <AriaTabs className={cn("flex flex-col gap-2", className)} {...props}>
+      <InsideTabsContext.Provider value={true}>{children}</InsideTabsContext.Provider>
+    </AriaTabs>
+  );
+}
+
+/**
+ * True in the pass RAC renders only to collect the tabs (see `TabsContent`):
+ * inside the kit `Tabs`, with no tab list state yet. The page bar asks, so
+ * that in that pass it renders its tab strip and nothing else. On the server
+ * the pass is real markup, in a `<template>`, and it held a second `<h1>`.
+ */
+export function useTabsCollectionPass(): boolean {
+  const inside = useContext(InsideTabsContext);
+  const state = useContext(TabListStateContext);
+  return inside && state === null;
 }
 
 /**
@@ -208,6 +231,5 @@ export function TabPanel({
  * two passes are told apart with nothing but RAC's public API.
  */
 export function TabsContent({ children }: { children: React.ReactNode }) {
-  const real = useContext(TabListStateContext) !== null;
-  return real ? <>{children}</> : null;
+  return useTabsCollectionPass() ? null : <>{children}</>;
 }
