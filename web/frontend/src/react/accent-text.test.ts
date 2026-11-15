@@ -314,3 +314,79 @@ describe("no colour arrives unmeasured", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * Text dimmed by opacity: `text-foreground/60`, `text-muted-foreground/80`.
+ *
+ * A token can hold 4.5:1 at full strength and lose it at a reduced opacity,
+ * and nothing above looks at that. An unselected tab's label was
+ * `text-foreground/60` on the strip's `--muted`: 4.16:1 in light, on every
+ * tab strip in the app, while every token in it passed. Lower a token's
+ * opacity and this measures it, on every surface in both themes.
+ *
+ * Text that marks something INACTIVE is exempt (WCAG 1.4.3 says so), and so
+ * is an icon, which is not text. Each one is listed below with its reason.
+ * Text on a ground of its own (the analysis map's HUD is `text-white/60` on a
+ * translucent card over the map) has no token to measure against, so a class
+ * that is not a token is left alone here.
+ */
+describe("text is not dimmed below 4.5:1", () => {
+  const SURFACES = ["background", "card", "popover", "muted", "secondary", "accent"];
+  const EXEMPT: Record<string, Record<string, string>> = {
+    "src/react/rac/date-picker.impl.tsx": {
+      // react-aria disables a day outside the month (useCalendarCell), so
+      // the calendar draws it dimmed as an inactive control.
+      "text-muted-foreground/40": "a day outside the month, which cannot be chosen",
+    },
+    "src/analysis/task-editor.ts": {
+      "text-muted-foreground/50": "the drag grip, an icon beside a turnpoint's name",
+    },
+  };
+  // A class drawn on fewer surfaces than all six names them, and the tests
+  // above hold it there.
+  const DRAWN_ON: Record<string, string[]> = {
+    // rac/alert.tsx: a destructive alert's description, on its card.
+    "text-danger/90": ["card"],
+  };
+  const DIMMED = /((?:[\w-]+:)*)text-([a-z][a-z-]*)\/(\d+)\b/g;
+
+  it("every dimmed text colour holds 4.5:1 on every surface it can sit on", () => {
+    const themes = { ":root": tokens(":root"), ".dark": tokens(".dark") };
+    const offenders: string[] = [];
+    let measured = 0;
+    for (const f of SOURCES) {
+      const file = relative(f);
+      for (const m of readFileSync(f, "utf8").matchAll(DIMMED)) {
+        const [, variants, token] = m;
+        const cls = `text-${token}/${m[3]}`;
+        if (!(token in themes[":root"])) continue; // not a token: see above
+        if (EXEMPT[file]?.[cls]) continue;
+        measured++;
+        const alpha = Number(m[3]) / 100;
+        // A `dark:` class is drawn on dark only; any other is drawn on both.
+        const selectors = variants.includes("dark:") ? [".dark"] : [":root", ".dark"];
+        for (const selector of selectors as Theme[]) {
+          const t = themes[selector];
+          for (const surface of DRAWN_ON[cls] ?? SURFACES) {
+            const ratio = contrast(wash(t[token], alpha, t[surface]), t[surface]);
+            if (ratio < AA) {
+              offenders.push(`${file}: ${cls} is ${ratio.toFixed(2)}:1 on --${surface} in ${selector}`);
+            }
+          }
+        }
+      }
+    }
+    expect(measured, "the scan found the dimmed text it is meant to measure").toBeGreaterThan(0);
+    expect(offenders).toEqual([]);
+  });
+
+  it("every exemption still names a class the file uses", () => {
+    const stale = Object.entries(EXEMPT).flatMap(([file, classes]) => {
+      const source = readFileSync(join(ROOT, file), "utf8");
+      return Object.keys(classes)
+        .filter((cls) => !source.includes(cls))
+        .map((cls) => `${file}: ${cls}`);
+    });
+    expect(stale).toEqual([]);
+  });
+});

@@ -97,6 +97,14 @@ differs. Know which surface you're touching:
   text (`text-chart-2`): a chart's line is a mark, and its label is text, so
   the label takes `text-link`, `text-positive` or `text-caution`. The test
   fails on both. The 3D replay has its own theme and is outside this rule.
+- **Text dimmed by opacity is a new colour, so measure it.** A token that
+  holds 4.5:1 at full strength can lose it at `/60`. An unselected tab's
+  label was `text-foreground/60` on the strip's `--muted`, at 4.16:1 in light,
+  on every tab strip in the app, until 2026-11. Use `text-muted-foreground`
+  for quieter text. `accent-text.test.ts` measures every `text-<token>/NN` on
+  every surface in both themes and fails under 4.5:1. Text that marks
+  something inactive (a day outside the month in a calendar) is exempt, as
+  WCAG 1.4.3 allows, and the test lists each such case with its reason.
 - **A wash under coloured text must not change with what is behind it.** The
   analysis page's rank bubbles were a translucent wash on an item that turns
   grey when hovered and blue when selected, so a climb's rank fell to 2.13:1
