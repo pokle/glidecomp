@@ -142,8 +142,10 @@ test("a reload of the new key's page shows the form, and the secret nowhere", as
   await expect(created(page)).toHaveCount(0);
   await expect(page.getByText(secret)).toHaveCount(0);
 
-  // No label: the list says so.
-  await backToList(page);
+  // No label: the list says so. The page is the form again, so its way out
+  // is Cancel, and with nothing typed it leaves without asking.
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\/api-keys$/);
   await expect(keyRow(page, "Unnamed")).toBeVisible();
 });
 

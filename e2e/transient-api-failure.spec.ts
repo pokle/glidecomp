@@ -193,7 +193,7 @@ test("the waypoints page says so when the comp fetch never lands", async ({
   await breakFirst(page, `/api/comp/${compId}`, "drop", Number.MAX_SAFE_INTEGER);
 
   await page.goto(`/comp/${compId}/waypoints`);
-  await expect(page.getByText("Competition not found")).toBeVisible({
+  await expect(page.getByRole("heading", { level: 1, name: "Competition not found" })).toBeVisible({
     timeout: 15_000,
   });
   await expect(page.getByText("0 waypoints")).toHaveCount(0);
@@ -202,7 +202,7 @@ test("the waypoints page says so when the comp fetch never lands", async ({
 test("a genuinely missing comp still says so", async ({ page }) => {
   // The retries must not turn a real 404 into a hang or a blank page.
   await page.goto("/comp/zzzzzzzz");
-  await expect(page.getByText("Competition not found")).toBeVisible({
+  await expect(page.getByRole("heading", { level: 1, name: "Competition not found" })).toBeVisible({
     timeout: 15_000,
   });
 });

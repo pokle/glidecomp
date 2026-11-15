@@ -85,6 +85,11 @@ test("units apply instantly and flash a Saved confirmation", async ({ page }) =>
   const pill = (label: string) =>
     distanceGroup.locator("label").filter({ hasText: new RegExp(`^${label}$`) });
 
+  // Wait for the page: `evaluateAll` does not, and read before the radios
+  // are there it answers undefined — the target then came out as "km", a
+  // click on the unit already chosen, which saves nothing and says nothing.
+  await expect(page.getByRole("heading", { name: "Units", level: 1 })).toBeVisible();
+  await expect.poll(checkedValue).toBeTruthy();
   const original = await checkedValue();
   const target = original === "km" ? "mi" : "km";
 
@@ -140,6 +145,8 @@ test("leaving a dirty profile is guarded: Keep stays, Discard leaves", async ({ 
   await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
   await expect(dialog.getByText("Discard profile changes?")).toBeVisible();
   await dialog.getByRole("button", { name: "Keep editing" }).click();
+  // Gone, not going: a closing dialog still holds a Cancel of its own.
+  await expect(dialog).toBeHidden();
   await expect(page).toHaveURL(/\/settings\/profile$/);
   await expect(glider).toHaveValue("Unsaved Wing");
 

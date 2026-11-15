@@ -139,8 +139,11 @@ test("the full-size chart is a page: a link in, reload, and Back out", async ({ 
   const label = (await link.getAttribute("aria-label"))!.replace(/^Show (.+) full size$/, "$1");
   const inline = (await scatter(page).boundingBox())!;
 
-  // Somewhere down the page, so Back has a scroll position to restore.
-  await link.evaluate((el) => el.scrollIntoView({ block: "start" }));
+  // Somewhere down the page, so Back has a scroll position to restore: the
+  // link a little under the bar. At the very top it is under the bar's
+  // controls, where no reader could press it, and Playwright scrolled the
+  // page again to reach it — so the page was left from somewhere else.
+  await link.evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 160));
   const from = page.url();
   const scrollFrom = await page.evaluate(() => window.scrollY);
   expect(scrollFrom, "the strategies page should have scrolled").toBeGreaterThan(0);

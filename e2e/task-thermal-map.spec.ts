@@ -181,10 +181,12 @@ test("maximise is a link to the thermal map page: reload keeps it, Back returns"
   const maximise = thermalsCard(page).getByRole("link", { name: "Maximise map" });
   await expect(maximise).toHaveAttribute("href", new RegExp(`/analysis/thermals/map\\?(.*&)?thermal=${thermal}(&|$)`));
   // Somewhere down the page, so Back has an offset to restore: the control
-  // mid-screen, clear of the sticky header. Nothing scrolls after the Map
+  // a little under the bar, clear of it. (Centred was not far enough: under
+  // the bar alone the control is already in the top half of a desktop
+  // screen, and centring it scrolled nothing.) Nothing scrolls after the Map
   // toggle's REPLACE, so this also pins that the offset carries over to the
   // entry that replace made.
-  await maximise.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await maximise.evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 160));
   const leftAt = await page.evaluate(() => window.scrollY);
   expect(leftAt, "the section should have scrolled").toBeGreaterThan(0);
   const entries = await page.evaluate(() => history.length);

@@ -184,30 +184,57 @@ test.describe("submitting a track without an account", () => {
   });
 
   test("submitting is reachable from the nav on every page", async ({ page }) => {
-    await page.goto(BASE_URL);
-    const nav = page.locator('nav[aria-label="Main"]');
-    // A plain anchor, not a scripted button: these pages are prerendered and
-    // must stay useful with JS off.
+    // The whole website has one bar (#863), and "Submit track" is one of the
+    // places it starts from: a row of the main menu on a top-level page, and
+    // under "Elsewhere" in the title's menu on a page below one.
     //
+    // The content pages first. Their bar is the vanilla twin
+    // (static/src/components/SiteHeader.astro): native <details> menus whose
+    // rows are plain anchors in the prerendered HTML, because these pages
+    // must stay useful with JS off.
+    await page.goto(BASE_URL);
+    const siteBar = page.locator("[data-page-bar]");
     // Explicit timeout because this is the FIRST test to hit `/`, and in dev
     // that page is compiled on demand by the Astro server — the default 5s is
     // the Astro cold start, not the assertion. It passes in 3s warm and has
     // failed at 5s cold.
-    const inRow = nav.locator('[data-priority-item="submit"] a[href="/submit"]');
-    await expect(inRow).toBeAttached({ timeout: 20_000 });
-    // Where it SHOWS depends on the width: the header is priority+overflow
-    // (issue #639), so a phone folds this link into "More". Reachable is the
-    // claim, and it holds either way — the folded copy is an anchor too.
-    if (await inRow.isVisible()) {
-      await expect(nav.getByRole("button", { name: "More pages" })).toBeHidden();
-    } else {
-      await nav.getByRole("button", { name: "More pages" }).click();
-      await expect(
-        page.getByRole("menu", { name: "More pages" }).locator('a[href="/submit"]')
-      ).toBeVisible();
-    }
-    // Deliberately NOT a third hero call to action — the nav carries it.
+    // By CSS, not by role: a closed <details> is out of the accessibility
+    // tree, and "in the markup with the menu closed" is the claim.
+    const inMainMenu = siteBar.locator('nav[aria-label="Main"] a[href="/submit"]');
+    await expect(inMainMenu).toBeAttached({ timeout: 20_000 });
+    await siteBar.locator('summary[aria-label="Main menu"]').click();
+    await expect(inMainMenu).toBeVisible();
+    await expect(inMainMenu).toHaveText("Submit track");
+    // Deliberately NOT a third hero call to action — the bar carries it.
     await expect(page.locator('.hero-cta a[href="/submit"]')).toHaveCount(0);
+
+    // A content page below Home: the title's menu.
+    await page.goto(`${BASE_URL}/about`);
+    const inTitleMenu = siteBar.locator('nav[aria-label="Pages"] a[href="/submit"]');
+    await expect(inTitleMenu).toBeAttached({ timeout: 20_000 });
+    await siteBar.locator('summary[aria-label$=": go to another page"]').click();
+    await expect(inTitleMenu).toBeVisible();
+    await expect(inTitleMenu).toHaveText("Submit track");
+
+    // The app. A top-level page: the main menu.
+    await page.goto(`${BASE_URL}/comp`);
+    await page.getByRole("button", { name: "Main menu" }).click();
+    const row = page.getByRole("menuitem", { name: "Submit track", exact: true });
+    await expect(row).toBeVisible();
+    await expect(row).toHaveAttribute("href", "/submit");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menuitem")).toHaveCount(0);
+
+    // A page below one: "Elsewhere" in the title's menu.
+    await page.goto(`${BASE_URL}/comp/${fixture.compId}`);
+    await page
+      .getByRole("button", { name: `${fixture.compName}: go to another page` })
+      .click();
+    const elsewhere = page.getByRole("group", { name: "Elsewhere" });
+    await expect(elsewhere.getByRole("menuitem", { name: "Submit track", exact: true })).toHaveAttribute(
+      "href",
+      "/submit"
+    );
   });
 
   test("a linked task names itself, and can still be changed", async ({ page }) => {
