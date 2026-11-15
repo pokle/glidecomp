@@ -365,17 +365,54 @@ it, and reading a failure means knowing which one spoke:
   cases where restarting would only hide the real message: a session that never
   bound the port at all, ports something else still holds, and more than
   `DEV_WORKERS_MAX_RESTARTS` (10) deaths.
-- Every test waits for `/__ready` before it starts (`e2e/fixtures/test.ts` — this
-  is why specs import `test`/`expect` from there and **not** from
-  `@playwright/test`). A test scheduled into the restart gap waits it out
-  instead of asserting against a closed port, and the wait is added back to that
-  test's timeout.
+- Every test, and every `beforeAll` and `afterAll` hook, waits for `/__ready`
+  before it starts (`e2e/fixtures/test.ts` — this is why specs import
+  `test`/`expect` from there and **not** from `@playwright/test`). Anything
+  scheduled into the restart gap waits it out instead of asserting against a
+  closed port. The wait has a timeout of its own, so it never comes out of the
+  test's or the hook's budget.
+  - The hooks are covered on purpose. A plain auto fixture reaches only tests:
+    Playwright runs a file's `beforeAll` before any test-scoped fixture, and
+    29 specs have one, most of which sign in and build a competition over the
+    API. CI run
+    43686074965 lost a shard to that gap. Wrangler died inside
+    `task-scores-admin.spec.ts`'s `beforeAll`, and the retry's `beforeAll` ran
+    into the restart a second later and failed too. The fixture now uses
+    `auto: "all-hooks-included"`, the mode Playwright's own trace recording
+    uses. That mode is missing from Playwright's public types, so
+    `e2e/stack-wait.spec.ts` fails if an upgrade stops honouring it.
+  - A worker-scoped fixture would not do. With `workers: 1` the worker is
+    reused from file to file, so it waits before the first file's hooks only,
+    and again only after a failure replaces the worker.
+  - What stays exposed is a crash in the MIDDLE of a test or hook. That attempt
+    fails, because a request that was already lost cannot succeed, and the
+    retry gets the live stack. A test that polls an API in a loop can call
+    `waitForStack()` itself, as `explain-affordance.spec.ts` does.
 - The reporter interrupts the run only if the stack **stays** down. If it
   recovers, the reporter prints what happened and lets `retries: 1` re-run the
   one casualty against the live stack.
 
 So a `dev-workers:` banner or a `[stack]` line in an otherwise green run is not
 noise: it means the workaround fired, and it stays printed on purpose.
+
+**To check the recovery yourself,** send SIGTERM to the
+`wrangler-dist/cli.js dev` process (not to `dev-workers.sh`) while a spec runs,
+with `--retries=1`. Wrangler shuts down as it does after its own fatal error,
+the supervisor prints its banner, and the run should end with a flaky test, not
+a failed one. Killed between two files, it should not fail at all: the next
+file's `beforeAll` prints a `[stack]` line and waits.
+
+**What severs the connection is not known yet, and it is not a closing page.**
+The e2e frontend server (`web/scripts/e2e-serve-dist.ts`) reads each proxied
+request and its answer in full, so a browser that gives up on a request never
+cuts it off at wrangler's end. In CI run 43686074965, the request that got
+`Error: Network connection lost.` back was a track upload whose client was
+still waiting for the answer. Both crashes in that run fell inside
+`createScoredComp`'s burst of uploads (`e2e/fixtures/scored-comp.ts`), and
+each upload starts a recompute of the task's scores in the background. That
+burst is a lead, not a finding. It did not reproduce locally, even under CPU
+load, and CI keeps no request log to check it against: wrangler prints its
+requests to stdout, which Playwright's `webServer` discards.
 
 **Every failing spec passing in isolation** is the tell for shared-state trouble.
 The e2e suite writes to the *persistent* local D1 (`web/.wrangler/state`), so

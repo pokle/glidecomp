@@ -59,9 +59,9 @@ interface Options {
 
 /**
  * How long to give the supervisor to bring the Workers back. Matches the
- * per-test wait in e2e/fixtures/test.ts — the two are watching the same restart,
- * and a reporter that gave up sooner would interrupt a run the tests were still
- * happily waiting out.
+ * wait before each test and hook in e2e/fixtures/test.ts — the two are watching
+ * the same restart, and a reporter that gave up sooner would interrupt a run the
+ * tests were still happily waiting out.
  */
 const RECOVERY_TIMEOUT_MS = 90_000;
 const POLL_INTERVAL_MS = 1_000;

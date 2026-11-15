@@ -175,6 +175,7 @@ export const E2E_SHARDS = {
     "static-pages.spec.ts", // 5.1s
     "search.spec.ts", // 4.6s
     "transient-api-failure.spec.ts", // 4.5s
+    "stack-wait.spec.ts", // new — the stack wait reaches hooks; ~0s, chromium only
     "not-found-suggestions.spec.ts", // 4.4s
     "last-used-sign-in.spec.ts", // 3.8s
     "api-doc.spec.ts", // 2.3s
