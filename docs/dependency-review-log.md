@@ -4,6 +4,120 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-11-15
+
+**`bun audit` opens and closes at 1 high, the same test-only
+`zod@3.25.76` as the last three weeks.** The headline is **Node 22.23.5**, a
+security release (2026-11-11) with eight high-severity CVEs in http2 and TLS.
+`.node-version`, the `Containerfile` and `engines.node` move together. Every
+package bump is a patch or an additive minor, and no source change was needed.
+
+### Security Vulnerabilities Fixed
+
+| Advisory | Severity | What was patched |
+|----------|----------|------------------|
+| Node 22.23.5 (CVE-2026-123863 … 123877) | 8 high, 7 medium, 3 low | http2 stream/buffer lifetime, nested HTTP parser execution, TLS resumption and SNI changes, proxy credentials in errors, llhttp 9.4.4. `.node-version` 22.23.4 → 22.23.5 (CI's `setup-node`), `Containerfile` `node:22.23.5-slim`, root `engines.node` `>=22.23.5`. |
+
+None new in `bun audit`. better-auth and hono carry hardening that no advisory
+names (see the table below).
+
+**Open, and not reachable:**
+
+| Advisory | Severity | Package | Why it stays |
+|----------|----------|---------|--------------|
+| [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) | high | `zod@3.25.76` | Unchanged: pinned exactly by `@cloudflare/vitest-pool-workers@0.19.1`, test runner only. It leaves with the wrangler cap. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **Node** | 22.23.4 | 22.23.5 | CI, Containerfile, root `engines` | Security release (above). astro 7.4.12's floor is still `>=22.23.4`, so the new Node satisfies it. |
+| **better-auth**, **@better-auth/api-key**, **@better-auth/mcp** | 1.7.18 | 1.7.25 | frontend, auth-api | Fixes only. The ones that touch us: on Workers, consuming a verification value (email OTP) no longer hangs when an earlier request for the same identifier ended mid-query (1.7.22); revoking the current session now expires its cookies (1.7.22); schema validation is deferred to first use (1.7.22; ours is off, `validateSchema: false`); a sign-up verification email is sent after the user is saved, and a throwing `sendVerificationEmail` is logged rather than failing the sign-up (1.7.21); expired verification rows are swept at most once a minute (1.7.24); thrown errors keep `Access-Control-Expose-Headers` (1.7.25). **No schema change:** `@better-auth/core`'s `db/get-tables.mjs` differs only in bundler comments, and the api-key plugin's field declarations are identical. |
+| **hono** | 4.13.17 | 4.13.18 | frontend, airscore-api, auth-api, competition-api + root override | Dist diff (no changelog): `mount()` rejects `..`/`%2e` in the mounted path with 400 and rejects optional-regex params; `bodyLimit` buffers into one growing array; `serveStatic` refuses `%` unless the decoded filename matches. We use none of `mount()`/`serveStatic`. |
+| **kysely** | 0.28.19 | 0.28.20 | auth-api + root override | Migrator only: recorded execution timestamps never go backwards. We do not use kysely's migrator. |
+| **mapbox-gl** | 3.34.2 | 3.35.0 | root, frontend | Faster polygon triangulation, `setMinzoom`/`setMaxzoom` on sources, fixes. **CSP:** counts of `WebAssembly.` (27), `new Function` (0) and `eval(` (0) across `dist/*.js` are identical to 3.34.2. |
+| **astro** | 7.4.7 | 7.4.12 | frontend (dev) | Fixes: forwarded-header validation for `security.allowedDomains`, 400 on malformed percent-encoding, lower build memory, `@astrojs/*` deps unpinned to `^`. Node floor unchanged at `>=22.23.4`. |
+| vite | 8.3.6 | 8.3.8 | frontend + root override | Fixes; rolldown 1.1.1. |
+| @vitejs/plugin-react | 6.2.1 | 6.3.0 | frontend (dev) | `reactCompilerPreset` by module path (unused here). |
+| @playwright/test | 1.65.0 | 1.65.1 | root (dev) | Patch. |
+| lucide-react | 1.70.0 | 1.73.0 | frontend | 111 names added, none removed (export lists compared). |
+| dompurify | 3.4.17 | 3.4.18 | frontend | Patch. |
+| jose | 6.2.16 | 6.2.17 | competition-api (dev), shared | Patch. |
+| `anthropics/claude-code-action` | v1.0.269 | v1.0.276 | `.github/workflows/claude.yml` | Re-pinned to the peeled commit `f3b070c8…`. The other six actions are at the newest release in their major line. |
+
+### Code Changes Required
+
+None.
+
+### Overrides Added / Updated / Removed
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `hono` `^4.13.17` → `^4.13.18` | Updated | Aligned with the workspaces. |
+| `kysely` `^0.28.19` → `^0.28.20` | Updated | Aligned with auth-api. |
+| `vite` `^8.3.6` → `^8.3.8` | Updated | Aligned with the frontend. |
+
+Every override matches exactly one package key in `bun.lock` (a grep per
+override).
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **wrangler** | 4.116.0 | 4.162.0 | Still capped (16 cycles). `wrangler@4.162.0` depends on `miniflare 5.20261113.0-beta`; miniflare's `latest` is still 4.20260730.0. |
+| @cloudflare/vitest-pool-workers, **vitest** 5 | 0.19.1, 4.1.12 | 0.23.0, 5.1.0 | Paired with the wrangler cap. Also holds the last `zod@3.25.76`. |
+| **@astrojs/mdx** | 7.0.8 | 8.1.6 | Still vestigial. It wants its own PR to delete it. |
+| **three**, **@types/three** | 0.185.x | 0.187.0 | Pre-1.0 minor (two); focused PR. |
+| **katex** | 0.18.11 | 0.19.1 | Pre-1.0 minor; focused PR. |
+| kysely 0.29 | 0.28.20 | 0.29.9 | Pre-1.0 minor; `kysely-d1@0.4.0` (patched) is written against 0.28. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20261115.1 | Major. |
+| jsdom, concurrently 10, @types/node 26 | — | 31.0.1, 10.0.7, 26.6.6 | Majors. Reasons unchanged from 2026-09-27. |
+
+### Verification
+
+All on Node 22.23.5 (nodejs.org tarball, checked against `SHASUMS256.txt`,
+first on `PATH` for the whole chain, e2e included).
+
+- `bun run typecheck:all` and `bun run --filter '@glidecomp/frontend' typecheck`:
+  clean.
+- `bun run test:all`: 1907 root/engine/airscore/dev-router/mcp-api, 1473
+  frontend, 249 auth-api (6 todo), 967 competition-api. 0 fail.
+- `bun run build`: clean, 10 Astro pages.
+- `bun run test:e2e:ssr`: **96/96 passed** in 1.5 minutes, run first and from
+  a fresh state.
+- `bun run test:e2e`: **434 passed, 1 skipped, 0 failed** in 15.9 minutes,
+  exit 0, on the first run (with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0`). No
+  wrangler `✘ [ERROR]` lines this time.
+- `bun audit`: 1 high before, 1 high after (the test-only `zod@3.25.76`).
+- `bun install` printed no `warn:` lines; both patches (`kysely-d1@0.4.0`,
+  `threebox-plugin@2.2.7`) still match the locked versions.
+- Root `package.json` `dependencies`: read first (the same three legitimate
+  entries). `git diff package.json` after the workspace `bun update`s showed
+  no change; the root edits are by hand (`mapbox-gl`, `@playwright/test`,
+  `engines.node`, the overrides above).
+- GitHub Actions: `git ls-remote --tags` for all seven; one re-pin.
+- Map-library bump: CSP grep done (above).
+
+### Lessons / Notes for Future Sessions
+
+- **better-auth's dist diffs are noisy this cycle for a reason that is not a
+  code change.** Their bundler stopped emitting `//#region`/`//#endregion`
+  comments and renamed its chunk hashes, so `diff -r` on a plugin's `dist`
+  prints hundreds of lines. The schema check still works: diff
+  `@better-auth/core`'s `dist/db/get-tables.mjs` (only the comment lines
+  differed), and for a plugin compare its field declarations
+  (`grep -oE 'type: "(string|number|boolean|date|json)"'` and the field
+  names) rather than the whole file.
+- **The vite "unsupported by `configLoader: 'native'`" warning in
+  `bun run build` is not new.** It is in vite 8.3.6 too. It names `__dirname`
+  in both vite configs and extensionless imports in `src/dev-routing.ts` and
+  `src/scores-csv.ts`. It matters only when vite makes the native loader the
+  default (a future major); fix it then, or in a focused PR.
+- **A Node security release lands mid-week.** 22.23.5 came out four days
+  before this cycle. The `nodejs.org/dist/index.json` check is what caught it;
+  nothing else in the tree would have.
+- **`cd <workspace> && bun update <pkgs>` behaved for an eleventh cycle.**
+
 ## 2026-11-08
 
 **`bun audit` opens and closes at 1 high, the same test-only
