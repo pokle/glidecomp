@@ -21,7 +21,6 @@ import { loadCorryongWaypoints } from './waypoint-loader';
 import { config, type UnitPreferences } from './config';
 import { formatAltitude, formatDistance, onUnitsChanged } from './units-browser';
 import { storage, AuthRequiredError, QuotaExceededError, gunzipResponse } from './storage';
-import { StorageMenu } from './storage-menu';
 import { fetchAirScoreTask, fetchAirScoreTrack } from './airscore-client';
 import { downloadTask } from './task-editor';
 
@@ -29,7 +28,7 @@ import { downloadTask } from './task-editor';
 import '../analysis.css';
 
 // Command palette behavior (vanilla, local)
-import { initCommandMenus } from './command-menu';
+import { compTrail, followPanel, MY_FLIGHTS, pulse, setPressed, setTrail, setupBarMenus } from './page-bar';
 import { installStaleDeployReload } from '../react/lib/stale-deploy';
 import { html, renderInto } from '../render-html';
 import { installDefaultTrustedTypesPolicy } from '../trusted-types';
@@ -86,7 +85,6 @@ function isOpenDistanceMode(): boolean {
 
 let mapRenderer: MapProvider | null = null;
 let analysisPanel: AnalysisPanel | null = null;
-let storageMenu: StorageMenu | null = null;
 let waypointDatabase: WaypointRecord[] = [];
 
 // Feature toggle state, keyed by URL parameter name
@@ -95,7 +93,6 @@ const featureState: Record<string, boolean> = {};
 /** Configuration for a single feature toggle in the command menu */
 interface FeatureToggleConfig {
   menuId: string;
-  statusId: string;
   urlParam: string;
   /** Whether the feature is on by default (affects URL param parsing) */
   defaultOn: boolean;
@@ -141,7 +138,6 @@ async function init(): Promise<void> {
   const eventPanelContainer = document.getElementById('event-panel-container');
   const igcFileInput = document.getElementById('igc-file') as HTMLInputElement;
   const dropZone = document.getElementById('drop-zone');
-  const commandDialog = document.getElementById('command-dialog') as HTMLDialogElement | null;
   const importTaskDialog = document.getElementById('import-task-dialog') as HTMLDialogElement | null;
   const importTaskInput = document.getElementById('import-task-input') as HTMLInputElement | null;
   const importAirscoreDialog = document.getElementById('import-airscore-dialog') as HTMLDialogElement | null;
@@ -153,7 +149,6 @@ async function init(): Promise<void> {
   const menuImportTask = document.getElementById('menu-import-task');
   const menuImportAirscore = document.getElementById('menu-import-airscore');
   const menuDownloadTask = document.getElementById('menu-download-task');
-  const showSpeedLabel = document.getElementById('show-speed-label');
 
   // Settings dialog
   const menuConfigureSettings = document.getElementById('menu-configure-settings');
@@ -177,8 +172,14 @@ async function init(): Promise<void> {
     return;
   }
 
-  // Wire the command palette (filtering, keyboard nav) on its static markup
-  initCommandMenus();
+  // The page bar: its two menus (page-bar.ts). The trail is My Flights until
+  // a competition task says otherwise (loadCompTask).
+  const barMenus = setupBarMenus();
+  setTrail([MY_FLIGHTS]);
+  // A debug tool for the map's label style, for development only.
+  if (import.meta.env.DEV) {
+    for (const el of document.querySelectorAll('[data-dev-only]')) el.classList.remove('hidden');
+  }
   wireCloseControls();
 
   /**
@@ -253,22 +254,6 @@ async function init(): Promise<void> {
   // Initialize storage and menu
   try {
     await storage.init();
-    storageMenu = new StorageMenu({
-      onTaskSelect: async (taskId) => {
-        commandDialog?.close();
-        updateUrlParam('task', null);
-        updateUrlParam('storedTask', taskId);
-        await loadStoredTask(taskId);
-      },
-      onTrackSelect: async (trackId) => {
-        commandDialog?.close();
-        updateUrlParam('track', null);
-        updateUrlParam('storedTrack', trackId);
-        await loadStoredTrack(trackId);
-      },
-    });
-    storageMenu.init();
-    await storageMenu.refresh();
   } catch (err) {
     console.warn('Failed to initialize storage:', err);
   }
@@ -279,7 +264,6 @@ async function init(): Promise<void> {
   const featureToggles: FeatureToggleConfig[] = [
     {
       menuId: 'menu-3d-track',
-      statusId: '3d-track-status',
       urlParam: '3d',
       defaultOn: false,
       isSupported: (map) => map.supports3D,
@@ -288,14 +272,12 @@ async function init(): Promise<void> {
     },
     {
       menuId: 'menu-toggle-task',
-      statusId: 'task-visibility-status',
       urlParam: 'task-visible',
       defaultOn: true,
       apply: (map, enabled) => map.setTaskVisibility(enabled),
     },
     {
       menuId: 'menu-toggle-track',
-      statusId: 'track-visibility-status',
       urlParam: 'track-visible',
       defaultOn: true,
       apply: (map, enabled) => map.setTrackVisibility(enabled),
@@ -303,14 +285,10 @@ async function init(): Promise<void> {
     },
     {
       menuId: 'menu-show-speed',
-      statusId: 'show-speed-status',
       urlParam: 'speed',
       defaultOn: false,
       apply: (map, enabled) => map.setSpeedOverlay(enabled),
       onToggle: (enabled) => {
-        if (showSpeedLabel) {
-          showSpeedLabel.textContent = enabled ? 'Hide track metrics' : 'Show track metrics';
-        }
         // Clear glide segment selection when enabling speed overlay
         if (enabled) {
           analysisPanel?.clearSelection();
@@ -321,11 +299,10 @@ async function init(): Promise<void> {
 
   for (const toggle of featureToggles) {
     const menuEl = document.getElementById(toggle.menuId);
-    const statusEl = document.getElementById(toggle.statusId);
 
     // If the feature requires provider support and it's missing, hide the menu item
     if (toggle.isSupported && !toggle.isSupported(mapRenderer)) {
-      if (menuEl) menuEl.style.display = 'none';
+      if (menuEl) (menuEl.closest('li') ?? menuEl).classList.add('hidden');
       continue;
     }
 
@@ -337,7 +314,7 @@ async function init(): Promise<void> {
       ? paramValue !== '0'   // on-by-default: only '0' disables
       : paramValue === '1';  // off-by-default: only '1' enables
     featureState[toggle.urlParam] = enabled;
-    updateFeatureStatus(statusEl, enabled);
+    setPressed(menuEl, enabled);
 
     // Apply initial state to provider
     toggle.apply(mapRenderer, enabled);
@@ -351,7 +328,7 @@ async function init(): Promise<void> {
     menuEl.addEventListener('click', () => {
       const newState = !featureState[toggle.urlParam];
       featureState[toggle.urlParam] = newState;
-      updateFeatureStatus(statusEl, newState);
+      setPressed(menuEl, newState);
 
       if (mapRenderer) toggle.apply(mapRenderer, newState);
 
@@ -369,38 +346,31 @@ async function init(): Promise<void> {
       updateUrlParam(toggle.urlParam, urlValue);
 
       toggle.onToggle?.(newState);
-      commandDialog?.close();
     });
   }
 
   // Annotation mode toggle
-  const annotateStatusEl = document.getElementById('annotate-status');
+  const annotateRow = document.getElementById('menu-annotate');
 
   function toggleAnnotation() {
     const layer = mapRenderer?.getAnnotationLayer();
     if (!layer) return;
     const newState = !layer.isEnabled();
     layer.setEnabled(newState);
-    if (annotateStatusEl) {
-      annotateStatusEl.textContent = newState ? '(on) D' : '(off) D';
-    }
+    setPressed(annotateRow, newState);
   }
 
   // Sync menu status when annotation is toggled via the map button
   mapRenderer?.getAnnotationLayer()?.onToggle((on) => {
-    if (annotateStatusEl) {
-      annotateStatusEl.textContent = on ? '(on) D' : '(off) D';
-    }
+    setPressed(annotateRow, on);
   });
 
-  document.getElementById('menu-annotate')?.addEventListener('click', () => {
+  annotateRow?.addEventListener('click', () => {
     toggleAnnotation();
-    commandDialog?.close();
   });
 
   // Text Shadow Tuner (debug tool for label styling)
   document.getElementById('menu-text-shadow-tuner')?.addEventListener('click', () => {
-    commandDialog?.close();
     // Remove existing tuner if re-opened
     document.getElementById('ts-tuner-panel')?.remove();
 
@@ -514,7 +484,6 @@ async function init(): Promise<void> {
 
   // Open settings dialog
   menuConfigureSettings?.addEventListener('click', () => {
-    commandDialog?.close();
     populateSettingsDialog();
     settingsDialog?.showModal();
   });
@@ -535,18 +504,18 @@ async function init(): Promise<void> {
            What-if analysis only — these settings affect just this page's score table.
          </div>`;
     const helpLink = (hash: string, text: string, heading = false) =>
-      html`<a href="/scoring-gap.html#${hash}" target="_blank" rel="noopener noreferrer" class="text-sm ${heading ? 'font-medium' : 'text-muted-foreground'} hover:text-foreground inline-flex items-center gap-0.5">${text} <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>`;
+      html`<a href="/scoring-gap.html#${hash}" target="_blank" rel="noopener noreferrer" class="touch-target text-sm ${heading ? 'font-medium' : 'text-muted-foreground'} hover:text-foreground inline-flex items-center gap-0.5">${text} <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>`;
     renderInto(competitionSettingsContent, html`
       <form id="competition-settings-form" class="space-y-4">
         ${whatIfNotice}
         <div class="space-y-3">
           ${helpLink('what-is-gap', 'Scoring Type', true)}
           <div class="flex gap-4">
-            <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+            <label class="flex items-center gap-1.5 text-sm cursor-pointer pointer-coarse:min-h-11">
               <input type="radio" name="gap-scoring" value="HG" ?checked=${params.scoring === 'HG'} class="accent-primary">
               Hang Gliding
             </label>
-            <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+            <label class="flex items-center gap-1.5 text-sm cursor-pointer pointer-coarse:min-h-11">
               <input type="radio" name="gap-scoring" value="PG" ?checked=${params.scoring === 'PG'} class="accent-primary">
               Paragliding
             </label>
@@ -573,11 +542,11 @@ async function init(): Promise<void> {
 
         <div class="space-y-2">
           <label class="text-sm font-medium">Point Categories</label>
-          <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+          <label class="flex items-center gap-1.5 text-sm cursor-pointer pointer-coarse:min-h-11">
             <input type="checkbox" id="gap-use-leading" ?checked=${params.useLeading} class="accent-primary">
             <a href="/scoring-gap.html#leading-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Leading (departure) points</a>
           </label>
-          <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+          <label class="flex items-center gap-1.5 text-sm cursor-pointer pointer-coarse:min-h-11">
             <input type="checkbox" id="gap-use-arrival" ?checked=${params.useArrival} class="accent-primary">
             <a href="/scoring-gap.html#arrival-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Arrival points (HG only)</a>
           </label>
@@ -622,7 +591,6 @@ async function init(): Promise<void> {
   }
 
   function openCompetitionSettings(): void {
-    commandDialog?.close();
     populateCompetitionSettings();
     competitionSettingsDialog?.showModal();
   }
@@ -641,7 +609,6 @@ async function init(): Promise<void> {
 
   // Clear current task and track (reset to initial state)
   menuClearSession?.addEventListener('click', () => {
-    commandDialog?.close();
 
     // Clear state
     state.igcFile = null;
@@ -667,8 +634,7 @@ async function init(): Promise<void> {
     // Reset speed overlay state (must call setSpeedOverlay to clear provider flag)
     featureState['speed'] = false;
     mapRenderer?.setSpeedOverlay(false);
-    updateFeatureStatus(document.getElementById('show-speed-status'), false);
-    if (showSpeedLabel) showSpeedLabel.textContent = 'Show track metrics';
+    setPressed(document.getElementById('menu-show-speed'), false);
     updateUrlParam('speed', null);
 
     // Clear analysis panel
@@ -844,9 +810,14 @@ async function init(): Promise<void> {
 
   /** Keep the drag handle pinned to the sidebar's left edge */
   function syncHandlePosition(): void {
-    if (!resizeHandle || !sidebar) return;
-    resizeHandle.style.right = sidebar.style.width;
+    if (!sidebar) return;
+    // The bar keeps clear of the panel, and its Analysis button says whether it is open.
+    followPanel(sidebar.style.width, sidebar.getAttribute('aria-hidden') === 'false');
+    if (resizeHandle) resizeHandle.style.right = sidebar.style.width;
   }
+
+  // The bar follows the panel only on a wide screen: re-check when the width changes.
+  window.addEventListener('resize', syncHandlePosition);
 
   // Set up sidebar toggle for mobile
   if (sidebar && sidebarBackdrop) {
@@ -1043,12 +1014,10 @@ async function init(): Promise<void> {
     analysisPanel?.addTurnpoint(lat, lon);
   });
 
-  // Wire native map control buttons
-  mapRenderer.onMenuButtonClick(() => {
-    commandDialog?.showModal();
-  });
-  mapRenderer.onPanelToggleClick(() => {
-    analysisPanel?.show();
+  // The bar's Analysis button opens and closes the side panel
+  document.getElementById('analysis-toggle')?.addEventListener('click', () => {
+    if (analysisPanel?.isHidden()) analysisPanel.show();
+    else analysisPanel?.hide();
   });
 
   // Close button inside the sidebar panel
@@ -1058,12 +1027,14 @@ async function init(): Promise<void> {
 
   // First-visit tooltip on Analysis button
   if (!localStorage.getItem('glidecomp-seen-analysis-hint')) {
-    // Find the panel toggle button container in the DOM (top-right control)
-    const panelToggleContainer = document.querySelector('.mapboxgl-ctrl-top-right .mapboxgl-ctrl:first-child');
+    // Under the bar's Analysis button
+    const panelToggleContainer = document.getElementById('analysis-toggle');
     if (panelToggleContainer) {
       (panelToggleContainer as HTMLElement).style.position = 'relative';
       const tooltip = document.createElement('div');
       tooltip.className = 'analysis-tooltip';
+      // A hint for the eye, not part of the button's name.
+      tooltip.setAttribute('aria-hidden', 'true');
       tooltip.textContent = 'View flight analysis here';
       panelToggleContainer.appendChild(tooltip);
 
@@ -1114,23 +1085,20 @@ async function init(): Promise<void> {
 
   // Feedback menu item opens mailto link
   menuFeedback?.addEventListener('click', () => {
-    commandDialog?.close();
     window.location.href = 'mailto:tushar.pokle@gmail.com?subject=GlideComp%20Feedback%20for%20you';
   });
 
   // Download task menu item
   menuDownloadTask?.addEventListener('click', () => {
-    commandDialog?.close();
     if (state.task) downloadTask(state.task);
   });
 
   function updateDownloadTaskVisibility(): void {
-    menuDownloadTask?.classList.toggle('hidden', !state.task);
+    menuDownloadTask?.closest('li')?.classList.toggle('hidden', !state.task);
   }
 
   // Open IGC menu item triggers hidden file input
   menuOpenIgc?.addEventListener('click', () => {
-    commandDialog?.close();
     igcFileInput?.click();
   });
 
@@ -1170,7 +1138,6 @@ async function init(): Promise<void> {
   document.addEventListener('drop', async (e) => {
     e.preventDefault();
     dropZone?.classList.remove('drag-over');
-    commandDialog?.close();
 
     const files = e.dataTransfer?.files;
     if (!files?.length) return;
@@ -1200,7 +1167,6 @@ async function init(): Promise<void> {
 
   // Import task menu item -> opens import dialog
   menuImportTask?.addEventListener('click', () => {
-    commandDialog?.close();
     if (importTaskInput) {
       importTaskInput.value = '';
     }
@@ -1226,7 +1192,6 @@ async function init(): Promise<void> {
 
   // Import AirScore menu item -> opens AirScore dialog
   menuImportAirscore?.addEventListener('click', () => {
-    commandDialog?.close();
     if (importAirscoreInput) {
       importAirscoreInput.value = '';
     }
@@ -1258,11 +1223,7 @@ async function init(): Promise<void> {
 
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault();
-      if (commandDialog?.open) {
-        commandDialog.close();
-      } else {
-        commandDialog?.showModal();
-      }
+      barMenus.toggleMore();
       return;
     }
     // Cmd+, (or Ctrl+,) opens settings
@@ -1324,7 +1285,7 @@ async function init(): Promise<void> {
       if (e.key === 'Escape' || e.key === 'v' || e.key === 'V') {
         e.preventDefault();
         layer.setEnabled(false);
-        if (annotateStatusEl) annotateStatusEl.textContent = '(off) D';
+        setPressed(annotateRow, false);
         return;
       }
     }
@@ -1417,7 +1378,7 @@ async function init(): Promise<void> {
     analysisPanel?.setAltitudes(igcFile.fixes.map(f => f.gnssAltitude), igcFile.fixes.map(f => f.time));
 
     // Pulse the Analysis button to draw attention to the newly available data
-    mapRenderer?.highlightPanelToggle();
+    pulse(document.getElementById('analysis-toggle'));
   }
 
   /**
@@ -1479,7 +1440,6 @@ async function init(): Promise<void> {
     if (shouldStore && storage.isAvailable()) {
       try {
         const id = await storage.storeTrack(filename, content, igcFile);
-        await storageMenu?.refresh();
         updateUrlParam('storedTrack', id);
         updateUrlParam('track', null);
         setAnnotationTrack(id);
@@ -1534,7 +1494,6 @@ async function init(): Promise<void> {
         if (!skipStorage && storage.isAvailable()) {
           try {
             await storage.storeTrack(file.name, content, igcFile);
-            await storageMenu?.refresh();
           } catch (err) {
             handlePersistError(err, 'track');
           }
@@ -1807,41 +1766,15 @@ async function init(): Promise<void> {
    * When pilotId is given, that pilot is pre-focused: their track (with event
    * markers) on the map, while the score table keeps the full field.
    */
-  /**
-   * Append "› comp › task" links to the top-center breadcrumb bar so a
-   * shared analysis link (this is a common way flights get shared) leads
-   * back into the competition, not just to the GlideComp home page.
-   */
-  function appendCompBreadcrumbs(
-    compId: string,
-    taskId: string,
-    compName: string | null,
-    taskName: string | null
-  ): void {
-    const nav = document.getElementById('breadcrumbs');
-    if (!nav) return;
-    const crumbs = [
-      { label: compName ?? 'Competition', href: `/comp/${encodeURIComponent(compId)}` },
-      {
-        label: taskName ?? 'Task',
-        href: `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}`,
-      },
-    ];
-    for (const c of crumbs) {
-      nav.appendChild(document.createTextNode('›'));
-      const a = document.createElement('a');
-      a.href = c.href;
-      a.textContent = c.label;
-      a.className = 'min-w-0 max-w-40 truncate hover:underline underline-offset-4';
-      nav.appendChild(a);
-    }
-  }
-
   async function loadCompTask(
     compId: string,
     taskId: string,
     pilotId: string | null
   ): Promise<void> {
+    // The bar's links work at once, under generic names that name nothing:
+    // a hidden comp's task says not-found below without naming the comp.
+    const pilot = pilotId ? { id: pilotId, name: null } : undefined;
+    setTrail(compTrail(compId, null, taskId, null, pilot));
     try {
       showStatus('Loading competition task...', 'info');
       const taskBase = `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}`;
@@ -1895,7 +1828,13 @@ async function init(): Promise<void> {
         compGap = comp.gap_params ?? {};
         state.compScoringFormat = comp.scoring_format === 'open_distance' ? 'open_distance' : 'gap';
       }
-      appendCompBreadcrumbs(compId, taskId, compName, taskDetail.name ?? null);
+      // The task resolved: name the trail. With a pilot, Back is their report card.
+      const pilotName = pilotId
+        ? trackList.find((t) => t.comp_pilot_id === pilotId)?.pilot_name ?? null
+        : null;
+      setTrail(
+        compTrail(compId, compName, taskId, taskDetail.name ?? null, pilot && { id: pilot.id, name: pilotName }),
+      );
       const { nominalDistance, ...gapParameters } = compGap;
       let nominalDistancePct = 70;
       if (state.task) {
@@ -1996,7 +1935,6 @@ async function init(): Promise<void> {
         if (storage.isAvailable()) {
           try {
             await storage.storeTask(code, task, result.rawJson);
-            await storageMenu?.refresh();
           } catch (err) {
             handlePersistError(err, 'task');
           }
@@ -2195,14 +2133,6 @@ async function init(): Promise<void> {
     window.history.replaceState({}, '', newUrl);
   }
 
-  /**
-   * Update feature status text in command menu
-   */
-  function updateFeatureStatus(element: HTMLElement | null, enabled: boolean): void {
-    if (element) {
-      element.textContent = enabled ? '(on)' : '(off)';
-    }
-  }
 
   // Sample flights
   const sampleFiles: Record<string, string> = {
@@ -2292,7 +2222,7 @@ async function init(): Promise<void> {
 
   // If no task or track was loaded, open the command menu to guide users
   if (!params.get('task') && !params.get('track') && !params.get('storedTrack') && !params.get('storedTask') && !params.get('sampleComp') && !params.get('compId') && params.get('shared') !== '1' && !state.igcFile && !state.task) {
-    commandDialog?.showModal();
+    barMenus.openMore();
   }
 
   /**

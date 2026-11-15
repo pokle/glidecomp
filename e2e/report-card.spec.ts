@@ -319,10 +319,16 @@ test.describe("the pilot report card", () => {
       // Not bounced. This is the assertion the whole issue is about.
       await expect(page).toHaveURL(/\/analysis\?compId=/);
 
-      // The task arrived: the breadcrumbs are only built once it resolved.
+      // The task arrived: the bar's trail is only named once it resolved,
+      // and with a pilot in the link, Back is that pilot's report card.
       await expect(page.locator("#breadcrumbs")).toContainText("Task 4", {
         timeout: 60_000,
       });
+      await expect(page.locator("#breadcrumbs")).toContainText(cardPilot.pilot_name);
+      await expect(page.getByRole("link", { name: `Back to ${cardPilot.pilot_name}` })).toHaveAttribute(
+        "href",
+        new RegExp(`/task/[^/]*${fixture.taskId}/pilot/[^/]*${cardPilot.comp_pilot_id}$`),
+      );
 
       // And the pilot's track was parsed and analysed, under their registered
       // name rather than whatever the IGC header says.
@@ -333,13 +339,13 @@ test.describe("the pilot report card", () => {
 
       // All six single-track tabs — the tooling the report card does not have.
       // The panel is a sidebar over the map, collapsed to zero width until the
-      // reader opens it from the "Analysis" control. Collapsed is not the same
+      // reader opens it from "Analysis" in the page bar. Collapsed is not the same
       // as absent: it keeps its markup (and enough of a box to look "visible"
       // to a bounding-box check), so its own `aria-hidden` is what says
       // whether it is open.
       const panel = page.locator("#waypoint-sidebar");
       if ((await panel.getAttribute("aria-hidden")) !== "false") {
-        await page.getByRole("button", { name: "Toggle analysis panel" }).click();
+        await page.getByRole("button", { name: "Analysis", exact: true }).click();
       }
       await expect(panel).toHaveAttribute("aria-hidden", "false");
       const tabs = page.locator("#tab-row-single");
@@ -420,9 +426,9 @@ test.describe("the pilot report card", () => {
         );
 
         // And nothing about the competition leaked on the way to saying so:
-        // the breadcrumbs are built only after the task resolved, and the
-        // title is the page's own.
-        await expect(page.locator("#breadcrumbs")).toHaveText("GlideComp");
+        // the bar's trail keeps its generic names until the task resolves,
+        // and the title is the page's own.
+        await expect(page.locator("#breadcrumbs li")).toHaveText(["Competitions", "Competition", "Task", "Map"]);
         expect(await page.locator("body").innerText()).not.toContain(name);
         expect(await page.title()).not.toContain(name);
         expect(await page.title()).not.toContain("Secret task");

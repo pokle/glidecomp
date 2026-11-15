@@ -284,7 +284,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     <!-- Flight info banner -->
     <div class="flex items-start gap-2 border-b border-border bg-muted/50 pl-4 pr-[10px] py-[10px] text-sm">
       <div class="flight-info-content text-muted-foreground flex-1 min-w-0 pt-1">Load an IGC file to see flight info</div>
-      <button type="button" id="sidebar-close" class="shrink-0" style="display:flex;align-items:center;justify-content:center;width:29px;height:29px;border:none;border-radius:4px;background:#fff;cursor:pointer;box-shadow:0 0 0 2px rgba(0,0,0,.1);" title="Close panel" aria-label="Close panel">
+      <button type="button" id="sidebar-close" class="shrink-0 touch-target" style="display:flex;align-items:center;justify-content:center;width:29px;height:29px;border:none;border-radius:4px;background:#fff;cursor:pointer;box-shadow:0 0 0 2px rgba(0,0,0,.1);" title="Close panel" aria-label="Close panel">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
       </button>
     </div>
@@ -451,7 +451,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       const pct = ((val - minAlt) / range) * 100;
       // pct=0 is bottom, pct=100 is top; CSS bottom percentage
       const label = document.createElement('div');
-      label.style.cssText = `position: absolute; right: 2px; bottom: ${pct}%; transform: translateY(50%); font-size: 9px; line-height: 1; color: var(--color-muted-foreground); display: flex; align-items: center; gap: 1px;`;
+      label.style.cssText = `position: absolute; right: 2px; bottom: ${pct}%; transform: translateY(50%); font-size: 11px; line-height: 1; color: var(--color-muted-foreground); display: flex; align-items: center; gap: 1px;`;
       const fv = formatAltitude(val);
       renderInto(label, html`<span>${fv.formatted}</span><span style="width: 4px; height: 1px; background: var(--color-muted-foreground); display: inline-block; flex-shrink: 0;"></span>`);
       sparklineYAxis.appendChild(label);
@@ -484,7 +484,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       if (tickMs < startMs) continue;
       const pct = ((tickMs - startMs) / durationMs) * 100;
       const label = document.createElement('div');
-      label.style.cssText = `position: absolute; left: ${pct}%; top: 0; transform: translateX(-50%); font-size: 9px; line-height: 1; color: var(--color-muted-foreground); display: flex; flex-direction: column; align-items: center;`;
+      label.style.cssText = `position: absolute; left: ${pct}%; top: 0; transform: translateX(-50%); font-size: 11px; line-height: 1; color: var(--color-muted-foreground); display: flex; flex-direction: column; align-items: center;`;
       const tickDate = new Date(tickMs);
       renderInto(label, html`<span style="width: 1px; height: 4px; background: var(--color-muted-foreground); display: block;"></span><span>${formatTimeShort(tickDate)}</span>`);
       sparklineXAxis.appendChild(label);
@@ -1449,7 +1449,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         ? html`<span class="text-caution" title="Never left the take-off cylinder — open distance is measured from the cylinder exit, so this flight scores 0">*</span>`
         : nothing;
       return html`<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
-        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot=${ps.pilotName} ?checked=${isChecked}></td>
+        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><label class="touch-target inline-flex align-middle"><input type="checkbox" class="comp-pilot-cb accent-primary" aria-label="Show ${ps.pilotName}" data-pilot=${ps.pilotName} ?checked=${isChecked}></label></td>
         <td class="px-2 py-1.5 text-right font-medium tabular-nums sticky left-[28px] z-10 bg-background">${ps.rank}</td>
         <td class="px-2 py-1.5 truncate max-w-[140px] sticky left-[52px] z-10 bg-background after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" title=${ps.pilotName}>${ps.pilotName}</td>
         <td class="px-2 py-1.5 text-right font-medium tabular-nums">${formatDistance(ps.flownDistance).withUnit}${stayedMark}</td>
@@ -1473,7 +1473,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       <div class="rounded-lg border border-border overflow-x-auto overflow-y-hidden">
         <table class="text-sm">
           <thead class="bg-muted/50"><tr>
-            <th class="px-2 py-1.5 text-left font-medium sticky left-0 z-10 bg-muted/50"><input type="checkbox" id="comp-select-all" class="accent-primary" ?checked=${allSelected}></th>
+            <th class="px-2 py-1.5 text-left font-medium sticky left-0 z-10 bg-muted/50"><label class="touch-target inline-flex align-middle"><input type="checkbox" id="comp-select-all" class="accent-primary" aria-label="Show all pilots" ?checked=${allSelected}></label></th>
             <th class="px-2 py-1.5 text-right font-medium sticky left-[28px] z-10 bg-muted/50">#</th>
             <th class="px-2 py-1.5 text-left font-medium sticky left-[52px] z-10 bg-muted/50 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border">Pilot</th>
             <th class="px-2 py-1.5 text-right font-medium" title="Straight-line distance from the take-off cylinder exit to the furthest point reached — this is the score">Scored</th>
@@ -1500,11 +1500,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     eventCountEl.textContent = `${result.pilotScores.length} pilots \u00b7 ${stats.numInGoal} in goal`;
 
     // Settings gear link
-    const settingsRow = html`<div class="flex justify-end gap-3"><a href="/scoring-gap.html" target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>How GAP works</a><button type="button" class="comp-settings-btn flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-0 p-0"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Scoring Config</button></div>`;
+    const settingsRow = html`<div class="flex justify-end gap-3"><a href="/scoring-gap.html" target="_blank" rel="noopener noreferrer" class="touch-target flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>How GAP works</a><button type="button" class="touch-target comp-settings-btn flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-0 p-0"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Scoring Config</button></div>`;
 
     // Helpers for linking to the scoring docs and formatting fractions.
     const docLink = (anchor: string, text: string) =>
-      html`<a href="/scoring-gap.html#${anchor}" target="_blank" rel="noopener noreferrer" class="underline decoration-dotted hover:text-foreground">${text}</a>`;
+      html`<a href="/scoring-gap.html#${anchor}" target="_blank" rel="noopener noreferrer" class="touch-target underline decoration-dotted hover:text-foreground">${text}</a>`;
     const pct1 = (n: number) => `${(n * 100).toFixed(1)}%`;
     const wPct = (n: number) => `${Math.round(n * 100)}%`;
 
@@ -1583,7 +1583,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     // Ranked scores table
     const allSelected = selectedPilots === null;
     const tableHead = html`<thead class="bg-muted/50"><tr>
-      <th class="px-2 py-1.5 text-left font-medium sticky left-0 z-10 bg-muted/50"><input type="checkbox" id="comp-select-all" class="accent-primary" ?checked=${allSelected}></th>
+      <th class="px-2 py-1.5 text-left font-medium sticky left-0 z-10 bg-muted/50"><label class="touch-target inline-flex align-middle"><input type="checkbox" id="comp-select-all" class="accent-primary" aria-label="Show all pilots" ?checked=${allSelected}></label></th>
       <th class="px-2 py-1.5 text-right font-medium sticky left-[28px] z-10 bg-muted/50">#</th>
       <th class="px-2 py-1.5 text-left font-medium sticky left-[52px] z-10 bg-muted/50 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border">Pilot</th>
       <th class="px-2 py-1.5 text-right font-medium">Dist</th>
@@ -1645,7 +1645,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         ? html`<span class="cursor-help underline decoration-dotted" title="${ps.distanceLinearPoints.toFixed(1)} linear + ${ps.distanceDifficultyPoints.toFixed(1)} difficulty">${ps.distancePoints.toFixed(1)}</span>`
         : ps.distancePoints.toFixed(1);
       return html`<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
-        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot=${ps.pilotName} ?checked=${isChecked}></td>
+        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><label class="touch-target inline-flex align-middle"><input type="checkbox" class="comp-pilot-cb accent-primary" aria-label="Show ${ps.pilotName}" data-pilot=${ps.pilotName} ?checked=${isChecked}></label></td>
         <td class="px-2 py-1.5 text-right font-medium tabular-nums sticky left-[28px] z-10 bg-background">${ps.rank}</td>
         <td class="comp-detail-toggle px-2 py-1.5 truncate max-w-[120px] sticky left-[52px] z-10 bg-background cursor-pointer select-none after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" data-pilot=${ps.pilotName} title="Show scoring breakdown for ${ps.pilotName}"><span class="comp-caret inline-block text-muted-foreground transition-transform">&#9656;</span> ${ps.pilotName}${goalIcon}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${formatDistance(ps.flownDistance).withUnit}${distMark}</td>
