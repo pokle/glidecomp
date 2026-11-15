@@ -69,6 +69,7 @@ import {
 import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
+import { ChartColumnIcon, MapIcon, QrCodeIcon, ShareIcon } from "lucide-react";
 import { underComp, taskSiblings, TASK_ANALYSIS_LABEL } from "../lib/crumbs";
 import { compUrlId, idFromSegment, compPath, submitTrackPath, taskPath, taskAnalysisPath, taskQrPath, taskSettingsPath, taskRoutePath, taskTestIgcPath, taskWeatherPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -221,10 +222,11 @@ export function TaskDetail() {
     const share: BarAction[] = [];
     if (task.xctsk) {
       share.push(
-        { id: "share", label: "Share task", onAction: () => setShareOpen(true) },
+        { id: "share", label: "Share task", icon: ShareIcon, onAction: () => setShareOpen(true) },
         {
           id: "qr",
           label: "QR code",
+          icon: QrCodeIcon,
           to: taskQrPath(compUrlId(comp, compId), comp?.name, taskId, task.name),
         },
         // The analysis page and the replay are separate entries, not SPA
@@ -232,6 +234,7 @@ export function TaskDetail() {
         {
           id: "map",
           label: "All tracks",
+          icon: MapIcon,
           to: `/analysis.html?compId=${encodeURIComponent(compId)}&taskId=${encodeURIComponent(taskId)}`,
         }
       );
@@ -240,6 +243,7 @@ export function TaskDetail() {
       share.push({
         id: "replay",
         label: "Replay the task in 3D",
+        icon: MapIcon,
         to: `/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`,
       });
     }
@@ -254,6 +258,7 @@ export function TaskDetail() {
       share.push({
         id: "analysis",
         label: TASK_ANALYSIS_LABEL,
+        icon: ChartColumnIcon,
         to: taskAnalysisPath(compId, comp.name, taskId, task.name),
       });
     }

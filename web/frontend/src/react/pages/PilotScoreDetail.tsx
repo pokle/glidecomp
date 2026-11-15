@@ -21,6 +21,7 @@
  * inputs — so the page renders without downloading the tracklog. The
  * IGC is fetched separately, only to draw the track on the map.
  */
+import { MapIcon } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "../lib/use-in-view";
 import { useParams } from "react-router-dom";
@@ -390,10 +391,11 @@ export function PilotScoreDetail() {
   const urlId = ready ? compUrlId(ready.comp, compId) : compId;
   const actions: BarAction[] = [
     // Plain links out of the SPA, to the vanilla analysis and replay entries.
-    { id: "track", label: "Climbs and glides", to: analysisUrl, target: "_blank" },
+    { id: "track", label: "Climbs and glides", icon: MapIcon, to: analysisUrl, target: "_blank" },
     {
       id: "replay",
       label: "Replay the task in 3D",
+      icon: MapIcon,
       to: `/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`,
     },
   ];

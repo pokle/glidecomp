@@ -510,6 +510,12 @@ These are the standing imperatives. Each links to the reference that explains it
     task pages. An action stays on the page only when its place says
     something: "Add turnpoint" under the list. Pass the bar only the actions
     this reader may use.
+  - **A ⋯ row may carry a line icon** (`icon` on `BarAction`, from Lucide,
+    the app's one icon set): `MapIcon` for every row that opens tracks on a
+    map, the 3D replay included; `ChartColumnIcon` for task and comp
+    analysis, and for nothing else, so the bar chart always means analysis;
+    `ShareIcon` and `QrCodeIcon` for sharing. In a menu where any row has
+    one, the rest keep an empty slot so the labels line up.
   - **A second layer may stick with the bar** (`below`): a search field,
     tabs, a class select. Nothing else sticks.
   - **Every control in the bar and its menus is 44 px**, at every pointer;

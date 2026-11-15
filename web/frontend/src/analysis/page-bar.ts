@@ -83,6 +83,9 @@ export function setPageMode(mode: PageMode): void {
   byId('bar-title')?.setAttribute('aria-label', `${title}: go to another page`);
   const panelLabel = byId('analysis-toggle-label');
   if (panelLabel) panelLabel.textContent = panel;
+  for (const icon of document.querySelectorAll<SVGElement>('[data-panel-icon]')) {
+    icon.toggleAttribute('hidden', icon.dataset.panelIcon !== mode);
+  }
   document.title = `GlideComp - ${title}`;
 }
 

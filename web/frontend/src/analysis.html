@@ -107,8 +107,11 @@
                  its name kept for a screen reader, so the title has room. -->
             <button type="button" id="analysis-toggle" aria-expanded="false" aria-controls="waypoint-sidebar"
                 class="bar-glass pointer-events-auto relative flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full px-4 text-[0.9375rem] font-medium hover:bg-muted max-[400px]:w-11 max-[400px]:px-0">
-                <!-- lucide chart-no-axes-column -->
-                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg>
+                <!-- lucide list, for one track's lists; lucide list-ordered, for the
+                     field's score table (setPageMode). Not a bar chart: that icon
+                     marks task and comp analysis in the app's menus. -->
+                <svg data-panel-icon="one" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg>
+                <svg data-panel-icon="field" hidden aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5h10"/><path d="M11 12h10"/><path d="M11 19h10"/><path d="M4 4h1v5"/><path d="M4 9h2"/><path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02"/></svg>
                 <span id="analysis-toggle-label" class="max-[400px]:sr-only">Lists</span>
             </button>
 
