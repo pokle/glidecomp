@@ -33,6 +33,8 @@ import { initCommandMenus } from './command-menu';
 import { installStaleDeployReload } from '../react/lib/stale-deploy';
 import { html, renderInto } from '../render-html';
 import { installDefaultTrustedTypesPolicy } from '../trusted-types';
+import { clearSharedFiles, readSharedFiles } from '../share-target';
+import { registerServiceWorker } from '../register-sw';
 
 // Before anything can create a map: Mapbox GL's and threebox's own HTML, and
 // Mapbox's worker URL, go through the default Trusted Types policy
@@ -2368,46 +2370,26 @@ async function init(): Promise<void> {
   }
 
   /**
-   * Load files that were shared via the Web Share Target API.
-   * The service worker stores them in a dedicated cache bucket.
+   * Load files that were shared via the Web Share Target API: a task, or
+   * several files. One track alone goes to /submit instead (public/sw.js).
+   * The service worker stores them in a dedicated cache bucket
+   * (src/share-target.ts).
    */
   async function loadSharedFiles(): Promise<void> {
-    const SHARE_CACHE = 'share-target-files';
     try {
-      const cache = await caches.open(SHARE_CACHE);
-      const keys = await cache.keys();
-
-      for (const request of keys) {
-        const response = await cache.match(request);
-        if (!response) continue;
-
-        // Primary source is X-File-Name (set by sw.js). Fallback to the
-        // pathname-derived name, decoding the URL-component encoding the
-        // service worker applies for SEC-13.
-        let filename = response.headers.get('X-File-Name');
-        if (!filename) {
-          const tail = new URL(request.url).pathname.split('/').pop() || 'shared-file';
-          try {
-            filename = decodeURIComponent(tail);
-          } catch {
-            filename = tail;
-          }
-        }
-        const blob = await response.blob();
-        const file = new File([blob], filename, { type: blob.type });
-
-        const name = filename.toLowerCase();
+      for (const file of await readSharedFiles()) {
+        const name = file.name.toLowerCase();
         if (name.endsWith('.xctsk')) {
           await loadXCTaskFile(file);
         } else if (name.endsWith('.igc')) {
           await loadIGCFile(file);
         } else {
-          showStatus(`Unsupported file type: ${filename}`, 'warning');
+          showStatus(`Unsupported file type: ${file.name}`, 'warning');
         }
       }
 
       // Clean up the cache
-      await caches.delete(SHARE_CACHE);
+      await clearSharedFiles();
     } catch (err) {
       console.error('Failed to load shared files:', err);
       showStatus(`Failed to load shared files: ${err}`, 'error');
@@ -2497,11 +2479,7 @@ async function loadFromQueryParams(
 }
 
 // Register service worker (enables PWA install + Web Share Target)
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch((err) => {
-    console.warn('Service worker registration failed:', err);
-  });
-}
+registerServiceWorker();
 
 /**
  * The markup's close controls, declared with data attributes rather than

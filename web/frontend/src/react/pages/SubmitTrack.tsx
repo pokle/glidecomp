@@ -12,16 +12,23 @@
  * Back returns them to the page they came from. A hidden comp's id carries its
  * share key in `?comp=` (`compUrlId()`), exactly as it does in a comp URL.
  *
+ * `?shared=1` is where Android sends a track shared to the installed app from
+ * XCTrack, SeeYou or the Files app (public/sw.js, issue #800): the form opens
+ * with that file already chosen, read from the service worker's cache
+ * (src/share-target.ts), so a reload finds it again.
+ *
  * The flow itself is SubmitTrackForm.
  */
 import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { SubmitTrackForm } from "../comp/SubmitTrackForm";
+import { SHARED_PARAM } from "../../share-target";
 
 export function SubmitTrack() {
   const [params] = useSearchParams();
   const compId = params.get("comp") ?? undefined;
   const taskId = params.get("task") ?? undefined;
+  const shared = params.get(SHARED_PARAM) === "1";
 
   useEffect(() => {
     document.title = "GlideComp - Submit track";
@@ -37,6 +44,7 @@ export function SubmitTrack() {
       <SubmitTrackForm
         key={`${compId ?? ""}/${taskId ?? ""}`}
         prefill={compId ? { compId, taskId } : undefined}
+        shared={shared}
       />
     </div>
   );
