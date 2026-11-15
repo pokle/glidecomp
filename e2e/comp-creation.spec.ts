@@ -83,7 +83,7 @@ test("dev login, create competition and task", async ({ page, request }) => {
   // guide's last step.
   await expect(createForm.getByText("Hidden?")).toHaveCount(0);
   // Create is in the bar, live once the competition has a name.
-  await createForm.getByRole("button", { name: "Create" }).click();
+  await createForm.getByRole("button", { name: "Create", exact: true }).click();
 
   // Client-side navigation to the competition detail page; the heading
   // assertion polls until the comp fetch resolves.
@@ -166,7 +166,7 @@ test("dev login, create competition and task", async ({ page, request }) => {
   await dateField.getByRole("spinbutton", { name: /day/ }).click();
   await page.keyboard.type("15042026");
   // Pilot class checkboxes default to all checked (just "open")
-  await taskForm.getByRole("button", { name: "Create" }).click();
+  await taskForm.getByRole("button", { name: "Create", exact: true }).click();
 
   // Create goes to the task it made; the comp's trail leads back to the
   // guide. The task link is scoped to the Tasks section — the setup guide's

@@ -108,6 +108,13 @@ export function useUnsavedChangesGuard(
       // click — then re-run it iff the user confirms.
       e.preventDefault();
       e.stopImmediatePropagation();
+      // A row of a menu (the bar's title menu, ⋯): the menu closes itself on
+      // this same click when it is a touch, and now never sees it. Left open,
+      // it kept the page inert behind the question, and after "Keep editing"
+      // too. Escape is the menu's own way to close.
+      anchor
+        .closest('[role="menu"]')
+        ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       const guard = guardRef.current;
       // One question at a time: a second click while it is on screen is not
       // a second dialog.

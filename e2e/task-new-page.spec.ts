@@ -123,7 +123,7 @@ test("Create goes to the task it made, and Back from there is the comp", async (
   // Both classes are ticked to begin with; this task is for one of them.
   await page.getByRole("main").getByText("sport", { exact: true }).click();
   await page.getByRole("textbox", { name: "Name" }).fill("Day 1 Ridge Run");
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
 
   await expect(page).toHaveURL(/\/task\/day-1-ridge-run-[a-z]+$/, { timeout: 20_000 });
   await expect(page.getByRole("heading", { level: 1, name: "Day 1 Ridge Run" })).toBeVisible();
@@ -147,7 +147,7 @@ test("a refusal lands under the field it is about", async ({ page }) => {
 
   // Create is in the bar, and live only once the task has a name, a date
   // and a class (issue #863): there is nothing to send before that.
-  const create = page.getByRole("button", { name: "Create" });
+  const create = page.getByRole("button", { name: "Create", exact: true });
   await expect(create).toBeDisabled();
   await page.getByRole("main").getByText("open", { exact: true }).click();
   await page.getByRole("main").getByText("sport", { exact: true }).click();
@@ -169,7 +169,7 @@ test("a refusal lands under the field it is about", async ({ page }) => {
 
   // Corrected, it is made.
   await name.fill("Day 1");
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Day 1" })).toBeVisible({
     timeout: 20_000,
   });
@@ -196,7 +196,7 @@ test("a hidden comp's share key rides along to the new task", async ({ page }) =
   expect(page.url()).toContain(keyed);
 
   await page.getByRole("textbox", { name: "Name" }).fill("Draft day");
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Draft day" })).toBeVisible({
     timeout: 20_000,
   });

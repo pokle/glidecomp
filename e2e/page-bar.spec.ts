@@ -49,6 +49,11 @@ test.beforeAll(async ({ playwright }) => {
     data: { pilots: ROSTER, remove: [] },
   });
   expect(bulk.ok(), await bulk.text()).toBe(true);
+  // Any save marks the settings reviewed. Until then an untouched Save is
+  // live on purpose: it is the review the setup guide asks for
+  // (canSaveSettings, comp/settings/CompSettingsIndex.tsx).
+  const reviewed = await api.patch(`/api/comp/${compId}`, { data: { name: compName } });
+  expect(reviewed.ok(), await reviewed.text()).toBe(true);
 });
 
 test.afterAll(async () => {
@@ -85,11 +90,13 @@ async function expectMenuRows(page: Page, what: string): Promise<void> {
   const count = await rows.count();
   expect(count, `${what} must have rows`).toBeGreaterThan(0);
   for (let i = 0; i < count; i++) {
-    const box = await rows.nth(i).boundingBox();
-    expect(box, `${what}, row ${i + 1}`).not.toBeNull();
-    expect(box!.height, `${what}, row ${i + 1} must be 44 px tall or more`).toBeGreaterThanOrEqual(
-      TARGET
-    );
+    // Polled: a menu opens with a short scale animation, and a row measured
+    // in the middle of it is a few per cent smaller than it will be.
+    await expect
+      .poll(async () => (await rows.nth(i).boundingBox())?.height ?? 0, {
+        message: `${what}, row ${i + 1} must be 44 px tall or more`,
+      })
+      .toBeGreaterThanOrEqual(TARGET);
   }
 }
 
@@ -110,6 +117,8 @@ test.describe("the page bar", () => {
     await more.click();
     await expectMenuRows(page, "the ⋯ menu");
     await page.keyboard.press("Escape");
+    // Gone, not going: a closing menu's rows are still in the DOM for a moment.
+    await expect(page.getByRole("menuitem")).toHaveCount(0);
 
     await titleMenu.click();
     await expectMenuRows(page, "the title's menu");

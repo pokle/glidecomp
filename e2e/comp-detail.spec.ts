@@ -385,7 +385,9 @@ test("the competition's pages are rows on its page, a finger tall", async ({ pag
   await expect(page.locator("#activity")).toBeVisible();
 
   // A task's row is a link a finger tall too.
-  const task = page.locator("#tasks").getByRole("link", { name: new RegExp(comp.tasks[0].name) }).first();
+  // A name can hold brackets ("Task 1 (stopped)"): escaped, so they are text.
+  const taskName = comp.tasks[0].name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const task = page.locator("#tasks").getByRole("link", { name: new RegExp(taskName) }).first();
   expect((await task.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
   await rows.getByRole("link", { name: /^Scores/ }).click();
@@ -647,13 +649,11 @@ test("scoring settings page shows stored GAP values; leaving saves nothing", asy
     page.getByRole("switch", { name: "Arrival points (HG only)" })
   ).not.toBeChecked();
 
-  // Leave without saving via the breadcrumb — untouched fields arm no guard,
-  // the index renders, and nothing was PATCHed. The Scoring row is scoped to
-  // main because the Shell footer also carries a "Scoring" link.
-  await page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: "Settings", exact: true })
-    .click();
+  // Leave without saving with the bar's Cancel — untouched fields arm no
+  // guard, so it asks nothing; the index renders, and nothing was PATCHed.
+  // The Scoring row is scoped to main because the Shell footer also carries
+  // a "Scoring" link.
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(
     page.getByRole("main").getByRole("link", { name: /^Scoring/ })
   ).toBeVisible();
@@ -692,12 +692,9 @@ test("general settings page: the timezone list filters in flow; leaving saves no
     "Australia/Adelaide"
   );
 
-  // The pick dirtied the form, so leaving prompts; Discard drops the edit
-  // and navigates — and nothing was PATCHed.
-  await page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: "Settings", exact: true })
-    .click();
+  // The pick dirtied the form, so Cancel asks first; Discard drops the edit
+  // and leaves — and nothing was PATCHed.
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   const guard = page.getByRole("alertdialog");
   await expect(guard.getByText("Discard changes?")).toBeVisible();
   await guard.getByRole("button", { name: "Discard changes" }).click();
