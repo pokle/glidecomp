@@ -1131,6 +1131,58 @@ test.describe("Content-Security-Policy", () => {
 });
 
 /**
+ * Every map carries a "Find my location" button (the Geolocate control in
+ * src/analysis/mapbox-provider.ts). Before it enables itself it asks the
+ * browser one question: is geolocation "denied"? Under
+ * `Permissions-Policy: geolocation=()` Chromium answers yes without asking the
+ * reader, so the button was dead in Chrome, Edge and on Android. It worked on
+ * an iPhone, whose browser did not enforce the header, and that hid the fault
+ * (2026-11-15; see PERMISSIONS_POLICY in web/frontend/src/security-headers.ts).
+ *
+ * Only this suite can see it: the dev server behind `test:e2e` sends no
+ * security headers. The build here has no Mapbox token, so no map is
+ * constructed and there is no button to look at. The test asks the browser the
+ * button's own question, on one page for each way a page gets its headers.
+ */
+test.describe("Permissions-Policy", () => {
+  const PAGES = [
+    // The SSR Function's page with a map, which gets the headers from the middleware.
+    ":waypoints",
+    // The analysis page, a static file served with public/_headers.
+    ":analysis",
+    // The SPA shell via a _redirects rewrite. A reader who goes on from here to
+    // a map by an in-app link stays in this document, under this policy.
+    "/submit",
+  ] as const;
+
+  for (const path of PAGES) {
+    test(`${path} may ask for the reader's location, and for nothing else`, async ({ page, request }) => {
+      let url: string = path;
+      if (path.startsWith(":")) {
+        const d = await discover(request);
+        url = {
+          ":waypoints": `/comp/${d.compId}/waypoints`,
+          ":analysis": `/analysis?compId=${d.compId}&taskId=${d.taskId}&pilotId=${d.pilotId}`,
+        }[path as ":waypoints" | ":analysis"];
+      }
+
+      const res = await page.goto(url);
+      const served = `${url} was served "Permissions-Policy: ${res?.headers()["permissions-policy"]}"`;
+      const state = (name: string) =>
+        page.evaluate((n) => navigator.permissions.query({ name: n as PermissionName }).then((p) => p.state), name);
+
+      // mapbox-gl's own test: any answer but "denied" enables the button. The
+      // browser still asks the reader before it gives a position.
+      expect(await state("geolocation"), served).not.toBe("denied");
+      // Nothing was opened beside it, and a page that lost the header
+      // altogether fails here.
+      expect(await state("microphone"), served).toBe("denied");
+      expect(await state("camera"), served).toBe("denied");
+    });
+  }
+});
+
+/**
  * A tab that outlived a deploy (lib/stale-deploy.ts, AppErrorBoundary). Every
  * deploy renames the hashed chunks, so the old app asks for files that no
  * longer exist. It must reload itself onto the new deploy ONCE, and if the
