@@ -85,7 +85,12 @@ screenshots them. Paths below are relative to the repo root.
    Ends with `✓ drove task analysis end-to-end`; shots land in `shots/`
    (`ta-task-pending.png`, `ta-task.png`, `ta-strategies.png`,
    `ta-metrics.png`, `ta-comp.png`).
-   **Breadcrumbs / navigation hierarchy** have their own driver — it asserts
+   **The navigation hierarchy** has its own driver. Every page has one bar
+   (`rac/page-bar.tsx`): back on the left, the title over a menu of the pages
+   above, beside and under it, and ⋯ for the page's actions. The trail a
+   reader sees is the tree in the title's menu; the bar also keeps it in the
+   markup as a visually hidden `navigation` named "Breadcrumb", which is what
+   the driver reads. It asserts
    the trail text on every `/comp` page and walks the analysis journey
    (comp detail → Comp analysis → one task's Task analysis → up one level to
    the task), including the superseded-URL redirect and the "Comp analysis"
@@ -154,6 +159,15 @@ cd web/frontend && bunx vitest run     # or: bun run --filter '@glidecomp/fronte
   resolves CSS to an empty module by default.
 
 ## Gotchas
+
+- **Where the controls are (issue #863).** A page's actions are rows of the
+  bar's ⋯ ("More actions" → `menuitem`), not buttons on the page; a form's
+  Save, Create, Add or Submit is in the bar, and is disabled until there is
+  something to commit. "Sign in", "Sign in (dev)", Settings and Sign out are in
+  the "Main menu" button's menu on a top-level page (`/comp`, `/submit`,
+  `/settings`). Every ⋯ row that opens a page is also a plain link in a
+  visually hidden `navigation` named "Page actions", which is the easy way to
+  read an href without opening the menu.
 
 - **Driving admin-only UI (settings / route-editor / waypoint editor) headless:**
   sign in with dev-login *from inside the page* so the browser stores the

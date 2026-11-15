@@ -660,8 +660,9 @@ These are the standing imperatives. Each links to the reference that explains it
     accepted. The snapshot is kept in the waypoints draft, so it holds across
     a visit to one waypoint (`/altitudes/:n`) and a reload. A difference of
     exactly zero prints nothing — the absence of a finding is not a finding —
-    and inside a waypoint Back and Done (and the browser's Back) return to
-    the review's LIST, never out of the review.
+    and inside a waypoint the bar's Back (and the browser's Back) returns to
+    the review's LIST, never out of the review. The page has no Done: Back
+    does the same thing.
   - **The waypoints page is a list of pages, at every width** (sheets until
     #811) — see the
     mobile-first rule above for what it replaced. `comp-waypoints.spec.ts`
