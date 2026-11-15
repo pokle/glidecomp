@@ -4,7 +4,7 @@
  *
  *   leading   Back to the page above: a pilot's report card, a task, or
  *             My Flights
- *   centre    "Map" over a menu of where this page is
+ *   centre    "Flight analysis" over a menu of where this page is
  *   trailing  Analysis (the side panel), then ⋯ for the page's actions
  *
  * Both menus are native `<details>`, so they open with no script and every
@@ -102,7 +102,7 @@ export function setTrail(trail: BarCrumb[]): void {
     renderInto(
       crumbs,
       html`${trail.map((c) => html`<li><a href=${c.href} tabindex="-1">${c.label}</a></li>`)}
-        <li><span aria-current="page">Map</span></li>`,
+        <li><span aria-current="page">Flight analysis</span></li>`,
     );
   }
 }

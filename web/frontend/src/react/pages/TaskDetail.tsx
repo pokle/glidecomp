@@ -231,7 +231,7 @@ export function TaskDetail() {
         // routes: the router bridge loads them for real (rac/router.tsx).
         {
           id: "map",
-          label: "View on map",
+          label: "Flight analysis",
           to: `/analysis.html?compId=${encodeURIComponent(compId)}&taskId=${encodeURIComponent(taskId)}`,
         }
       );

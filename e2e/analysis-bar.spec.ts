@@ -7,7 +7,7 @@
  * MOBILE_SPEC_FILES, e2e/fixtures/mobile.ts):
  * - from a report card's link, Back is that pilot's report card, and the
  *   trail names the competition, the task and the pilot;
- * - the page has one <h1>, "Map", and the trail is in the markup as links;
+ * - the page has one <h1>, "Flight analysis", and the trail is in the markup as links;
  * - ⋯ is a plain menu: a Show row ticks and unticks, writes the URL, and
  *   closes the menu; ⌘K opens it; Escape closes it and gives focus back;
  * - "Analysis" opens the side panel and says so, and on a wide screen the
@@ -97,7 +97,7 @@ test.describe("the analysis page's bar", () => {
     );
 
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Map");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Flight analysis");
     const crumbs = page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link");
     await expect(crumbs).toHaveText(["Competitions", SAMPLE_COMP_NAME, taskName, pilotName]);
 
@@ -105,7 +105,7 @@ test.describe("the analysis page's bar", () => {
     const pages = page.getByRole("navigation", { name: "Pages" });
     await expect(pages).toBeVisible();
     await expect(pages.getByRole("link", { name: pilotName })).toBeVisible();
-    await expect(pages.locator('[aria-current="page"]')).toHaveText("Map");
+    await expect(pages.locator('[aria-current="page"]')).toHaveText("Flight analysis");
     // Competitions is in the trail, so "Elsewhere" does not repeat it.
     await expect(pages.getByRole("link", { name: "Competitions" })).toHaveCount(1);
     await page.keyboard.press("Escape");

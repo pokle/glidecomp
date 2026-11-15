@@ -289,7 +289,7 @@ test.describe("the pilot report card", () => {
       await expect(more).toBeVisible({ timeout: 30_000 });
       await more.click();
       await expect(
-        page.getByRole("menuitem", { name: "Open the track on the map" })
+        page.getByRole("menuitem", { name: "Flight analysis" })
       ).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(
@@ -300,7 +300,7 @@ test.describe("the pilot report card", () => {
       // visually hidden "Page actions" list), which is where its href is read.
       const link = page
         .getByRole("navigation", { name: "Page actions" })
-        .getByRole("link", { name: "Open the track on the map" });
+        .getByRole("link", { name: "Flight analysis" });
       await expect(link).toHaveCount(1);
       // `pilotId` is what narrows the viewer to this one track, which is what
       // keeps its panel in single-track mode. Without it the reader lands on
@@ -428,7 +428,7 @@ test.describe("the pilot report card", () => {
         // And nothing about the competition leaked on the way to saying so:
         // the bar's trail keeps its generic names until the task resolves,
         // and the title is the page's own.
-        await expect(page.locator("#breadcrumbs li")).toHaveText(["Competitions", "Competition", "Task", "Map"]);
+        await expect(page.locator("#breadcrumbs li")).toHaveText(["Competitions", "Competition", "Task", "Flight analysis"]);
         expect(await page.locator("body").innerText()).not.toContain(name);
         expect(await page.title()).not.toContain(name);
         expect(await page.title()).not.toContain("Secret task");
