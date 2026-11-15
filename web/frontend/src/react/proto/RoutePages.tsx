@@ -701,7 +701,7 @@ export function RoutePage() {
           </ul>
         ) : null}
         {warnings.length > 0 ? (
-          <ul className="text-sm text-amber-500">
+          <ul className="text-sm text-caution">
             {warnings.map((w, i) => (
               <li key={i}>⚠ {w}</li>
             ))}

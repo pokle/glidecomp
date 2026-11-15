@@ -82,6 +82,27 @@ differs. Know which surface you're touching:
   dialog in dark). The same test holds red text on every surface and on every
   wash of the fill, fails on `text-destructive`, and fails on a wash that is
   stronger than the ones it has measured.
+- **Amber and green are pairs as well.** `--warning` and `--success` are the
+  fills: the wash behind a warning, a chip or a rank (`bg-warning/10`,
+  `bg-success/15`). `--caution` and `--positive` are the text (`text-caution`,
+  `text-positive`). Until 2026-11 the app wrote Tailwind's palette into its
+  classes, and nothing measured it: `text-amber-500` was 2.13:1 on a card
+  and was every warning, and `text-green-600` was 3.22:1 across the analysis
+  page. On dark the fill and the text hold one value each, because system
+  orange and green read as text there. They stay two tokens because light
+  needs two.
+- **A colour that carries text is a token in `globals.css`.** Do not write a
+  Tailwind palette colour (`text-amber-500`, `bg-green-500/20`) in the app,
+  the analysis page or the content pages, and do not use a chart tone as
+  text (`text-chart-2`): a chart's line is a mark, and its label is text, so
+  the label takes `text-link`, `text-positive` or `text-caution`. The test
+  fails on both. The 3D replay has its own theme and is outside this rule.
+- **A wash under coloured text must not change with what is behind it.** The
+  analysis page's rank bubbles were a translucent wash on an item that turns
+  grey when hovered and blue when selected, so a climb's rank fell to 2.13:1
+  on a selected item. A bubble is now its fill mixed with the card
+  (`color-mix(in srgb, var(--success) 20%, var(--card))`), one colour in
+  every state.
 - **Non-text contrast ≥ 3:1** (WCAG 1.4.11) for UI component boundaries and
   states that convey meaning: input borders, the focus ring (`--ring`),
   checkbox/radio marks, chart/track lines and legends on the analysis and
@@ -157,6 +178,10 @@ differs. Know which surface you're touching:
   data-focused:ring-ring/50` on `rac/field.tsx`'s `inputClass` — do not strip
   it. Any custom focusable element gets an equivalently visible ring using
   `--ring` (which must keep ≥ 3:1 against its background, see §3.1).
+  A destructive button's ring is red, and is the kit's shape: a border of
+  `--destructive` at full strength (3.18:1 on the ground) with a 50% halo.
+  Its border used to be `border-destructive/40`, 1.68:1 against the page. Do
+  not make a focus border translucent; `accent-text.test.ts` fails on it.
 - Never set `outline: none` without providing a replacement indicator.
 - Focus must not be obscured (WCAG 2.4.11): sticky headers (the 60px chrome,
   the mobile anchor bar, the pilots page's sticky search bar) and toasts
@@ -438,30 +463,6 @@ they're closed deliberately rather than rediscovered:
    `@axe-core/playwright` and an `e2e/accessibility.spec.ts` that sweeps a
    representative route per surface — a comp page (SSR'd), a static content
    page, and the analysis page — and fails on violations.
-4. **Coloured text other than the accent and red is under 4.5:1 in light**
-   (§3.1) — found when red was fixed (2026-11) and not fixed with it. Each
-   needs the split the accent and red have: a text colour beside the fill,
-   held by `accent-text.test.ts`. Ratios are on a card unless stated; dark
-   passes on every one of these.
-   - Tailwind's amber, for warnings and cautions. `text-amber-500` is 2.13:1:
-     the warnings under a start setting, a quick route and the route editor,
-     and the "Draft" and "No route" chips (1.98:1 on their own wash).
-     `text-amber-600` is 3.20:1: "(unverified)" on `/admin/users` (2.87:1 from
-     pixels, on the ground), "counted in part" on the scores, the report
-     card's cautions. The DNF chip's `text-amber-700` is 4.48:1 on its wash.
-   - The analysis page, which is light only. `text-green-600` is 3.22:1 (the
-     SSS label, a goal tick, a climb's gain) and 2.69:1 on the climb rank's
-     wash. `text-red-600` is 3.57:1 on the sink rank's wash; it is Tailwind's
-     red and not the token, so the red fix did not reach it. `text-yellow-600`
-     (the ESS label) is 2.94:1. The "Goal" and "reached" banners are 4.32:1
-     and 4.47:1.
-   - The chart labels on `/scoring/data-cleaning` are `text-chart-1`, `-2` and
-     `-3`: 4.02:1, 2.22:1 and 2.20:1. The chart tones are marks; as labels
-     they are text.
-5. **A destructive button's focus ring is under 3:1** (§3.1, §4.2) —
-   `rac/button.tsx` replaces the kit's ring with `border-destructive/40` and
-   `ring-destructive/20`. From pixels, against the page: the border is 1.68:1
-   and the ring 1.30:1 in light, and the ring is 1.74:1 in dark.
 
 Closed since this document was written, kept here as pointers rather than
 rediscovered as gaps:

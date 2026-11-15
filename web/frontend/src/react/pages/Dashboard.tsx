@@ -540,7 +540,7 @@ function NearQuotaWarning({ tracks, tasks }: { tracks: StoredTrack[]; tasks: Sto
   return (
     <p
       role="status"
-      className="mb-4 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm"
+      className="mb-4 rounded-lg border border-warning/50 bg-warning/10 px-3 py-2 text-sm"
     >
       <strong>Storage almost full</strong> — {Math.round(fraction * 100)}% used. Remove old
       flights below or new uploads will fail.

@@ -471,7 +471,7 @@ function OutcomeBadge({ outcome, evidence }: { outcome: Outcome; evidence: RowPi
   const tone: Record<Outcome, string> = {
     landed: "bg-primary/10 text-link",
     present: "bg-muted text-muted-foreground",
-    dnf: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+    dnf: "bg-warning/15 text-caution",
     absent: "bg-destructive/10 text-danger",
   };
   return (

@@ -102,6 +102,20 @@
      the hovered wash of a destructive button included. In a class it is
      `text-danger`; the fill's own token is never text (accent-text.test.ts). */
   --danger: #b0251d;
+  /* Amber and green, split the same way. The fills are the system orange and
+     green the chart tones below use: the wash behind a warning, a chip or a
+     rank. As text they are 2.20:1 and 2.22:1 on a card (Tailwind's amber-500
+     and green-600, which is what the app wrote until 2026-11, were 2.13:1 and
+     3.22:1), so each has a text colour: its own hue, darkened until it reads.
+     --caution is 6.22:1 on a card and no less than 4.66:1 on any surface, a
+     15% wash of the fill over a hovered row included; --positive is 6.54:1
+     and 4.73:1, on a 20% wash. In classes: `bg-warning/10 text-caution` and
+     `bg-success/15 text-positive`. A chart's label is text too, so it takes
+     these and --link, never a --chart tone. */
+  --warning: #ff9500;
+  --caution: #8f5200;
+  --success: #34c759;
+  --positive: #136c2e;
   /* Hairline separators */
   --border: rgba(0, 0, 0, 0.12);
   --input: rgba(0, 0, 0, 0.14);
@@ -170,6 +184,13 @@
      than 4.63:1 on any surface, a hovered destructive button in a dialog
      included. Lighter than the fill, as --link is lighter than --primary. */
   --danger: #ff8a80;
+  /* On dark the system orange and green read as text as they are (no less
+     than 5.09:1 and 4.67:1), so the fill and the text hold one value each.
+     They stay two tokens because light needs two. */
+  --warning: #ff9f0a;
+  --caution: #ff9f0a;
+  --success: #30d158;
+  --positive: #30d158;
   --border: rgba(255, 255, 255, 0.14);
   --input: rgba(255, 255, 255, 0.16);
   --ring: #0a84ff;
@@ -200,6 +221,10 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-caution: var(--caution);
+  --color-success: var(--success);
+  --color-positive: var(--positive);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

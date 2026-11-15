@@ -380,7 +380,7 @@ function ClassWarnings({
     <Disclosure
       className="mt-3 border-t-0 pt-0"
       title={
-        <span className="text-amber-600 dark:text-amber-400">
+        <span className="text-caution">
           Task warnings ({count})
         </span>
       }
@@ -402,7 +402,7 @@ function ClassWarnings({
           );
         })}
         {setupWarnings.map((w) => (
-          <li key={w.name} className="text-amber-500/80">
+          <li key={w.name} className="text-caution">
             <strong>{w.name}</strong> — {w.text}
           </li>
         ))}
@@ -522,7 +522,7 @@ function TasksList({
                   ) : null}{" "}
                   {row.task.missing_sss ? (
                     <span
-                      className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
+                      className="inline-flex items-center rounded-md bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-caution"
                       title="Scoring falls back — see Task warnings above"
                     >
                       No SSS
@@ -530,7 +530,7 @@ function TasksList({
                   ) : null}{" "}
                   {row.task.missing_ess ? (
                     <span
-                      className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
+                      className="inline-flex items-center rounded-md bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-caution"
                       title="Scoring falls back — see Task warnings above"
                     >
                       No ESS

@@ -283,7 +283,7 @@ export function QuickTaskField({
             Amber, not red: none of these block a save, and the turnpoints are
             still good — it's the start setting that didn't land. */}
         {parsed.problems.length > 0 ? (
-          <ul className="flex flex-col gap-0.5 text-xs text-amber-500">
+          <ul className="flex flex-col gap-0.5 text-xs text-caution">
             {parsed.problems.map((problem, i) => (
               <li key={i}>⚠ {problem}</li>
             ))}

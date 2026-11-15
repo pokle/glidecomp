@@ -51,11 +51,11 @@ const TYPE_OPTIONS: { value: string; label: string }[] = [
 ];
 
 const TYPE_COLORS: Record<string, string> = {
-  TAKEOFF: 'text-blue-600',
-  SSS: 'text-green-600',
-  ESS: 'text-yellow-600',
+  TAKEOFF: 'text-link',
+  SSS: 'text-positive',
+  ESS: 'text-caution',
 };
-const DEFAULT_TYPE_COLOR = 'text-blue-600';
+const DEFAULT_TYPE_COLOR = 'text-link';
 
 const TYPE_LABELS: Record<string, string> = {
   TAKEOFF: 'Takeoff',
@@ -248,10 +248,10 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         }
         if (warnings.length > 0) {
           const warn = document.createElement('div');
-          warn.className = 'border-b border-amber-500/30 bg-amber-500/5 px-3 py-2 space-y-0.5';
+          warn.className = 'border-b border-warning/30 bg-warning/5 px-3 py-2 space-y-0.5';
           for (const w of warnings) {
             const line = document.createElement('div');
-            line.className = 'text-xs text-amber-500';
+            line.className = 'text-xs text-caution';
             line.textContent = `⚠ ${w}`;
             warn.appendChild(line);
           }
