@@ -39,6 +39,7 @@
 import { test, expect, PHONE_ONLY, type Locator, type Page } from "./fixtures/test";
 import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { e2eCompName } from "./fixtures/stack";
+import { coordsFields, fillCoords, pasteInto } from "./fixtures/coords";
 
 const ADMIN_USER = {
   name: "Task Settings Fixture",
@@ -614,6 +615,53 @@ test("a turnpoint's numbers show every digit on a phone", { tag: PHONE_ONLY }, a
   await expectNoSidewaysScroll(page, "the start turnpoint's page");
 });
 
+test("a turnpoint's coordinates are two fields, and a pasted pair fills both", async ({
+  page,
+}) => {
+  // Latitude and Longitude, so one half is edited without placing a cursor
+  // inside "-36.550979, 147.890395" — while a pair copied from Google Maps
+  // still goes in whole, into either field.
+  await devLogin(page, ADMIN_USER);
+  await seedRoute(page);
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+  await openTurnpoint(page, "BRAVO");
+  const { lat, lon } = coordsFields(page);
+  await expect(lat).toHaveValue("-36.600000");
+  await expect(lon).toHaveValue("147.900000");
+
+  // Pasted into the LONGITUDE: both halves, every digit as copied.
+  await pasteInto(lon, "-36.550979, 147.890395");
+  await expect(lat).toHaveValue("-36.550979");
+  await expect(lon).toHaveValue("147.890395");
+
+  // One half on its own, and the other is untouched.
+  await lon.fill("147.95");
+  await expect(lat).toHaveValue("-36.550979");
+
+  // A pair TYPED into one field stays there while it is typed — splitting
+  // at "-36.7, 148" would send the rest of 148.05 into the latitude — and
+  // is split when the field is left.
+  await lat.fill("");
+  await lat.pressSequentially("-36.7, 148.05");
+  await expect(lat).toHaveValue("-36.7, 148.05");
+  await lat.blur();
+  await expect(lat).toHaveValue("-36.7");
+  await expect(lon).toHaveValue("148.05");
+
+  // A malformed half is flagged under that half as it is typed.
+  await lon.fill("200");
+  await expect(page.getByText("Enter a longitude between -180 and 180.")).toBeVisible();
+  await lon.fill("148.05");
+  await expect(page.getByText("Enter a longitude between -180 and 180.")).toHaveCount(0);
+
+  // Done keeps it: the route shows the point where the pair put it.
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
+  await openTurnpoint(page, "BRAVO");
+  await expect(coordsFields(page).lat).toHaveValue("-36.7");
+  await expect(coordsFields(page).lon).toHaveValue("148.05");
+});
+
 test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async ({
   page,
 }) => {
@@ -628,7 +676,7 @@ test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async (
   await expect(page.getByRole("heading", { name: "Add turnpoint" })).toBeVisible();
   await expect(page.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
   await page.getByRole("textbox", { name: "Code" }).fill("DELTA");
-  await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.8, 148.1");
+  await fillCoords(page, "-36.8, 148.1");
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page).toHaveURL(ROUTE_URL);
 
@@ -643,11 +691,11 @@ test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async (
   await expect(page.getByRole("heading", { name: "Goal", exact: true })).toBeVisible();
   // Coordinates that do not read as coordinates are refused under their
   // field, and Done stays on the page.
-  await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("nowhere");
+  await coordsFields(page).lat.fill("nowhere");
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByText('Enter "lat, lon" decimal degrees')).toBeVisible();
+  await expect(page.getByText("Enter a latitude between -90 and 90.")).toBeVisible();
   await expect(page).toHaveURL(/\/route\/4$/);
-  await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.8, 148.1");
+  await fillCoords(page, "-36.8, 148.1");
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page).toHaveURL(ROUTE_URL);
 
@@ -657,7 +705,7 @@ test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async (
   await expect(page.getByRole("radio", { name: "Takeoff" })).toBeChecked();
   await expect(page.getByRole("heading", { name: "Goal", exact: true })).toHaveCount(0);
   await page.getByRole("textbox", { name: "Code" }).fill("ONE");
-  await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.5, 147.8");
+  await fillCoords(page, "-36.5, 147.8");
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page).toHaveURL(ROUTE_URL);
 
@@ -803,9 +851,8 @@ test("a waypoint added from the route's map is a page, and is saved with the rou
   await page.goto(`/comp/${compId}/task/${taskId}/route/add-waypoint?at=-36.9,148.2`);
   await expect(page.getByRole("heading", { name: "Add waypoint", exact: true })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("textbox", { name: "Coordinates (lat, lon)" })).toHaveValue(
-    "-36.9,148.2"
-  );
+  await expect(coordsFields(page).lat).toHaveValue("-36.9");
+  await expect(coordsFields(page).lon).toHaveValue("148.2");
   await page.getByRole("textbox", { name: "Code" }).fill("ECHO");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page).toHaveURL(ROUTE_URL);

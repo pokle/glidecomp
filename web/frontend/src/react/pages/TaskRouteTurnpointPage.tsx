@@ -38,7 +38,7 @@ import { ChoiceList } from "@/react/rac/choice-list";
 import { NumberField, SearchField, TextField } from "@/react/rac/field";
 import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { ListBox, ListBoxItem } from "@/react/rac/list-box";
-import { AltitudeField, CoordsField, coordsProblem } from "../comp/fields";
+import { AltitudeField, CoordsField, coordsProblems } from "../comp/fields";
 import { underTaskRoute } from "../lib/crumbs";
 import { compWaypointsPath, taskRouteTurnpointPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -170,7 +170,7 @@ function TurnpointForm({
         current={row.name || "Turnpoint"}
       />
       <Form
-        validate={() => ({ coords: coordsProblem(String(row.coords)) })}
+        validate={() => coordsProblems("coords", String(row.coords))}
         // Nothing to send: every change is in the draft already.
         onSuccess={() => editor.leave()}
       >

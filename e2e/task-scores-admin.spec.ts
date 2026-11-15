@@ -6,8 +6,8 @@
  * tied to nothing, and easy for a screen reader to miss. Now:
  *
  *  - The manual-flight page is a kit form (rac/form.tsx): a missing landing
- *    point, and a server refusal naming `landing_lat`, both land under the one
- *    Landing point field, which is focused.
+ *    point lands under its Latitude and Longitude, and a server refusal naming
+ *    `landing_lat` under Latitude, which is focused.
  *  - A row action (the status select, Upload track, Restore track) has no
  *    field to put a refusal under, so it goes in the kit's fixed place beside
  *    the control — under that pilot's row of buttons — and takes focus.
@@ -24,6 +24,7 @@
 import { test, expect, type APIRequestContext, type Page } from "./fixtures/test";
 import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
+import { coordsFields, fillCoords } from "./fixtures/coords";
 import { createScoredComp, type ScoredComp } from "./fixtures/scored-comp";
 
 const BASE_URL = FRONTEND_URL;
@@ -201,20 +202,24 @@ test("manual flight: a missing or refused landing point is said under the field"
     });
   });
 
-  const landing = page.getByRole("textbox", { name: "Landing point" });
+  const { lat: landing, lon: landingLon } = coordsFields(page, "Landing point");
   const record = page.getByRole("button", { name: "Record flight" });
 
-  // Nothing typed: the form's own check, under the field, before any request.
+  // Nothing typed: the form's own check, under each half, before any
+  // request — and the first of them has focus.
   await record.click();
   await expect(landing).toHaveAttribute("aria-invalid", "true");
+  await expect(landingLon).toHaveAttribute("aria-invalid", "true");
   await expect(landing).toBeFocused();
-  await expect(page.getByText('Enter the coordinates as "lat, lon"')).toBeVisible();
+  await expect(page.getByText("Enter a latitude between -90 and 90.")).toBeVisible();
+  await expect(page.getByText("Enter a longitude between -180 and 180.")).toBeVisible();
   expect(sent).toBe(0);
 
-  // Typing clears it; the server's refusal of landing_lat lands on the same
-  // field, without its "landing_lat: " prefix.
-  await landing.fill(LANDING);
+  // Typing clears them; the server's refusal of landing_lat lands under
+  // Latitude, without its "landing_lat: " prefix.
+  await fillCoords(page, LANDING, "Landing point");
   await expect(landing).not.toHaveAttribute("aria-invalid", "true");
+  await expect(landingLon).not.toHaveAttribute("aria-invalid", "true");
   await record.click();
   await expect(page.getByText("Too big: expected number to be <=90")).toBeVisible();
   await expect(landing).toHaveAttribute("aria-invalid", "true");
@@ -223,7 +228,8 @@ test("manual flight: a missing or refused landing point is said under the field"
   expect(sent).toBe(1);
   // Still on the page, with what was typed kept.
   await expect(page.getByRole("heading", { name: "Record manual flight" })).toBeVisible();
-  await expect(landing).toHaveValue(LANDING);
+  await expect(landing).toHaveValue("-36.2212878474");
+  await expect(landingLon).toHaveValue("147.729549408");
   await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
 
   const flights = await admin.get(

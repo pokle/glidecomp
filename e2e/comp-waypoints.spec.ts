@@ -38,6 +38,7 @@
 import { test, expect, DESKTOP_ONLY, type Page, type Locator } from "./fixtures/test";
 import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { FRONTEND_URL } from "./fixtures/stack";
+import { coordsFields, fillCoords } from "./fixtures/coords";
 import {
   COMP_NAME,
   editorRows,
@@ -111,7 +112,7 @@ async function editWaypoint(
   page: Page,
   row: Locator,
   code: string,
-  field: "Code" | "Name" | "Coordinates (lat, lon)" | "Altitude (m)" | "Radius (m)",
+  field: "Code" | "Name" | "Latitude" | "Longitude" | "Altitude (m)" | "Radius (m)",
   value: string
 ) {
   await openWaypoint(page, row, code);
@@ -175,7 +176,7 @@ test("the editor lists waypoints, edits one on its own page, and blocks bad coor
 
   // A row opens one waypoint — a page, with every field it has.
   await openWaypoint(page, firstRow, code);
-  for (const label of ["Code", "Name", "Coordinates (lat, lon)", "Altitude (m)", "Radius (m)"]) {
+  for (const label of ["Code", "Name", "Latitude", "Longitude", "Altitude (m)", "Radius (m)"]) {
     await expect(page.getByRole("textbox", { name: label, exact: true })).toBeVisible();
   }
   await expectNoSidewaysScroll(page);
@@ -203,12 +204,12 @@ test("the editor lists waypoints, edits one on its own page, and blocks bad coor
   await expect(await firstWaypointRow(page)).toContainText("321 m");
 
   // Done will not leave with coordinates that do not parse: it is a kit form,
-  // so the reason is under the field, and the field has focus.
+  // so the reason is under the half it is about, and that half has focus.
   await openWaypoint(page, await firstWaypointRow(page), code);
-  const coords = page.getByRole("textbox", { name: "Coordinates (lat, lon)", exact: true });
+  const coords = coordsFields(page).lat;
   await coords.fill("not coordinates");
   await page.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByText('Enter "lat, lon" decimal degrees')).toBeVisible();
+  await expect(page.getByText("Enter a latitude between -90 and 90.")).toBeVisible();
   await expect(coords).toBeFocused();
   await expect(page).toHaveURL(waypointUrl);
 
@@ -349,11 +350,12 @@ test("remove a waypoint, and add one on a page of its own (nothing saved)", asyn
   // Coordinates are the one thing it cannot do without: refused under the
   // field, which takes focus.
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  const coords = page.getByRole("textbox", { name: "Coordinates (lat, lon)" });
-  await expect(page.getByText('Enter the coordinates as "lat, lon"')).toBeVisible();
-  await expect(coords).toBeFocused();
+  const coords = coordsFields(page);
+  await expect(page.getByText("Enter a latitude between -90 and 90.")).toBeVisible();
+  await expect(page.getByText("Enter a longitude between -180 and 180.")).toBeVisible();
+  await expect(coords.lat).toBeFocused();
 
-  await coords.fill("-36.5, 148.2");
+  await fillCoords(page, "-36.5, 148.2");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await onEditorList(page, waypoints.length);
   await expect(page.getByText(`${waypoints.length} waypoints`)).toBeVisible();
@@ -363,7 +365,7 @@ test("remove a waypoint, and add one on a page of its own (nothing saved)", asyn
   await page.getByRole("link", { name: "Add waypoint" }).click();
   await expect(h1(page, "Add waypoint")).toBeVisible({ timeout: 20_000 });
   await page.getByRole("textbox", { name: "Code" }).fill("E2E2");
-  await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.6, 148.3");
+  await fillCoords(page, "-36.6, 148.3");
   await page.goBack();
   await onEditorList(page, waypoints.length);
   await expect(waypointRow(page, "E2E2")).toHaveCount(0);
@@ -378,13 +380,15 @@ test("Add waypoint takes a map tap from its URL, and survives a reload", async (
   const pick = encodeURIComponent(JSON.stringify({ elevation: 812, placeName: "E2E Hill" }));
   await page.goto(`/comp/${compId}/waypoints/new?at=-36.5,148.2&pick=${pick}`);
   await expect(h1(page, "Add waypoint")).toBeVisible({ timeout: 20_000 });
-  const coords = page.getByRole("textbox", { name: "Coordinates (lat, lon)" });
-  await expect(coords).toHaveValue("-36.5,148.2");
+  const coords = coordsFields(page);
+  await expect(coords.lat).toHaveValue("-36.5");
+  await expect(coords.lon).toHaveValue("148.2");
   await expect(page.getByRole("textbox", { name: /^Name/ })).toHaveValue("E2E Hill");
   await expect(page.getByText(/Filled coordinates, elevation and name from the map/)).toBeVisible();
 
   await page.reload();
-  await expect(coords).toHaveValue("-36.5,148.2", { timeout: 20_000 });
+  await expect(coords.lat).toHaveValue("-36.5", { timeout: 20_000 });
+  await expect(coords.lon).toHaveValue("148.2");
 
   // Opened directly, Add has no list behind it to go Back to: it goes there.
   await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -642,7 +646,7 @@ test("the device panel follows the SAVED set, not the editor's rows", async ({ p
     await page.getByRole("link", { name: "Add waypoint" }).click();
     await expect(h1(page, "Add waypoint")).toBeVisible({ timeout: 20_000 });
     await page.getByRole("textbox", { name: "Code" }).fill("E2E2");
-    await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.5, 148.2");
+    await fillCoords(page, "-36.5, 148.2");
     await page.getByRole("button", { name: "Add", exact: true }).click();
     await onEditorList(page, 1);
     await expect(page.getByText("Unsaved changes")).toBeVisible();

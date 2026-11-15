@@ -35,7 +35,7 @@ import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { underCompWaypoints } from "../lib/crumbs";
 import { compWaypointPath, compWaypointsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
-import { CoordsField, coordsProblem } from "../comp/fields";
+import { CoordsField, coordsProblems } from "../comp/fields";
 import { RADIUS_PRESETS, radiusChipLabel } from "../comp/turnpoint-draft";
 import { useWaypointsEditor } from "../comp/use-waypoints-editor";
 import { waypointsEditorGate } from "../comp/WaypointsEditorGate";
@@ -70,7 +70,7 @@ export function CompWaypointPage() {
     <div className="max-w-2xl">
       <Breadcrumbs items={underCompWaypoints(urlId, compName)} current={row.code || "Waypoint"} />
       <Form
-        validate={() => ({ coords: coordsProblem(row.coords, true) })}
+        validate={() => coordsProblems("coords", row.coords, true)}
         // Nothing to send: every change is in the draft already.
         onSuccess={back}
       >

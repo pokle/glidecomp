@@ -42,6 +42,7 @@ import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { test, expect, type APIRequestContext, type Page } from "./fixtures/test";
 import { FRONTEND_URL, SUPER_ADMIN, e2eCompName } from "./fixtures/stack";
+import { fillCoords } from "./fixtures/coords";
 import {
   createScoredComp,
   openClass,
@@ -320,7 +321,7 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     // than in a popover — click its text, since ChoiceList paints the row
     // with spans over a hidden radio (rac gotcha #13).
     await page.getByText("4. mur041", { exact: true }).click();
-    await page.getByRole("textbox", { name: "Landing point" }).fill(MANUAL_LANDING);
+    await fillCoords(page, MANUAL_LANDING, "Landing point");
     // The live preview is the engine's own made-good number: seeing a distance
     // here is what says the coordinates parsed and the geometry ran.
     await expect(page.getByText(/km made good/)).toBeVisible();

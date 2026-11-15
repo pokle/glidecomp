@@ -10,11 +10,12 @@
  * no way left to go wrong here.
  *
  * RAC (see docs/2026-07-18-rac-adoption-guide.md): the kit `Form`
- * (rac/form.tsx) with TextField/NumberField/ChoiceList. The coordinates field
- * uses RAC's `validate` so "must be lat, lon" shows inline as the user types.
+ * (rac/form.tsx) with TextField/NumberField/ChoiceList. The landing point is
+ * the shared CoordsField — Latitude and Longitude, either of which takes a
+ * pasted "lat, lon" — and a malformed half shows inline as it is typed.
  * Record flight with no landing point, and every refusal the server gives,
- * lands under the field it is about — the server's `landing_lat`/`landing_lon`
- * are this page's one Landing point field — or beside the button when it is
+ * lands under the field it is about — the server's `landing_lat` under
+ * Latitude, `landing_lon` under Longitude — or beside the button when it is
  * about no field. Never a toast: toasts are for "recorded".
  *
  * Pre-scoped to one pilot (unlike SubmitTrackForm, which picks the pilot
@@ -40,7 +41,7 @@ import {
 } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
 import { NumberField } from "@/react/rac/field";
-import { CoordsField, coordsProblem } from "./fields";
+import { CoordsField, coordsProblems, lonFieldName } from "./fields";
 import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { ChoiceList } from "@/react/rac/choice-list";
 import { SettingsPage } from "@/react/components/SettingsPage";
@@ -185,18 +186,16 @@ export function ManualFlightForm({
     >
       <Form
         className="flex flex-col gap-6"
-        validate={() => ({
-          landing: coordsProblem(coords, true),
-        })}
+        validate={() => coordsProblems("landing", coords, true)}
         onSubmit={save}
         onSuccess={() => {
           toast.success(`Manual flight recorded for ${pilotName}`);
           onSaved();
         }}
-        // The server's names for the parts of the one Landing point field.
+        // The server's names for the two halves of the Landing point.
         fieldNames={{
           landing_lat: "landing",
-          landing_lon: "landing",
+          landing_lon: lonFieldName("landing"),
           duration_seconds: "duration",
         }}
       >
@@ -220,7 +219,6 @@ export function ManualFlightForm({
         <CoordsField
           label="Landing point"
           name="landing"
-          description="Latitude, longitude — paste straight from Google Maps."
           value={coords}
           onChange={setCoords}
         />

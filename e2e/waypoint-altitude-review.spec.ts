@@ -24,6 +24,7 @@
 import { test, expect, type Page } from "./fixtures/test";
 import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { FRONTEND_URL } from "./fixtures/stack";
+import { coordsFields } from "./fixtures/coords";
 import { stubTerrainElevations } from "./fixtures/mapbox";
 import {
   firstWaypointRow,
@@ -216,13 +217,15 @@ test("typing a coordinate in the review keeps the comparison on screen", async (
   // used to destroy the comparison this page exists to show. The page holds
   // the reading it opened with, so type a character at a time and none of
   // that moves.
-  const coords = page.getByRole("textbox", { name: "Coordinates (lat, lon)" });
-  await coords.fill("");
-  await coords.pressSequentially("-36.61234, 146.61234", { delay: 10 });
+  const coords = coordsFields(page);
+  await coords.lat.fill("");
+  await coords.lat.pressSequentially("-36.61234", { delay: 10 });
+  await coords.lon.fill("");
+  await coords.lon.pressSequentially("146.61234", { delay: 10 });
   await expect(page.getByRole("main")).toContainText("4000 m");
   await expect(page.getByRole("main")).toContainText("apart");
   await expect(accept).toBeVisible();
-  await expect(page.getByText('Enter "lat, lon" decimal degrees')).toHaveCount(0);
+  await expect(page.getByText(/^Enter a (latitude|longitude) between/)).toHaveCount(0);
 
   // Back on the list the waypoint has moved, so its reading is gone.
   await page.getByRole("button", { name: /^All \d+$/ }).click();
