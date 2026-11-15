@@ -19,6 +19,8 @@ import {
   compPilotsPath,
   pilotPath,
   compWaypointsPath,
+  compScoresPath,
+  compAnalysisPath,
   compAltitudeReviewPath,
   taskRoutePath,
 } from "./slug";
@@ -195,4 +197,67 @@ export function underPilot(
           : "/comp",
     },
   ];
+}
+
+/** A level of the bar's title menu: the pages beside a page, or under it. */
+export type RelatedPages = {
+  as: "siblings" | "children";
+  items: Array<Crumb & { current?: boolean }>;
+};
+
+/** The pages under a competition, by the name each has in the title's menu. */
+export type CompPage = "Scores" | "Waypoints" | "Pilots" | typeof COMP_ANALYSIS_LABEL | "Settings";
+
+/**
+ * The pages under a competition, for the bar's title menu (issue #863,
+ * decision 4: the strip of section links went into this menu).
+ *
+ * With `current`, they are drawn BESIDE the page that is open, which is
+ * ticked; without it, UNDER the competition's own page. Pilots and Settings
+ * are organisers' pages, and an open-distance competition has no analysis.
+ *
+ * `comp` may still be loading: the links work from the id alone.
+ */
+export function compPages(
+  compId: string | undefined,
+  comp: { name: string; scoring_format?: string | null } | null | undefined,
+  isAdmin: boolean,
+  current?: CompPage
+): RelatedPages | undefined {
+  if (!compId) return undefined;
+  const name = comp?.name;
+  const items: Array<Crumb & { current?: boolean }> = [
+    { label: "Scores", to: compScoresPath(compId, name) },
+    { label: "Waypoints", to: compWaypointsPath(compId, name) },
+  ];
+  if (isAdmin) items.push({ label: "Pilots", to: compPilotsPath(compId, name) });
+  if (comp?.scoring_format !== "open_distance") {
+    items.push({ label: COMP_ANALYSIS_LABEL, to: compAnalysisPath(compId, name) });
+  }
+  if (isAdmin) items.push({ label: "Settings", to: compSettingsPath(compId, name) });
+  return {
+    as: current ? "siblings" : "children",
+    items: items.map((it) => ({ ...it, current: it.label === current })),
+  };
+}
+
+/**
+ * A competition's tasks, beside the one that is open, for the bar's title
+ * menu on a task page: the way from one task to the next.
+ */
+export function taskSiblings(
+  compId: string | undefined,
+  compName: string | null | undefined,
+  tasks: Array<{ task_id: string; name: string }> | null | undefined,
+  currentTaskId: string | undefined
+): RelatedPages | undefined {
+  if (!compId || !tasks || tasks.length < 2) return undefined;
+  return {
+    as: "siblings",
+    items: tasks.map((t) => ({
+      label: t.name,
+      to: taskPath(compId, compName, t.task_id, t.name),
+      current: t.task_id === currentTaskId,
+    })),
+  };
 }
