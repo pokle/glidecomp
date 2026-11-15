@@ -525,8 +525,10 @@ These are the standing imperatives. Each links to the reference that explains it
     has no browser Back, so the bar's is the only one.
   - **The content pages have the same bar** in plain markup
     (`static/src/components/SiteHeader.astro`). Sign in, Onboarding and the
-    OAuth consent page stand outside the Shell and have none. The analysis
-    page and the 3D replay keep their own chrome for now.
+    OAuth consent page stand outside the Shell and have none. The 3D replay
+    has the same bar in plain markup too (`replay.html`, #869), as pills
+    floating over the scene, with ⋯ opening its control drawer. The analysis
+    page keeps its own chrome for now.
   - Coverage: `e2e/page-bar.spec.ts`, on a desktop and a phone.
 - **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
   dialog and piece of shared chrome uses it. Read

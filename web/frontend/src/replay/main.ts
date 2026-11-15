@@ -33,6 +33,7 @@ import { requiredGlideToTarget, type TrackManifest, type ThermalShapeSummary } f
 import { installStaleDeployReload } from '../react/lib/stale-deploy';
 import { html, renderElement, renderInto } from '../render-html';
 import { installDefaultTrustedTypesPolicy } from '../trusted-types';
+import { compPath, taskPath } from '../react/lib/slug';
 
 // Before anything can create a map: Mapbox GL's own HTML and worker URL go
 // through the default Trusted Types policy (src/trusted-types.ts).
@@ -98,18 +99,100 @@ async function fetchThermalShapes(): Promise<ThermalShapeSummary[] | null> {
   return null;
 }
 
+/** A page above this one: its name in the bar and the menu, and its link. */
+type BarCrumb = { label: string; href: string };
+
+/** The title-menu indent: 12 px, and 14 px more for each level down (the app's bar). */
+const barIndent = (depth: number): string => `padding-left:${12 + depth * 14}px`;
+
 /**
- * Fill the top-center breadcrumb with "› comp › task" links once the names
- * are known (one public comp-detail fetch). Sample mode (?comp/?task absent)
- * keeps the bare GlideComp crumb. Fire-and-forget: a failed fetch just
- * leaves the crumb short — never blocks the viewer.
+ * Draw the page bar's links (#869) for the pages above this one. The markup
+ * holds the sample's trail (Home), so this only runs for a real task.
  */
-async function populateBreadcrumbs(): Promise<void> {
+function renderPageBar(trail: BarCrumb[]): void {
+  const parent = trail[trail.length - 1];
+  const back = $<HTMLAnchorElement>('barBack');
+  back.href = parent.href;
+  back.setAttribute('aria-label', `Back to ${parent.label}`);
+
+  // A phone has room for the parent; a wider screen for the whole trail.
+  const more = trail.length > 1 ? ` +${trail.length - 1} more` : '';
+  renderInto(
+    $('barTrail'),
+    html`<span class="sm:hidden">${parent.label}${more}</span><span class="max-sm:hidden">${trail
+      .map((c) => c.label)
+      .join(' › ')}</span>`,
+  );
+
+  // "You are here": the trail, then this page, one level further in.
+  const here = $('barHere');
+  const current = $('barCurrent');
+  for (const li of Array.from(here.children)) if (li !== current) li.remove();
+  for (const [i, c] of trail.entries()) {
+    here.insertBefore(
+      renderElement(html`<li><a href=${c.href} class="bar-row" style=${barIndent(i)}>${c.label}</a></li>`),
+      current,
+    );
+  }
+  current.querySelector<HTMLElement>('.bar-row')?.setAttribute('style', barIndent(trail.length));
+  // "Elsewhere" holds what the trail does not.
+  $('barElsewhereComps').hidden = trail.some((c) => c.href === '/comp');
+
+  // The same trail as real links with the menu closed.
+  renderInto(
+    $('crumbs'),
+    html`${trail.map((c) => html`<li><a href=${c.href} tabindex="-1">${c.label}</a></li>`)}
+      <li><span aria-current="page">3D replay</span></li>`,
+  );
+}
+
+/**
+ * The page bar's title menu is a native <details>, so it opens with no
+ * script. This adds what a disclosure does not do by itself (the content
+ * pages' bar does the same in public/site-header.js): Escape closes it and
+ * gives focus back to the title; a click elsewhere or focus going elsewhere
+ * closes it. A click, not a pointerdown, so a tap on the scene that closes
+ * the menu is still seen as "menu open" by the scene's play/pause toggle.
+ */
+function setupBarMenu(): void {
+  const menu = $<HTMLDetailsElement>('barMenu');
+  menu.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !menu.open) return;
+    e.preventDefault();
+    e.stopPropagation(); // the drawer and the shortcuts popover keep their state
+    menu.open = false;
+    $('barTitle').focus();
+  });
+  menu.addEventListener('focusout', () => {
+    // focusout fires before the new element takes focus: look on the next tick.
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body && !menu.contains(active)) menu.open = false;
+    }, 0);
+  });
+  document.addEventListener('click', (e) => {
+    if (menu.open && !menu.contains(e.target as Node)) menu.open = false;
+  });
+}
+
+/**
+ * Fill the page bar for a real task (?comp=&task=). The links work at once,
+ * under generic names; one public comp-detail fetch then names them. A
+ * failed fetch keeps the generic names — it never blocks the viewer. The
+ * sample (no ?comp/?task) keeps the markup's trail: Home.
+ */
+async function setupPageBar(): Promise<void> {
+  setupBarMenu();
   const q = new URLSearchParams(location.search);
   const comp = q.get('comp');
   const task = q.get('task');
-  const nav = document.getElementById('crumbs');
-  if (!comp || !task || !nav) return;
+  if (!comp || !task) return;
+  const trail = (compName: string | null, taskName: string | null): BarCrumb[] => [
+    { label: 'Competitions', href: '/comp' },
+    { label: compName || 'Competition', href: compPath(comp, compName) },
+    { label: taskName || 'Task', href: taskPath(comp, compName, task, taskName) },
+  ];
+  renderPageBar(trail(null, null));
   try {
     const res = await fetch(`/api/comp/${encodeURIComponent(comp)}`);
     if (!res.ok) return;
@@ -117,26 +200,10 @@ async function populateBreadcrumbs(): Promise<void> {
       name: string;
       tasks?: Array<{ task_id: string; name: string }>;
     };
-    const crumbs: Array<{ label: string; href: string }> = [
-      { label: detail.name, href: `/comp/${encodeURIComponent(comp)}` },
-    ];
-    const taskName = detail.tasks?.find((t) => t.task_id === task)?.name;
-    if (taskName) {
-      crumbs.push({
-        label: taskName,
-        href: `/comp/${encodeURIComponent(comp)}/task/${encodeURIComponent(task)}`,
-      });
-    }
-    for (const c of crumbs) {
-      nav.appendChild(document.createTextNode('›'));
-      const a = document.createElement('a');
-      a.href = c.href;
-      a.textContent = c.label;
-      a.className = 'max-w-40 truncate hover:underline underline-offset-4';
-      nav.appendChild(a);
-    }
+    const taskName = detail.tasks?.find((t) => t.task_id === task)?.name ?? null;
+    renderPageBar(trail(detail.name, taskName));
   } catch {
-    // Offline / API hiccup — the GlideComp crumb alone still gets them home.
+    // Offline / API hiccup — the generic names still link to the right pages.
   }
 }
 
@@ -178,8 +245,8 @@ function zoneLabel(refDate: Date, timeZone?: string): string {
  * Wire the single control drawer.
  *
  * Every control — View, Pilots, Gaggles — lives in one scrolling panel
- * (#menuPanel) opened from the floating hamburger (#menuToggle), the same way
- * on desktop and mobile. The panel slides in from the right; the hamburger
+ * (#menuPanel) opened from ⋯ in the page bar (#menuToggle), the same way
+ * on desktop and mobile. The panel slides in from the right; ⋯
  * toggles it, the ✕ header button and Escape close it, and a click on the map
  * outside the panel dismisses it too. Inputs inside the panel never close it.
  */
@@ -189,19 +256,25 @@ function setupPanels(): void {
   const close = document.getElementById('menuClose');
   if (!toggle || !panel) return;
 
-  const setOpen = (open: boolean): void => {
+  /**
+   * `focus`: move focus with the drawer — into it on open, back to ⋯ on close
+   * (⋯ is under the open drawer, so focus left there would be out of sight).
+   */
+  const setOpen = (open: boolean, focus = false): void => {
     panel.classList.toggle('open', open);
+    // Closed, the drawer is off screen: its controls must not take focus.
+    panel.inert = !open;
     toggle.setAttribute('aria-expanded', String(open));
-    // Hide the floating hamburger while the drawer is open so it doesn't sit on
-    // top of the panel's ✕ button; the ✕ / Escape / click-outside close it.
-    toggle.classList.toggle('hidden', open);
+    // The drawer opens over the page bar (z-[60] against its z-50), so ⋯
+    // stays in its slot underneath and the title does not shift sideways.
+    if (focus) (open ? close : toggle)?.focus();
   };
 
   toggle.addEventListener('click', (e) => {
     e.stopPropagation();
-    setOpen(!panel.classList.contains('open'));
+    setOpen(!panel.classList.contains('open'), true);
   });
-  close?.addEventListener('click', () => setOpen(false));
+  close?.addEventListener('click', () => setOpen(false, true));
 
   // Click outside the drawer (and not on the toggle) closes it.
   document.addEventListener('click', (e) => {
@@ -210,9 +283,11 @@ function setupPanels(): void {
       setOpen(false);
     }
   });
-  // Esc closes the drawer.
+  // Esc closes the drawer, and gives focus back to ⋯ if it was in the drawer.
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') setOpen(false);
+    if (e.key === 'Escape' && panel.classList.contains('open')) {
+      setOpen(false, panel.contains(document.activeElement));
+    }
   });
 }
 
@@ -240,7 +315,7 @@ async function main(): Promise<void> {
   const overlayText = $('overlayText');
   const container = $('viewer');
 
-  void populateBreadcrumbs();
+  void setupPageBar();
 
   // Declared before the viewer so its callbacks (which fire from the rAF loop)
   // can never hit the temporal dead zone.
@@ -369,7 +444,8 @@ async function main(): Promise<void> {
       (t instanceof HTMLInputElement ||
         t instanceof HTMLSelectElement ||
         t instanceof HTMLTextAreaElement ||
-        (e.key === ' ' && t instanceof HTMLButtonElement))
+        // …as it is on the page bar's title (a <summary>): it opens the menu
+        (e.key === ' ' && (t instanceof HTMLButtonElement || t.tagName === 'SUMMARY')))
     )
       return;
     switch (e.key) {
@@ -591,13 +667,13 @@ async function main(): Promise<void> {
     // doubles as the visibility toggle); unranked pilots keep a plain swatch.
     const swatch =
       p.rank != null
-        ? html`<button class="swatch shrink-0 grid place-items-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold text-slate-900 leading-none" style="background:${rgb}; box-shadow: 0 0 0 1px rgba(8,12,22,0.6)" title="Toggle visibility">${p.rank}</button>`
-        : html`<button class="swatch shrink-0 w-3 h-3 rounded-sm" style="background:${rgb}" title="Toggle visibility"></button>`;
+        ? html`<span class="grid place-items-center h-5 min-w-5 px-1 rounded-full text-xs font-bold text-slate-900 leading-none" style="background:${rgb}; box-shadow: 0 0 0 1px rgba(8,12,22,0.6)">${p.rank}</span>`
+        : html`<span class="block w-3 h-3 rounded-sm" style="background:${rgb}"></span>`;
     const li = renderElement<HTMLLIElement>(html`
-      <li class="flex items-center gap-2 px-3 py-1 hover:bg-slate-700/40 cursor-pointer select-none">
-        ${swatch}
-        <span class="name flex-1 truncate" title="Click to follow">${p.name}</span>
-        <span class="shrink-0 text-[10px] text-slate-500 tabular-nums">${scoreLabel}</span>
+      <li class="flex items-center gap-2 px-3 py-1 pointer-coarse:min-h-11 pointer-coarse:py-0 hover:bg-slate-700/40 cursor-pointer select-none" title="Click to follow">
+        <button class="swatch shrink-0 grid place-items-center min-h-6 min-w-6 pointer-coarse:min-h-11 pointer-coarse:min-w-11" title="Toggle visibility">${swatch}</button>
+        <span class="name flex-1 truncate">${p.name}</span>
+        <span class="shrink-0 text-xs text-slate-500 tabular-nums">${scoreLabel}</span>
       </li>`);
     li.dataset.search = `${p.rank != null ? `${p.rank}. ` : ''}${p.name}`.toLowerCase();
     legend.appendChild(li);
@@ -605,7 +681,6 @@ async function main(): Promise<void> {
 
     let visible = true;
     const swatchBtn = li.querySelector<HTMLButtonElement>('.swatch')!;
-    const nameEl = li.querySelector<HTMLSpanElement>('.name')!;
 
     li.addEventListener('pointerenter', () => {
       if (followIdx < 0) viewer.setHighlight(i);
@@ -619,7 +694,9 @@ async function main(): Promise<void> {
       viewer.setPilotVisible(i, visible);
       li.classList.toggle('opacity-40', !visible);
     });
-    nameEl.addEventListener('click', () => setFollow(i));
+    // The whole row follows (the swatch stops its own click), so the target
+    // is the row's full 44 px on a touch screen, not the name's line of text.
+    li.addEventListener('click', () => setFollow(i));
   }
 
   // --- pilot search filter ---
@@ -661,7 +738,8 @@ async function main(): Promise<void> {
     if (i < 0) {
       const panelOpen =
         $('menuPanel').classList.contains('open') ||
-        !$('kbdPanel').classList.contains('hidden');
+        !$('kbdPanel').classList.contains('hidden') ||
+        $<HTMLDetailsElement>('barMenu').open;
       if (!panelOpen) viewer.togglePlay();
       return;
     }
@@ -820,7 +898,7 @@ async function main(): Promise<void> {
     if (p.rank == null) return null;
     const el = document.createElement('div');
     el.className =
-      'absolute left-0 top-0 grid place-items-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold text-slate-900 leading-none';
+      'absolute left-0 top-0 grid place-items-center h-[18px] min-w-[18px] px-1 rounded-full text-[11px] font-bold text-slate-900 leading-none';
     el.style.background = pilotRgb(i);
     el.style.boxShadow = '0 0 0 1px rgba(8,12,22,0.6)';
     el.style.display = 'none';

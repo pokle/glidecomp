@@ -86,6 +86,10 @@ export const MOBILE_SPEC_FILES = [
   // pointer for the kit's own controls, and Back, a refused Save and Cancel
   // are what a phone with no browser chrome (the installed app) depends on.
   "page-bar.spec.ts",
+  // The 3D replay's page bar and controls (#869): the replay is opened from
+  // the task page and the report card on a phone, and its controls were the
+  // smallest in the app (#860 §1).
+  "replay-bar.spec.ts",
   // Where a refusal lands on the task's management tools — the manage grid's
   // row actions and the manual-flight page (#808). A task is run from a hill,
   // and a phone is where a refusal can land off-screen.

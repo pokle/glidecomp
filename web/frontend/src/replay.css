@@ -33,3 +33,44 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* A row of the page bar's title menu (#869): 44 px at every pointer, body
+   size, and it may wrap — the app's bar exactly (react/rac/page-bar.tsx). */
+.bar-row {
+  @apply flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-base text-slate-100 outline-none;
+}
+a.bar-row:hover,
+a.bar-row:focus-visible {
+  @apply bg-slate-700/50;
+}
+html.light .bar-row {
+  color: #0f172a;
+}
+html.light a.bar-row:hover,
+html.light a.bar-row:focus-visible {
+  background-color: rgba(15, 23, 42, 0.1);
+}
+
+/* A bigger hit area without a bigger control, for a small control whose
+   neighbours would re-flow if it grew (a text toggle on a section's heading
+   row, the callout's ✕). The replay does not import react/globals.css, so this
+   is a copy of its `touch-target` utility; keep the two alike.
+
+   Coarse pointers only: a mouse is already precise at 24px, and on the desktop
+   an invisible 44px box would only steal clicks from its neighbours
+   (accessibility standard §4.5). */
+@utility touch-target {
+  @media (pointer: coarse) {
+    position: relative;
+
+    &::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+  }
+}

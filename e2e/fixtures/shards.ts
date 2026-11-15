@@ -96,6 +96,7 @@ export const E2E_SHARDS = {
   "maps-and-analysis": [
     "analysis-map.spec.ts", // 76.8s
     "trusted-types.spec.ts", // 57.1s
+    "replay-bar.spec.ts", // new (#869) — measure on its first CI run (chromium + mobile)
     "report-card.spec.ts", // 28.4s
     "task-analysis.spec.ts", // 20.6s
     "task-analysis-metric-chart.spec.ts", // new — measure on its first CI run (chromium + mobile)
