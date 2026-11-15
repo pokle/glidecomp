@@ -36,7 +36,7 @@ const buttonVariants = cva(
         ghost:
           "data-hovered:bg-muted data-hovered:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:data-hovered:bg-muted/50",
         destructive:
-          "bg-destructive/10 text-destructive data-hovered:bg-destructive/20 data-focus-visible:border-destructive/40 data-focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:data-hovered:bg-destructive/30 dark:data-focus-visible:ring-destructive/40",
+          "bg-destructive/10 text-danger data-hovered:bg-destructive/20 data-focus-visible:border-destructive data-focus-visible:ring-destructive/50 dark:bg-destructive/20 dark:data-hovered:bg-destructive/30",
         link: "text-link underline-offset-4 data-hovered:underline",
       },
       // Horizontal padding was px-2.5 (10px) at EVERY size, which is what made

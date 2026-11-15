@@ -98,7 +98,7 @@ export function ExplanationItem({
 }) {
   const textClass =
     item.emphasis === "warning"
-      ? "text-amber-600 dark:text-amber-500"
+      ? "text-caution"
       : item.emphasis === "muted"
         ? "text-muted-foreground"
         : "";

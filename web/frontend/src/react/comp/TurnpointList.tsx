@@ -193,7 +193,7 @@ export function TurnpointList({
                 title={name}
                 detailClassName={cn(
                   "tabular-nums",
-                  problem && "text-destructive"
+                  problem && "text-danger"
                 )}
                 detail={
                   problem ?? (

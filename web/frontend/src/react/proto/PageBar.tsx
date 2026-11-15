@@ -369,7 +369,7 @@ function menuItems(actions: BarAction[]): ReactNode[] {
         routerOptions={a.to ? openedHere() : undefined}
         onAction={a.onAction}
         isDisabled={a.disabled}
-        className={cn(ROW, a.destructive && "text-destructive data-focused:text-destructive")}
+        className={cn(ROW, a.destructive && "text-danger data-focused:text-danger")}
       >
         {a.label}
       </MenuItem>

@@ -468,7 +468,7 @@ function ScoresTable({ scores, cls }: { scores: CompScores; cls: CompClassScore 
               {formatRankedScore(entry.score)}
             </span>{" "}
             {partial ? (
-              <span className="text-amber-600 dark:text-amber-500">
+              <span className="text-caution">
                 (part)
               </span>
             ) : (
@@ -568,7 +568,7 @@ function FtvBreakdown({
                   <span>
                     {name(t.task_id)}
                     {t.ftv_status === "partial" ? (
-                      <span className="text-amber-600 dark:text-amber-500"> — counted in part</span>
+                      <span className="text-caution"> — counted in part</span>
                     ) : null}
                   </span>
                   <span className="tabular-nums">

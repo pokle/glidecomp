@@ -57,7 +57,7 @@ export function FieldError({
 }: React.ComponentProps<typeof AriaFieldError>) {
   return (
     <AriaFieldError
-      className={cn("text-xs font-medium text-destructive", className as string)}
+      className={cn("text-xs font-medium text-danger", className as string)}
       {...props}
     />
   );

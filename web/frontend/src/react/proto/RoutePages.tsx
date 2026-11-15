@@ -694,14 +694,14 @@ export function RoutePage() {
         </section>
 
         {errors.length > 0 ? (
-          <ul className="list-disc pl-5 text-sm text-destructive">
+          <ul className="list-disc pl-5 text-sm text-danger">
             {errors.slice(0, 10).map((e, i) => (
               <li key={i}>{e}</li>
             ))}
           </ul>
         ) : null}
         {warnings.length > 0 ? (
-          <ul className="text-sm text-amber-500">
+          <ul className="text-sm text-caution">
             {warnings.map((w, i) => (
               <li key={i}>⚠ {w}</li>
             ))}

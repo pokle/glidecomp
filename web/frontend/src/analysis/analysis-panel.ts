@@ -214,12 +214,12 @@ function formatDuration(seconds: number): string {
  * Each entry provides the display label and CSS class for a given turnpoint type.
  */
 const TURNPOINT_METADATA: Record<string, { label: string; cssClass: string }> = {
-  TAKEOFF: { label: 'Takeoff', cssClass: 'text-blue-600' },
-  SSS: { label: 'Start (SSS)', cssClass: 'text-green-600' },
-  ESS: { label: 'ESS', cssClass: 'text-yellow-600' },
+  TAKEOFF: { label: 'Takeoff', cssClass: 'text-link' },
+  SSS: { label: 'Start (SSS)', cssClass: 'text-positive' },
+  ESS: { label: 'ESS', cssClass: 'text-caution' },
 };
 
-const DEFAULT_TURNPOINT_METADATA = { label: 'Turnpoint', cssClass: 'text-blue-600' };
+const DEFAULT_TURNPOINT_METADATA = { label: 'Turnpoint', cssClass: 'text-link' };
 
 function getTurnpointTypeLabel(type: string): string {
   return TURNPOINT_METADATA[type]?.label || DEFAULT_TURNPOINT_METADATA.label;
@@ -998,11 +998,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
     // A. Status banner
     if (result.madeGoal) {
-      out.push(html`<div class="rounded-lg bg-green-500/15 px-3 py-2 text-sm font-medium text-green-700">Goal</div>`);
+      out.push(html`<div class="rounded-lg bg-success/15 px-3 py-2 text-sm font-medium text-positive">Goal</div>`);
     } else if (result.sequence.length > 0) {
       const lastTP = result.sequence[result.sequence.length - 1];
       const tpName = currentTask.turnpoints[lastTP.taskIndex]?.waypoint.name || getTurnpointLabel(lastTP.taskIndex);
-      out.push(html`<div class="rounded-lg bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-700">${getTurnpointLabel(lastTP.taskIndex)} reached &ndash; ${tpName}</div>`);
+      out.push(html`<div class="rounded-lg bg-warning/15 px-3 py-2 text-sm font-medium text-caution">${getTurnpointLabel(lastTP.taskIndex)} reached &ndash; ${tpName}</div>`);
     } else {
       out.push(html`<div class="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground">Not started</div>`);
     }
@@ -1019,8 +1019,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       fallbackNotes.push('No ESS turnpoint in this task — the speed section ends at the last turnpoint (goal).');
     }
     if (fallbackNotes.length > 0) {
-      out.push(html`<div class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 space-y-0.5">${
-        fallbackNotes.map(n => html`<div class="text-xs text-amber-500">&#9888; ${n}</div>`)
+      out.push(html`<div class="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 space-y-0.5">${
+        fallbackNotes.map(n => html`<div class="text-xs text-caution">&#9888; ${n}</div>`)
       }</div>`);
     }
 
@@ -1065,7 +1065,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       const toName = tpWithLabel(currentTask!.turnpoints[leg.toTaskIndex]?.waypoint.name, getTurnpointLabel(leg.toTaskIndex));
       const legDist = formatDistance(leg.distance).withUnit;
       const icon = leg.completed
-        ? html`<span class="text-green-600">&#10003;</span>`
+        ? html`<span class="text-positive">&#10003;</span>`
         : html`<span class="text-muted-foreground">&#10007;</span>`;
       return html`
         <div class="flex items-center justify-between py-1 text-sm">
@@ -1446,7 +1446,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       const isChecked = allSelected || selectedPilots!.has(ps.pilotName);
       const od = openDistanceStats?.get(ps.pilotName);
       const stayedMark = od?.leftTakeoff === false
-        ? html`<span class="text-amber-500" title="Never left the take-off cylinder — open distance is measured from the cylinder exit, so this flight scores 0">*</span>`
+        ? html`<span class="text-caution" title="Never left the take-off cylinder — open distance is measured from the cylinder exit, so this flight scores 0">*</span>`
         : nothing;
       return html`<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
         <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot=${ps.pilotName} ?checked=${isChecked}></td>
@@ -1638,9 +1638,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
     const rows = result.pilotScores.map((ps) => {
       const isChecked = allSelected || selectedPilots!.has(ps.pilotName);
-      const goalIcon = ps.madeGoal ? html`<span class="text-green-600 ml-1" title="Goal">&#10003;</span>` : nothing;
+      const goalIcon = ps.madeGoal ? html`<span class="text-positive ml-1" title="Goal">&#10003;</span>` : nothing;
       const floored = ps.turnpointResult.flownDistance < params.minimumDistance;
-      const distMark = floored ? html`<span class="text-amber-500" title="Raised to minimum distance">*</span>` : nothing;
+      const distMark = floored ? html`<span class="text-caution" title="Raised to minimum distance">*</span>` : nothing;
       const distPtsCell = ps.distanceDifficultyPoints > 0
         ? html`<span class="cursor-help underline decoration-dotted" title="${ps.distanceLinearPoints.toFixed(1)} linear + ${ps.distanceDifficultyPoints.toFixed(1)} difficulty">${ps.distancePoints.toFixed(1)}</span>`
         : ps.distancePoints.toFixed(1);

@@ -176,7 +176,7 @@ export function WaypointList({
               // Everything else on one mono line: the altitude is HERE, not
               // behind a frozen column. A blank altitude reads as unknown and
               // a zero reads as zero — they are different facts.
-              detailClassName={cn("font-mono", !valid && "text-destructive")}
+              detailClassName={cn("font-mono", !valid && "text-danger")}
               detail={
                 <>
                   {valid ? row.coords : `${row.coords || "no coordinates"} — invalid`}

@@ -126,7 +126,7 @@ export function AdminUsers() {
                 {u.email_verified ? null : (
                   <>
                     {" "}
-                    <span className="text-xs text-amber-600 dark:text-amber-400">
+                    <span className="text-xs text-caution">
                       (unverified)
                     </span>
                   </>

@@ -138,7 +138,7 @@ export function OAuthConsent() {
           You can disconnect it at any time in Settings → Connected AI Assistants.
         </p>
         {error ? (
-          <p role="alert" className="text-destructive">
+          <p role="alert" className="text-danger">
             {error}
           </p>
         ) : null}

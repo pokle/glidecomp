@@ -211,7 +211,7 @@ export function AltitudeReviewList({
                       <span
                         className={cn(
                           "ml-2 font-semibold",
-                          altitudeVerdict(pair) === "coords" && "text-destructive"
+                          altitudeVerdict(pair) === "coords" && "text-danger"
                         )}
                       >
                         {formatAltitudeDelta(delta)} m

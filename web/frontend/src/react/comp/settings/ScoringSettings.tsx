@@ -204,7 +204,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
             <div className="flex flex-col gap-6 border-t border-border px-4 py-4">
               <div
                 role="note"
-                className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-muted-foreground"
+                className="rounded-md border border-warning/50 bg-warning/10 p-3 text-sm text-muted-foreground"
               >
                 <strong className="font-medium text-foreground">
                   Official CIVL defaults for your wing.

@@ -13,9 +13,24 @@
  * `--link` is the accent wherever it is TEXT (or a tick, which may as well
  * pass too). In classes: `bg-primary` and `text-link`.
  *
- * This is two guards. The first holds the numbers, so a new shade of blue
- * cannot quietly go back under the line. The second keeps the fill from being
- * used as text, which is the mistake the old single token invited.
+ * RED has the same split, for the same reason. `--destructive` (iOS system
+ * red) is the fill and the mark: an invalid field's border, the wash behind a
+ * destructive button. As text it was 3.55:1 on a card in light, which is what
+ * every field's error message was, and the label of a destructive button sat
+ * on a wash of its own colour at 2.80:1 (3.60:1 in a dark confirm dialog).
+ * `--danger` is red wherever it is TEXT. In classes: `bg-destructive/10` and
+ * `text-danger`.
+ *
+ * AMBER and GREEN were never tokens: the app wrote Tailwind's palette
+ * straight into its classes, `text-amber-500` at 2.13:1 for every warning and
+ * `text-green-600` at 3.22:1 across the analysis page. They are pairs now too:
+ * `--warning` and `--success` are the fills, `--caution` and `--positive` the
+ * text. In classes: `bg-warning/10 text-caution`, `bg-success/15 text-positive`.
+ *
+ * This is two guards for each colour. The first holds the numbers, so a new
+ * shade cannot quietly go back under the line. The second keeps the fill from
+ * being used as text, which is the mistake a single token invites. A third
+ * guard keeps Tailwind's palette out, so a colour cannot arrive unmeasured.
  */
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -52,7 +67,7 @@ function contrast(a: Rgb, b: Rgb): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (hi + 0.05) / (lo + 0.05);
 }
-/** `bg-primary/NN` over a surface: the fill at that opacity. */
+/** `bg-primary/NN`, `bg-destructive/NN` and so on over a surface: the fill at that opacity. */
 function wash(fill: Rgb, alpha: number, under: Rgb): Rgb {
   return fill.map((c, i) => c * alpha + under[i] * (1 - alpha)) as Rgb;
 }
@@ -84,6 +99,116 @@ describe.each([":root", ".dark"] as const)("accent contrast in %s", (selector) =
   });
 });
 
+/**
+ * Red, amber and green: a fill, the text that goes with it, and every wash of
+ * the fill the app draws under that text. Contrast only falls as a wash gets
+ * stronger, so the strongest per theme is the one that decides.
+ *
+ * - Red. A destructive button is `bg-destructive/10`, and `/20` hovered; on
+ *   dark it is `/20`, and `/30` hovered (rac/button.tsx). A badge and a chip
+ *   are the resting washes. It sits on the ground, on a card and in a
+ *   dialog's footer.
+ * - Amber. A notice box is `bg-warning/5` or `/10`, a chip `/10` or `/15`. A
+ *   chip sits in a list's row, and a row turns `--muted` when hovered.
+ * - Green. The analysis page's Goal banner is `bg-success/15` and a climb's
+ *   rank is 20% of the fill mixed with a card (analysis.css).
+ */
+type Theme = ":root" | ".dark";
+const TONES = [
+  {
+    name: "red",
+    fill: "destructive",
+    text: "danger",
+    washes: { ":root": [0.1, 0.2], ".dark": [0.1, 0.2, 0.3] },
+    under: ["the ground", "a card", "a dialog's footer"],
+  },
+  {
+    name: "amber",
+    fill: "warning",
+    text: "caution",
+    washes: { ":root": [0.05, 0.1, 0.15], ".dark": [0.05, 0.1, 0.15] },
+    under: ["the ground", "a card", "a hovered row"],
+  },
+  {
+    name: "green",
+    fill: "success",
+    text: "positive",
+    washes: { ":root": [0.15, 0.2], ".dark": [0.15, 0.2] },
+    under: ["the ground", "a card", "a hovered row"],
+  },
+] as const;
+
+describe.each(
+  TONES.flatMap((tone) => ([":root", ".dark"] as const).map((selector) => [tone.name, selector, tone] as const))
+)("%s contrast in %s", (_name, selector, tone) => {
+  const t = tokens(selector);
+  const surface: Record<string, Rgb> = {
+    "the ground": t.background,
+    "a card": t.card,
+    // `bg-muted/50` on the popover (rac/dialog.tsx), where a confirm's
+    // destructive button sits.
+    "a dialog's footer": wash(t.muted, 0.5, t.popover),
+    "a hovered row": t.muted,
+  };
+  const text = t[tone.text];
+  const fill = t[tone.fill];
+
+  it.each(["background", "card", "popover", "muted", "secondary", "accent"])(
+    `${tone.name} text reads on --%s`,
+    (name) => {
+      expect(contrast(text, t[name])).toBeGreaterThanOrEqual(AA);
+    }
+  );
+
+  it.each(
+    tone.washes[selector].flatMap((alpha) =>
+      tone.under.map((where) => [`${alpha * 100}%`, where, alpha] as const)
+    )
+  )(`${tone.name} text reads on a %s wash of the fill over %s`, (_label, where, alpha) => {
+    expect(contrast(text, wash(fill, alpha, surface[where]))).toBeGreaterThanOrEqual(AA);
+  });
+});
+
+describe.each([":root", ".dark"] as const)("red's own cases in %s", (selector) => {
+  const t = tokens(selector);
+
+  // rac/alert.tsx draws a destructive alert's description as `text-danger/90`.
+  it("an alert's description, the text red at 90%, reads on a card", () => {
+    expect(contrast(wash(t.danger, 0.9, t.card), t.card)).toBeGreaterThanOrEqual(AA);
+  });
+
+  // The fill stays what it was because a mark needs 3:1, not 4.5:1 (WCAG
+  // 1.4.11). An invalid field's border is `border-destructive`, and so is the
+  // focus border of a destructive button, which also sits in a dialog's footer.
+  it.each([
+    ["the ground", (x: Record<string, Rgb>) => x.background],
+    ["a card", (x: Record<string, Rgb>) => x.card],
+    ["a dialog's footer", (x: Record<string, Rgb>) => wash(x.muted, 0.5, x.popover)],
+  ] as const)("the fill is a mark on %s", (_where, surface) => {
+    expect(contrast(t.destructive, surface(t))).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// The analysis page (/analysis.html) never sets `.dark`, so it is drawn with
+// the light tokens only. Two of its surfaces are washes of the ACCENT fill
+// with coloured text of another tone on them.
+describe("the analysis page's own surfaces", () => {
+  const t = tokens(":root");
+
+  // A turnpoint's number is `bg-primary/10` with its type's colour: blue for
+  // a turnpoint, green for the start, amber for the end of the speed section.
+  it.each(["link", "positive", "caution"])("--%s reads on a turnpoint's number", (text) => {
+    expect(contrast(t[text], wash(t.primary, 0.1, t.card))).toBeGreaterThanOrEqual(AA);
+  });
+
+  // A selected climb or sink is `bg-primary/20`, with its gain or drop written
+  // on it. Its rank is not: a rank's bubble is its fill mixed with a card, so
+  // it is the wash over a card that the tests above hold, in every state.
+  it.each(["positive", "danger"])("--%s reads on a selected item", (text) => {
+    expect(contrast(t[text], wash(t.primary, 0.2, t.card))).toBeGreaterThanOrEqual(AA);
+  });
+});
+
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -95,22 +220,97 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
-describe("the fill is not used as text", () => {
-  // `text-primary-foreground` is the label ON the fill, and is right.
-  const AS_CLASS = /\btext-primary(?![-\w])/;
-  // A stylesheet's own rule: the home page writes its styles by hand.
-  const AS_PROPERTY = /(?<![-\w])color:\s*var\(--primary\)/;
+const SOURCES = [join(ROOT, "src"), join(ROOT, "static", "src")]
+  .flatMap(sourceFiles)
+  .filter((f) => !f.endsWith("accent-text.test.ts"));
+const relative = (f: string) => f.slice(ROOT.length + 1);
 
-  it("no `text-primary` class and no `color: var(--primary)`: use `text-link` / `var(--link)`", () => {
-    const offenders = [join(ROOT, "src"), join(ROOT, "static", "src")]
-      .flatMap(sourceFiles)
-      .filter((f) => !f.endsWith("accent-text.test.ts"))
-      .filter((f) => {
-        const text = readFileSync(f, "utf8");
-        return AS_CLASS.test(text) || AS_PROPERTY.test(text);
-      })
-      .map((f) => f.slice(ROOT.length + 1));
+describe("a fill is not used as text", () => {
+  it.each([
+    ["primary", "link"],
+    ["destructive", "danger"],
+    ["warning", "caution"],
+    ["success", "positive"],
+  ])("no `text-%s` class and no `color: var(--…)` of it: use `text-%s`", (fill, text) => {
+    // `text-primary-foreground` is the label ON the fill, and is right.
+    const asClass = new RegExp(`\\btext-${fill}(?![-\\w])`);
+    // A stylesheet's own rule: the home page writes its styles by hand.
+    const asProperty = new RegExp(`(?<![-\\w])color:\\s*var\\(--${fill}\\)`);
 
+    const offenders = SOURCES.filter((f) => {
+      const source = readFileSync(f, "utf8");
+      return asClass.test(source) || asProperty.test(source);
+    }).map(relative);
+
+    expect(offenders, `use text-${text} / var(--${text})`).toEqual([]);
+  });
+});
+
+describe("no wash of a fill is stronger than the ones held above", () => {
+  // Text on a stronger wash than these has not been measured. Raise the list
+  // in TONES with the class, and the tests above say if it still reads.
+  it.each(TONES.map((tone) => [tone.fill, tone] as const))(
+    "every wash of --%s is one its text is held on",
+    (fill, tone) => {
+      const strongest: Record<Theme, number> = {
+        ":root": Math.max(...tone.washes[":root"]),
+        ".dark": Math.max(...tone.washes[".dark"]),
+      };
+      // `bg-destructive/20`, and a rule's own `color-mix(…, var(--destructive) 20%, …)`.
+      const asClass = new RegExp(`((?:[\\w-]+:)*)bg-${fill}\\/(\\d+)`, "g");
+      const asMix = new RegExp(`()var\\(--${fill}\\)\\s+(\\d+)%`, "g");
+      const offenders: string[] = [];
+      for (const f of SOURCES) {
+        const source = readFileSync(f, "utf8");
+        for (const m of [...source.matchAll(asClass), ...source.matchAll(asMix)]) {
+          // A `dark:` wash is drawn on dark only; any other is drawn on both.
+          const limit = strongest[m[1].includes("dark:") ? ".dark" : ":root"];
+          if (Number(m[2]) / 100 > limit) offenders.push(`${relative(f)}: ${m[0]}`);
+        }
+      }
+      expect(offenders).toEqual([]);
+    }
+  );
+});
+
+describe("a destructive button's focus ring", () => {
+  // Its border was `border-destructive/40` and its ring `/20`: 1.68:1 against
+  // the page, where a focus indicator needs 3:1. The border is the fill at
+  // full strength now, which "the fill is a mark" above holds at 3:1.
+  it("no focus border is a translucent red", () => {
+    const offenders = SOURCES.filter((f) =>
+      /focus(?:-visible|ed)?:border-destructive\/\d/.test(readFileSync(f, "utf8"))
+    ).map(relative);
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("no colour arrives unmeasured", () => {
+  // Tailwind's palette (`text-amber-500`, `bg-green-500/20`) and the chart
+  // tones as text (`text-chart-2`) are how amber and green came to be under
+  // 4.5:1 with nothing to say so. A colour that carries text is a token in
+  // globals.css, where the tests above can see it.
+  const HUES =
+    "red|rose|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink";
+  const PALETTE = new RegExp(`\\b(?:text|bg|border|ring)-(?:${HUES})-\\d{2,3}\\b|\\btext-chart-\\d`, "g");
+  // The 3D replay (/replay) is its own surface with its own theme, in
+  // replay.css and inline; accessibility-standard.md §2 says so.
+  const OWN_THEME = /^src\/replay[./]/;
+  // The "Last used" pill on the sign-in page is near-black on a solid
+  // highlighter yellow, the same in both themes, and well past 4.5:1.
+  const ALLOWED: Record<string, string[]> = {
+    "src/react/pages/SignIn.tsx": ["border-yellow-400", "bg-yellow-300", "text-yellow-950"],
+  };
+
+  it("no Tailwind palette colour, and no chart tone as text", () => {
+    const offenders: string[] = [];
+    for (const f of SOURCES) {
+      const file = relative(f);
+      if (OWN_THEME.test(file)) continue;
+      for (const m of readFileSync(f, "utf8").matchAll(PALETTE)) {
+        if (!ALLOWED[file]?.includes(m[0])) offenders.push(`${file}: ${m[0]}`);
+      }
+    }
     expect(offenders).toEqual([]);
   });
 });

@@ -754,7 +754,7 @@ async function init(): Promise<void> {
       if (!parsed) {
         input.classList.add('border-destructive');
         const errorEl = document.createElement('p');
-        errorEl.className = 'threshold-error text-xs text-destructive mt-0.5';
+        errorEl.className = 'threshold-error text-xs text-danger mt-0.5';
         errorEl.textContent = 'Invalid value';
         input.parentElement?.appendChild(errorEl);
         hasError = true;
@@ -765,7 +765,7 @@ async function init(): Promise<void> {
       if (parsed.valueSI < min || parsed.valueSI > max) {
         input.classList.add('border-destructive');
         const errorEl = document.createElement('p');
-        errorEl.className = 'threshold-error text-xs text-destructive mt-0.5';
+        errorEl.className = 'threshold-error text-xs text-danger mt-0.5';
         errorEl.textContent = `Must be between ${min} and ${max} (SI units)`;
         input.parentElement?.appendChild(errorEl);
         hasError = true;

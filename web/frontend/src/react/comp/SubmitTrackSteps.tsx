@@ -409,7 +409,7 @@ export function IgcFileField({
         ) : null}
       </div>
       {error ? (
-        <p id={errorId} className="text-xs font-medium text-destructive">
+        <p id={errorId} className="text-xs font-medium text-danger">
           {error}
         </p>
       ) : null}

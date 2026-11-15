@@ -53,7 +53,7 @@ export function StartSettings({
   return (
     <>
       {missingSssWarning ? (
-        <p className="mt-1 text-sm text-amber-500">
+        <p className="mt-1 text-sm text-caution">
           ⚠ No SSS turnpoint — mark one above so the gates have a cylinder.
         </p>
       ) : null}
@@ -118,7 +118,7 @@ export function StartSettings({
         ))}
       </ul>
       {isRace && gates.length === 0 ? (
-        <p className="mt-2 text-sm text-amber-500">
+        <p className="mt-2 text-sm text-caution">
           ⚠ No start gates — each pilot is timed from their own start
           crossing.
         </p>

@@ -336,9 +336,9 @@ function renderFigure(d: FigureData): string {
   }
   const baroLabel = d.baroAlive ? 'barometer' : 'barometer (logged 0)';
   push(`    <g aria-hidden="true" class="text-[10px]">`);
-  push(`      <text x="${labelX}" y="${(gpsEndY + 3).toFixed(1)}" class="fill-current text-chart-1">raw GPS</text>`);
-  push(`      <text x="${labelX}" y="${(cleanLabelY + 3).toFixed(1)}" class="fill-current text-chart-2">cleaned</text>`);
-  push(`      <text x="${labelX}" y="${(baroLabelY + 3).toFixed(1)}" class="fill-current text-chart-3">${baroLabel}</text>`);
+  push(`      <text x="${labelX}" y="${(gpsEndY + 3).toFixed(1)}" class="fill-current text-link">raw GPS</text>`);
+  push(`      <text x="${labelX}" y="${(cleanLabelY + 3).toFixed(1)}" class="fill-current text-positive">cleaned</text>`);
+  push(`      <text x="${labelX}" y="${(baroLabelY + 3).toFixed(1)}" class="fill-current text-caution">${baroLabel}</text>`);
   push(`    </g>`);
   push(`  </svg>`);
   // legend (HTML, text in muted ink, swatches carry identity)

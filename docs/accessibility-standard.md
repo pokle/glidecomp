@@ -70,6 +70,39 @@ differs. Know which surface you're touching:
   colour (iOS system blue, until 2026-11), every primary button's label was at
   4.02:1 in light and 3.65:1 in dark. `src/react/accent-text.test.ts` holds
   the ratios for both themes and fails on `text-primary`.
+- **Red is two colours too.** `--destructive` is the fill and the mark: an
+  invalid field's border and ring, the wash behind a destructive button or a
+  badge (`border-destructive`, `bg-destructive/10`). `--danger` is red as
+  text: a field's error, an alert, the label of a destructive button
+  (`text-danger`, or `color: var(--danger)`). Do not use the fill as text. A
+  mark needs 3:1 and the fill has it; a letter needs 4.5:1 and the fill does
+  not. When red was one colour (iOS system red, until 2026-11), every field's
+  error message was at 3.55:1 on a card in light, and the label of a
+  destructive button was at 2.80:1 on its own wash (3.60:1 in a confirm
+  dialog in dark). The same test holds red text on every surface and on every
+  wash of the fill, fails on `text-destructive`, and fails on a wash that is
+  stronger than the ones it has measured.
+- **Amber and green are pairs as well.** `--warning` and `--success` are the
+  fills: the wash behind a warning, a chip or a rank (`bg-warning/10`,
+  `bg-success/15`). `--caution` and `--positive` are the text (`text-caution`,
+  `text-positive`). Until 2026-11 the app wrote Tailwind's palette into its
+  classes, and nothing measured it: `text-amber-500` was 2.13:1 on a card
+  and was every warning, and `text-green-600` was 3.22:1 across the analysis
+  page. On dark the fill and the text hold one value each, because system
+  orange and green read as text there. They stay two tokens because light
+  needs two.
+- **A colour that carries text is a token in `globals.css`.** Do not write a
+  Tailwind palette colour (`text-amber-500`, `bg-green-500/20`) in the app,
+  the analysis page or the content pages, and do not use a chart tone as
+  text (`text-chart-2`): a chart's line is a mark, and its label is text, so
+  the label takes `text-link`, `text-positive` or `text-caution`. The test
+  fails on both. The 3D replay has its own theme and is outside this rule.
+- **A wash under coloured text must not change with what is behind it.** The
+  analysis page's rank bubbles were a translucent wash on an item that turns
+  grey when hovered and blue when selected, so a climb's rank fell to 2.13:1
+  on a selected item. A bubble is now its fill mixed with the card
+  (`color-mix(in srgb, var(--success) 20%, var(--card))`), one colour in
+  every state.
 - **Non-text contrast ≥ 3:1** (WCAG 1.4.11) for UI component boundaries and
   states that convey meaning: input borders, the focus ring (`--ring`),
   checkbox/radio marks, chart/track lines and legends on the analysis and
@@ -145,6 +178,10 @@ differs. Know which surface you're touching:
   data-focused:ring-ring/50` on `rac/field.tsx`'s `inputClass` — do not strip
   it. Any custom focusable element gets an equivalently visible ring using
   `--ring` (which must keep ≥ 3:1 against its background, see §3.1).
+  A destructive button's ring is red, and is the kit's shape: a border of
+  `--destructive` at full strength (3.18:1 on the ground) with a 50% halo.
+  Its border used to be `border-destructive/40`, 1.68:1 against the page. Do
+  not make a focus border translucent; `accent-text.test.ts` fails on it.
 - Never set `outline: none` without providing a replacement indicator.
 - Focus must not be obscured (WCAG 2.4.11): sticky headers (the 60px chrome,
   the mobile anchor bar, the pilots page's sticky search bar) and toasts

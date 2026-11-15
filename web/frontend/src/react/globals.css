@@ -88,7 +88,34 @@
   --muted-foreground: #5f5f65;
   --accent: #e3e3e9;
   --accent-foreground: #1d1d1f;
+  /* Red as a FILL and a mark: an invalid field's border and ring, the wash
+     behind a destructive button or a badge, a bar. iOS system red. It is 3.55:1
+     on a card and 3.18:1 on the ground: enough for a mark (3:1), and not for
+     a letter (4.5:1). As text it was under the line on every light surface,
+     and at 2.46:1 on a hovered destructive button. */
   --destructive: #ff3b30;
+  /* Red as TEXT: a field's error, an alert, the label of a destructive button
+     or badge. The same split as the accent above, for the same reason: a red
+     bright enough to tint a wash is too light to read on that wash. This one
+     is system red at about 70% of its brightness: 6.71:1 on a card, 6.02:1 on
+     the ground, and no less than 4.65:1 on any surface the app puts it on,
+     the hovered wash of a destructive button included. In a class it is
+     `text-danger`; the fill's own token is never text (accent-text.test.ts). */
+  --danger: #b0251d;
+  /* Amber and green, split the same way. The fills are the system orange and
+     green the chart tones below use: the wash behind a warning, a chip or a
+     rank. As text they are 2.20:1 and 2.22:1 on a card (Tailwind's amber-500
+     and green-600, which is what the app wrote until 2026-11, were 2.13:1 and
+     3.22:1), so each has a text colour: its own hue, darkened until it reads.
+     --caution is 6.22:1 on a card and no less than 4.66:1 on any surface, a
+     15% wash of the fill over a hovered row included; --positive is 6.54:1
+     and 4.73:1, on a 20% wash. In classes: `bg-warning/10 text-caution` and
+     `bg-success/15 text-positive`. A chart's label is text too, so it takes
+     these and --link, never a --chart tone. */
+  --warning: #ff9500;
+  --caution: #8f5200;
+  --success: #34c759;
+  --positive: #136c2e;
   /* Hairline separators */
   --border: rgba(0, 0, 0, 0.12);
   --input: rgba(0, 0, 0, 0.14);
@@ -147,7 +174,23 @@
   --muted-foreground: #a1a1a6;
   --accent: #3a3a3c;
   --accent-foreground: #f5f5f7;
+  /* The fill and mark red on dark: iOS system red (dark variant). As text it
+     reads on the canvas (6.16:1) and on a card (4.99:1), and nowhere else: a
+     destructive button's wash is this red at 20%, so its own label was 3.60:1
+     in a confirm dialog and 3.10:1 hovered, and on a menu's focused row
+     (--accent) it was 3.33:1. */
   --destructive: #ff453a;
+  /* Red as text on dark: 7.45:1 on a card, 9.20:1 on the canvas, and no less
+     than 4.63:1 on any surface, a hovered destructive button in a dialog
+     included. Lighter than the fill, as --link is lighter than --primary. */
+  --danger: #ff8a80;
+  /* On dark the system orange and green read as text as they are (no less
+     than 5.09:1 and 4.67:1), so the fill and the text hold one value each.
+     They stay two tokens because light needs two. */
+  --warning: #ff9f0a;
+  --caution: #ff9f0a;
+  --success: #30d158;
+  --positive: #30d158;
   --border: rgba(255, 255, 255, 0.14);
   --input: rgba(255, 255, 255, 0.16);
   --ring: #0a84ff;
@@ -177,6 +220,11 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-caution: var(--caution);
+  --color-success: var(--success);
+  --color-positive: var(--positive);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
