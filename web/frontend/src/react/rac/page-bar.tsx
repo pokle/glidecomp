@@ -465,6 +465,9 @@ function Bar({
  * reports, with no keyboard height, no guess at when the keyboard opened and
  * nothing fixed to the screen. On every other browser the offset is always 0.
  */
+/** Shorter than any on-screen keyboard, taller than a browser toolbar that hides and shows. */
+const KEYBOARD_MIN_HEIGHT = 150;
+
 function useKeepOnScreen() {
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -472,8 +475,14 @@ function useKeepOnScreen() {
     const el = ref.current;
     if (!viewport || !el) return;
     const follow = () => {
-      // Pinch-zoom pans the visual viewport too; the bar stays with the page then.
-      const top = viewport.scale === 1 ? Math.max(0, viewport.offsetTop) : 0;
+      // Only while the keyboard is up, which is when the visual viewport is
+      // shorter than the layout one. Safari also reports an offset while the
+      // page is dragged past its end and springs back, with the viewport at
+      // full height; following that moved the bar down the screen by the
+      // length of the drag. Pinch-zoom pans the visual viewport too; the bar
+      // stays with the page then.
+      const keyboardUp = window.innerHeight - viewport.height > KEYBOARD_MIN_HEIGHT;
+      const top = keyboardUp && viewport.scale === 1 ? Math.max(0, viewport.offsetTop) : 0;
       el.style.transform = top > 0 ? `translateY(${top}px)` : "";
     };
     follow();
