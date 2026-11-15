@@ -3,7 +3,7 @@
  * from, and the page that starts a competition. A top-level page has no
  * parent, so its leading control is the main menu.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
 import { ChoiceList } from "@/react/rac/choice-list";
@@ -117,33 +117,33 @@ export function MyFlights() {
   );
 }
 
-/** A top-level page that is also a form: its commit is still top right. */
+/**
+ * A top-level page that runs one action and shows the result beneath it. Its
+ * button stays under the fields, at the end of the steps, and does not go in
+ * the bar: the bar's trailing slot is for a page that edits a saved thing and
+ * then returns (the wording rule in issue #863).
+ */
 export function SubmitTrack() {
   const [task, setTask] = useState("3");
   const [who, setWho] = useState("");
   const [file, setFile] = useState<string | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+  const result = useRef<HTMLDivElement>(null);
+  // The result is beneath the button, which may be beneath the screen's edge.
+  useEffect(() => {
+    if (sent) result.current?.scrollIntoView({ block: "nearest" });
+  }, [sent]);
   return (
     <Form
       validate={() => ({ who: who.trim() ? null : "Enter the email you registered with." })}
       onSubmit={() => accepted()}
       onSuccess={() => {
-        toast.success("Track submitted");
+        const name = TASKS.find((t) => t.id === task)?.name ?? "the task";
+        setSent(`${file} is in for ${name}. The registered pilot has been emailed.`);
         setFile(null);
       }}
     >
-      <ProtoPage
-        bar={
-          <PageBar
-            title="Submit track"
-            commit={
-              <SubmitButton className={commitClass} pendingLabel="Submitting" isDisabled={!file}>
-                Submit
-              </SubmitButton>
-            }
-          />
-        }
-      >
-        <FormErrorBanner />
+      <ProtoPage bar={<PageBar title="Submit track" />}>
         <ChoiceList
           label="1. Which task did you fly?"
           value={task}
@@ -164,13 +164,34 @@ export function SubmitTrack() {
           <Button
             variant="outline"
             className="h-11 self-start px-4"
-            onPress={() => setFile(file ? null : "2026-01-07-corryong.igc")}
+            onPress={() => {
+              setSent(null);
+              setFile(file ? null : "2026-01-07-corryong.igc");
+            }}
           >
             {file ? "Remove the file" : "Choose IGC file…"}
           </Button>
           <p className="text-sm text-muted-foreground">
-            {file ?? "Submit, top right, is greyed out until a file is chosen."}
+            {file ?? "Submit track is greyed out until a file is chosen."}
           </p>
+        </div>
+        {/* Beside the button, where it cannot scroll away from it. */}
+        <FormErrorBanner />
+        <SubmitButton
+          className="h-11 self-start px-5 text-[0.9375rem]"
+          pendingLabel="Submitting"
+          isDisabled={!file}
+        >
+          Submit track
+        </SubmitButton>
+        {/* Always in the page, so a screen reader hears the result arrive. */}
+        <div ref={result} role="status" className="scroll-mb-4 empty:hidden">
+          {sent ? (
+            <Card>
+              <p className="font-medium">Track submitted</p>
+              <p className="text-muted-foreground">{sent}</p>
+            </Card>
+          ) : null}
         </div>
       </ProtoPage>
     </Form>
