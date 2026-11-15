@@ -14,7 +14,9 @@
  * business in the chunk a pilot downloads to read a scoreboard.
  */
 import { Suspense, lazy } from "react";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
+import { underTask } from "../lib/crumbs";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useRouteEditor } from "../comp/use-route-editor";
 import { routeEditorGate } from "../comp/RouteEditorGate";
@@ -25,15 +27,23 @@ const RouteEditor = lazy(() =>
 
 export function TaskRoutePage() {
   const editor = useRouteEditor();
-  const { comp, task, current, routePath } = editor;
+  const { comp, task, current, routePath, urlId, compName, taskId, taskName } = editor;
 
   useCanonicalPath(comp && task && current ? routePath : null);
 
-  const gate = routeEditorGate(editor);
+  // The bar is there before the route is (#863), under the same title.
+  const trail = underTask(urlId, compName, taskId, taskName);
+  const gate = routeEditorGate(editor, { title: "Route", trail });
   if (gate) return gate;
 
   return (
-    <Suspense fallback={<Loading>Loading the route editor…</Loading>}>
+    <Suspense
+      fallback={
+        <Page bar={<PageBar title="Route" trail={trail} />}>
+          <Loading>Loading the route editor…</Loading>
+        </Page>
+      }
+    >
       <RouteEditor editor={editor} />
     </Suspense>
   );

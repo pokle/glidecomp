@@ -126,7 +126,7 @@ test.beforeEach(async ({ page }) => {
 const rows = (page: Page) => page.getByRole("grid", { name: "Pilots" }).getByRole("row");
 const rowOf = (page: Page, name: string) => rows(page).filter({ hasText: name }).first();
 const fillHeading = (page: Page) =>
-  page.getByRole("heading", { name: "Fill from CIVL rankings" });
+  page.getByRole("heading", { level: 1, name: "Fill from CIVL" });
 
 async function openRoster(page: Page, id: string): Promise<void> {
   await page.goto(`/comp/${id}/pilots`);
@@ -135,7 +135,7 @@ async function openRoster(page: Page, id: string): Promise<void> {
 
 /** Open the fill's page (a sheet until #810) from the roster's ⋯ menu. */
 async function openFill(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Roster actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Fill from CIVL…" }).click();
   await expect(fillHeading(page)).toBeVisible({ timeout: 20_000 });
 }
@@ -191,7 +191,9 @@ test("one press fills IDs by name and then rankings by ID, and shows what it wil
   await expect(sheet).toContainText("From Sample World Ranking");
   const points = await sheet.getByRole("textbox", { name: "World Pilot Ranking Scheme points" }).inputValue();
   expect(points).toMatch(/^\d+(\.\d+)?$/);
-  await sheet.getByRole("button", { name: "Done" }).click();
+  // Nothing changed, so there is nothing to Save: Cancel leaves.
+  await expect(sheet.getByRole("button", { name: "Save" })).toBeDisabled();
+  await sheet.getByRole("button", { name: "Cancel" }).click();
   await expect(page).toHaveURL(/\/pilots(\?|$)/);
 
   // Ask again on the same roster. "Add when missing" means exactly that:
@@ -201,7 +203,7 @@ test("one press fills IDs by name and then rankings by ID, and shows what it wil
   await expect(page.getByText(/3 already had a score and were left alone/)).toBeVisible({
     timeout: 20_000,
   });
-  await expect(page.getByRole("button", { name: "Fill", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Fill", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(fillHeading(page)).toBeHidden();
   await expect(rowOf(page, "Bruno Ridge")).toContainText(`${points} pts`);
@@ -237,7 +239,7 @@ test("a score typed over by hand stops claiming a source", async ({ page }) => {
   await sheet.getByRole("textbox", { name: "World Pilot Ranking Scheme points" }).fill("99");
   // The moment it is typed, not at save: the number is the organiser's now.
   await expect(sheet).toContainText("Set by an organiser");
-  await sheet.getByRole("button", { name: "Done" }).click();
+  await sheet.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(/\/pilots(\?|$)/, { timeout: 20_000 });
   await expect(rowOf(page, "Ada Thermal")).toContainText("99 pts");
 

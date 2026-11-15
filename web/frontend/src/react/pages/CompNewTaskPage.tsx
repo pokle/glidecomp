@@ -10,6 +10,9 @@
  * answering taps on an iPhone. A page gets the keyboard, Back and focus from
  * the browser.
  *
+ * Create is in the bar (issue #863), live once the task has a name, a date
+ * and a class.
+ *
  * Reached by the comp page's "New task" links, so Back is the browser's own
  * and returns to the comp. Create REPLACES this entry with the task it made:
  * Back from the new task goes to the comp, not to a filled-in form whose
@@ -25,11 +28,11 @@ import { useId, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
+import { SettingsForm } from "@/react/components/SettingsForm";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { CheckList } from "@/react/rac/choice-list";
 import { DatePicker } from "@/react/rac/date-picker";
 import { Label, TextField } from "@/react/rac/field";
-import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import type { CompDetailData } from "../comp/types";
@@ -62,7 +65,14 @@ export function CompNewTaskPage() {
   const isAdmin = useAdminView(!!comp?.is_admin);
 
   if (notFound || !compId) return <NotFound title="Competition not found" />;
-  if (!comp || loading) return <Loading>Loading competition…</Loading>;
+  if (!comp || loading) {
+    // The bar is there before the data, so the page does not jump.
+    return (
+      <SettingsPage crumbs={underComp(urlId, comp?.name)} title={TITLE}>
+        <Loading>Loading competition…</Loading>
+      </SettingsPage>
+    );
+  }
 
   if (!isAdmin) return <OrganisersOnly to={compPath(urlId, comp.name)} />;
 
@@ -74,68 +84,72 @@ function NewTaskForm({ compId, comp }: { compId: string; comp: CompDetailData })
   const dateId = useId();
   const [name, setName] = useState("");
   // Today where the competition is flown, not where the organiser's laptop is.
-  const [taskDate, setTaskDate] = useState(() => todayInZone(comp.timezone));
+  const [today] = useState(() => todayInZone(comp.timezone));
+  const [taskDate, setTaskDate] = useState(today);
   // Every class ticked to begin with: most tasks are flown by the whole comp.
   const [selectedClasses, setSelectedClasses] = useState<string[]>(comp.pilot_classes);
 
   return (
-    <SettingsPage crumbs={underComp(compId, comp.name)} title={TITLE}>
-      <Form
-        validate={() => ({
-          name: name.trim() ? null : "Enter a task name",
-          task_date: taskDate ? null : "Enter a date",
-          pilot_classes:
-            selectedClasses.length > 0 ? null : "Select at least one pilot class",
-        })}
-        onSubmit={() =>
-          api.api.comp[":comp_id"].task.$post({
-            param: { comp_id: compId },
-            json: { name: name.trim(), task_date: taskDate, pilot_classes: selectedClasses },
-          })
-        }
-        onSuccess={async (res) => {
-          const task = (await res!.json()) as { task_id: string; name: string };
-          // Replace, not push: see the note at the top.
-          navigate(taskPath(compId, comp.name, task.task_id, task.name), { replace: true });
-        }}
-        className="flex flex-col gap-6"
-      >
-        <TextField
-          label="Name"
-          name="name"
-          maxLength={128}
-          placeholder="e.g. Day 1 - Ridge Run"
-          value={name}
-          onChange={setName}
-          autoComplete="off"
+    <SettingsForm
+      crumbs={underComp(compId, comp.name)}
+      title={TITLE}
+      // Something typed or changed is something Cancel would throw away.
+      dirty={
+        name !== "" ||
+        taskDate !== today ||
+        selectedClasses.length !== comp.pilot_classes.length
+      }
+      // A form that makes something new: live once the required fields are in.
+      canCommit={name.trim() !== "" && !!taskDate && selectedClasses.length > 0}
+      submitLabel="Create"
+      pendingLabel="Creating"
+      validate={() => ({
+        name: name.trim() ? null : "Enter a task name",
+        task_date: taskDate ? null : "Enter a date",
+        pilot_classes:
+          selectedClasses.length > 0 ? null : "Select at least one pilot class",
+      })}
+      onSubmit={() =>
+        api.api.comp[":comp_id"].task.$post({
+          param: { comp_id: compId },
+          json: { name: name.trim(), task_date: taskDate, pilot_classes: selectedClasses },
+        })
+      }
+      onSuccess={async (res) => {
+        const task = (await res!.json()) as { task_id: string; name: string };
+        // Replace, not push: see the note at the top.
+        navigate(taskPath(compId, comp.name, task.task_id, task.name), { replace: true });
+      }}
+    >
+      <TextField
+        label="Name"
+        name="name"
+        maxLength={128}
+        placeholder="e.g. Day 1 - Ridge Run"
+        value={name}
+        onChange={setName}
+        autoComplete="off"
+      />
+      {/* The same two controls the task's settings page uses (#638), so a
+          task looks the same the moment after it is created as it does
+          when it is next edited. */}
+      <div className="flex flex-col gap-2">
+        <Label id={dateId}>Date</Label>
+        <DatePicker
+          inline
+          name="task_date"
+          aria-labelledby={dateId}
+          value={taskDate}
+          onChange={setTaskDate}
         />
-        {/* The same two controls the task's settings page uses (#638), so a
-            task looks the same the moment after it is created as it does
-            when it is next edited. */}
-        <div className="flex flex-col gap-2">
-          <Label id={dateId}>Date</Label>
-          <DatePicker
-            inline
-            name="task_date"
-            aria-labelledby={dateId}
-            value={taskDate}
-            onChange={setTaskDate}
-          />
-        </div>
-        <CheckList
-          label="Pilot classes"
-          name="pilot_classes"
-          value={selectedClasses}
-          onChange={setSelectedClasses}
-          options={comp.pilot_classes.map((cls) => ({ value: cls, label: cls }))}
-        />
-        {/* The error that belongs to no field sits beside Create, the
-            button the reader just pressed. */}
-        <FormErrorBanner />
-        <div>
-          <SubmitButton pendingLabel="Creating">Create</SubmitButton>
-        </div>
-      </Form>
-    </SettingsPage>
+      </div>
+      <CheckList
+        label="Pilot classes"
+        name="pilot_classes"
+        value={selectedClasses}
+        onChange={setSelectedClasses}
+        options={comp.pilot_classes.map((cls) => ({ value: cls, label: cls }))}
+      />
+    </SettingsForm>
   );
 }

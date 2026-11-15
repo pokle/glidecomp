@@ -53,7 +53,11 @@ test("a completed Google sign-in moves the pill to Google", async ({ page }) => 
   await page.getByRole("button", { name: /Continue with Google/ }).click();
   // Through /signin?via=google, and on to the destination.
   await expect(page).toHaveURL(/\/comp$/);
-  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
+  // Signed in: the main menu, a top-level page's leading control, holds the
+  // account and Sign out.
+  await page.getByRole("button", { name: "Main menu" }).click();
+  await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
+  await page.keyboard.press("Escape");
 
   await page.context().clearCookies();
   await page.goto("/signin");

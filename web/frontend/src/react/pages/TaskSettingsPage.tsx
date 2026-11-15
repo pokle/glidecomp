@@ -13,7 +13,9 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
+import { SettingsPage } from "@/react/components/SettingsPage";
 import { Loading } from "@/react/rac/progress";
+import { underTask } from "../lib/crumbs";
 import { idFromSegment, taskPath, taskSettingsPath } from "../lib/slug";
 import { useTaskAdminPage } from "../lib/use-task-admin-page";
 import { TaskSettings } from "../comp/settings/TaskSettings";
@@ -41,7 +43,14 @@ export function TaskSettingsPage() {
   });
 
   if (notFound) return <NotFound title="Task not found" />;
-  if (loading || !comp || !task) return <Loading>Loading settings…</Loading>;
+  if (loading || !comp || !task) {
+    // The bar is there before the data, so the page does not jump.
+    return (
+      <SettingsPage crumbs={underTask(compId, comp?.name, taskId, task?.name)} title="Settings">
+        <Loading>Loading settings…</Loading>
+      </SettingsPage>
+    );
+  }
 
   if (!isAdmin) return <OrganisersOnly to={taskPath(compId, comp.name, taskId, task.name)} />;
 

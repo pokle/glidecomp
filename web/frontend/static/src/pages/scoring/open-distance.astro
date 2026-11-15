@@ -1,14 +1,12 @@
 ---
 /** Open distance scoring guide. Ported from react/pages/ScoringOpenDistance.tsx. */
 import Base from "../../layouts/Base.astro";
-import BackLink from "../../components/BackLink.astro";
 ---
 
-<Base title="GlideComp - How Open Distance Scoring Works">
+<Base page="open-distance" title="GlideComp - How Open Distance Scoring Works">
   <div class="min-h-screen bg-background text-foreground py-6 px-page-safe">
     <div class="max-w-2xl mx-auto">
       <header class="mb-10">
-        <BackLink href="/scoring" label="Scoring" />
         <h1 class="text-3xl font-bold flex items-center gap-3">
           <img src="/icon.svg" alt="GlideComp logo" class="w-8 h-8" />
           How Open Distance Scoring Works
@@ -95,7 +93,7 @@ import BackLink from "../../components/BackLink.astro";
             Your scored distance is how far your <strong>furthest point</strong> is from the
             <strong>edge of the take-off cylinder</strong>, in a straight line:
           </p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block">
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top">
             Distance = distance from the take-off centre to your furthest point − cylinder radius
           </p>
           <p class="text-muted-foreground">This means:</p>
@@ -131,7 +129,7 @@ import BackLink from "../../components/BackLink.astro";
           <p class="text-muted-foreground">
             Your score for the task is your distance in <strong>metres</strong>:
           </p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block">
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top">
             Score = metres of open distance flown
           </p>
           <p class="text-muted-foreground">

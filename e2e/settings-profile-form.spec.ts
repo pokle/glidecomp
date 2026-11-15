@@ -1,14 +1,15 @@
 /**
- * The profile form on Settings, and the card actions beside it, on a phone and
- * on a desktop (#808).
+ * The Profile page of account settings, and the actions on the pages beside
+ * it, on a phone and on a desktop (#808, and #863 for the pages).
  *
  * The profile saves through the kit form (rac/form.tsx), so a refusal lands
- * under the field it is about, an error about no field sits beside Save, and
- * neither is a toast. The kit's own rules are held by forms.spec.ts; this file
- * holds only that the profile's fields are wired to them — that each one
- * carries the server's name for it, and the page's own check lands the same
- * way. Revoke and Delete account are buttons, not forms, and their failures
- * are shown in their own card, also never as a toast.
+ * under the field it is about, an error about no field is in the banner at
+ * the top of the column, under the bar Save is in, and neither is a toast.
+ * The kit's own rules are held by forms.spec.ts; this file holds only that
+ * the profile's fields are wired to them — that each one carries the server's
+ * name for it, and the page's own check lands the same way. Revoke and Delete
+ * account are buttons, not forms, and their failures are shown beside them on
+ * their own pages, also never as a toast.
  *
  * Runs as its own fixture user, so nothing it saves meets another spec.
  */
@@ -29,25 +30,22 @@ async function devLogin(page: Page): Promise<void> {
   }
 }
 
-const profileCard = (page: Page) =>
-  page
-    .locator("section[data-slot=card]")
-    .filter({ has: page.getByRole("heading", { name: "Profile", exact: true }) });
+const main = (page: Page) => page.getByRole("main");
 const field = (page: Page, label: string) =>
-  profileCard(page).getByRole("textbox", { name: label, exact: true });
-const save = (page: Page) => profileCard(page).getByRole("button", { name: "Save profile" });
+  main(page).getByRole("textbox", { name: label, exact: true });
+const save = (page: Page) => main(page).getByRole("button", { name: "Save", exact: true });
 const toasts = (page: Page) => page.locator("[data-sonner-toast]");
 
 test.beforeEach(async ({ page }) => {
   await devLogin(page);
-  await page.goto("/settings");
-  await expect(save(page)).toBeVisible({ timeout: 15_000 });
+  await page.goto("/settings/profile");
+  await expect(field(page, "Display name")).toBeVisible({ timeout: 15_000 });
   // The fixture user needs a display name for any other edit to save.
   const name = field(page, "Display name");
   if ((await name.inputValue()).trim() === "") {
     await name.fill(TEST_USER.name);
     await save(page).click();
-    await expect(profileCard(page).getByText(/Profile saved/)).toBeVisible();
+    await expect(main(page).getByText(/Profile saved/)).toBeVisible();
   }
 });
 
@@ -64,13 +62,13 @@ test("a value the server refuses is shown under its field, focused, and kept", a
   await expect(glider).toBeFocused();
   await expect(glider).toHaveValue("Moyes <Litespeed>");
   await expect(toasts(page)).toHaveCount(0);
-  await expect(profileCard(page).getByText(/Profile saved/)).toHaveCount(0);
+  await expect(main(page).getByText(/Profile saved/)).toHaveCount(0);
 
   // Editing clears it, and the corrected value saves.
   await glider.fill(`Moyes Litespeed ${Date.now() % 100_000}`);
   await expect(glider).not.toHaveAttribute("aria-invalid", "true");
   await save(page).click();
-  await expect(profileCard(page).getByText(/Profile saved/)).toBeVisible();
+  await expect(main(page).getByText(/Profile saved/)).toBeVisible();
 });
 
 test("a blank display name is refused under Display name, before anything is sent", async ({
@@ -93,7 +91,7 @@ test("a blank display name is refused under Display name, before anything is sen
   await expect(toasts(page)).toHaveCount(0);
 });
 
-test("a dropped connection is shown beside Save, and keeps what was typed", async ({ page }) => {
+test("a dropped connection is shown in the banner, and keeps what was typed", async ({ page }) => {
   await page.route("**/api/comp/pilot", (route) =>
     route.request().method() === "PATCH" ? route.abort("internetdisconnected") : route.continue()
   );
@@ -103,7 +101,7 @@ test("a dropped connection is shown beside Save, and keeps what was typed", asyn
   await glider.fill(typed);
   await save(page).click();
 
-  const banner = profileCard(page).getByRole("alert").filter({
+  const banner = main(page).getByRole("alert").filter({
     hasText: "Could not reach GlideComp. Check your connection, then try again.",
   });
   await expect(banner).toBeVisible();
@@ -111,17 +109,17 @@ test("a dropped connection is shown beside Save, and keeps what was typed", asyn
   await expect(glider).toHaveValue(typed);
   await expect(glider).not.toHaveAttribute("aria-invalid", "true");
   await expect(toasts(page)).toHaveCount(0);
-  // Still unsaved, so still guarded.
-  await expect(profileCard(page).getByText("Unsaved changes")).toBeVisible();
+  // Still unsaved, so Save is still live.
+  await expect(save(page)).toBeEnabled();
 
   // Back online, the same Save goes through.
   await page.unroute("**/api/comp/pilot");
   await save(page).click();
-  await expect(profileCard(page).getByText(/Profile saved/)).toBeVisible();
+  await expect(main(page).getByText(/Profile saved/)).toBeVisible();
   await expect(banner).toHaveCount(0);
 });
 
-test("a failed Revoke is shown in the API keys card, not a toast", async ({ page }) => {
+test("a failed Revoke is shown on the API keys page, not a toast", async ({ page }) => {
   // A key that exists only in this response, and a revoke the server refuses:
   // no real key is made or lost.
   await page.route("**/api/auth/api-key/list", (route) =>
@@ -143,11 +141,10 @@ test("a failed Revoke is shown in the API keys card, not a toast", async ({ page
   await page.route("**/api/auth/api-key/delete", (route) =>
     route.fulfill({ status: 500, json: { message: "boom" } })
   );
-  await page.reload();
+  await page.goto("/settings/api-keys");
+  await expect(page.getByRole("heading", { name: "API keys", level: 1 })).toBeVisible();
 
-  const keysCard = page
-    .locator("section[data-slot=card]")
-    .filter({ has: page.getByRole("heading", { name: "API keys", exact: true }) });
+  const keysCard = main(page);
   const row = keysCard.getByRole("row").filter({ hasText: "Fixture key" });
   await row.getByRole("button", { name: "Revoke" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Revoke" }).click();
@@ -161,12 +158,12 @@ test("a failed Revoke is shown in the API keys card, not a toast", async ({ page
   await expect(toasts(page)).toHaveCount(0);
 });
 
-test("a Delete account that never got an answer says so in its card", async ({ page }) => {
+test("a Delete account that never got an answer says so beside it", async ({ page }) => {
   await page.route("**/api/auth/delete-account", (route) => route.abort("internetdisconnected"));
 
-  const dangerCard = page
-    .locator("section[data-slot=card]")
-    .filter({ has: page.getByRole("heading", { name: "Danger zone", exact: true }) });
+  // Delete account is a row of the index, as Delete competition is.
+  await page.goto("/settings");
+  const dangerCard = main(page);
   await dangerCard.getByRole("button", { name: "Delete account" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete my account" }).click();
 

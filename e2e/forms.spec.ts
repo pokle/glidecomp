@@ -8,11 +8,12 @@
  * built on the kit only has to test its own fields.
  *
  * It drives the development-only bench at /__kit/form
- * (pages/KitFormFixture.tsx), a form PAGE laid out as the pilot page is (the
- * sheet it once opened went with the rest in #817): Done on the header row,
- * then Name, ten notes and Email, so the field the server refuses is off
- * screen when the reader presses Done. Playwright
- * plays the server: every save goes to `/__kit/form-submit`, answered here.
+ * (pages/KitFormFixture.tsx), a form PAGE laid out as every form page is
+ * since the page bar (#863): Cancel and Save in the bar, which sticks, the
+ * form's own error first in the column under it, then Name, ten notes and
+ * Email, so the field the server refuses is off screen when the reader
+ * presses Save. Playwright plays the server: every save goes to
+ * `/__kit/form-submit`, answered here.
  */
 import { test, expect, type Locator, type Page, type Route } from "./fixtures/test";
 
@@ -20,7 +21,7 @@ import { test, expect, type Locator, type Page, type Route } from "./fixtures/te
 const form = (page: Page) =>
   page.locator("form").filter({ has: page.getByRole("heading", { name: "Test form", level: 1 }) });
 const field = (page: Page, name: string) => form(page).getByRole("textbox", { name });
-const done = (page: Page) => form(page).getByRole("button", { name: "Done" });
+const save = (page: Page) => form(page).getByRole("button", { name: "Save" });
 
 /** Count the saves, and answer each one with `answer`. */
 async function server(page: Page, answer: (route: Route) => Promise<void>): Promise<() => number> {
@@ -41,8 +42,8 @@ async function openForm(page: Page): Promise<void> {
 }
 
 /**
- * On screen, and not under anything — the site's sticky header included, so
- * anything that slid beneath it is as good as hidden. The topmost element at
+ * On screen, and not under anything — the page bar included, which sticks to
+ * the top, so anything that slid beneath it is as good as hidden. The topmost element at
  * the target's centre must be the target or inside it.
  */
 async function expectInView(page: Page, target: Locator, what: string): Promise<void> {
@@ -60,10 +61,10 @@ test("a problem the form finds itself is shown under its field, focused, and not
 }) => {
   const saves = await server(page, refuse(500, {}));
   await openForm(page);
-  // Down at the bottom, far from Name (the click scrolls back up to Done).
+  // Down at the bottom, far from Name. Save is in the bar, which sticks.
   await field(page, "Email").scrollIntoViewIfNeeded();
 
-  await done(page).click();
+  await save(page).click();
   const name = field(page, "Name");
   await expect(form(page)).toContainText("Enter a name.");
   await expect(name).toHaveAttribute("aria-invalid", "true");
@@ -90,7 +91,7 @@ test("a refusal about a field lands under that field, focused, and clears when i
   // Back at the top, far from Email.
   await field(page, "Name").scrollIntoViewIfNeeded();
 
-  await done(page).click();
+  await save(page).click();
   const email = field(page, "Email");
   await expect(form(page)).toContainText("Ana is already registered with this email.");
   await expect(email).toHaveAttribute("aria-invalid", "true");
@@ -107,7 +108,7 @@ test("a refusal about a field lands under that field, focused, and clears when i
   await expect(email).toHaveValue("someone@example.com");
 });
 
-test("a refusal about nothing in particular is shown beside Done, focused and on screen", async ({
+test("a refusal about nothing in particular is shown at the top of the column, focused and on screen", async ({
   page,
 }) => {
   await server(page, refuse(409, { error: "The competition is closed." }));
@@ -115,7 +116,7 @@ test("a refusal about nothing in particular is shown beside Done, focused and on
   await field(page, "Name").fill("Ana");
   await field(page, "Email").scrollIntoViewIfNeeded();
 
-  await done(page).click();
+  await save(page).click();
   const alert = form(page).getByRole("alert").filter({ hasText: "The competition is closed." });
   await expectInView(page, alert, "the error");
   await expect(alert).toBeFocused();
@@ -132,7 +133,7 @@ test("a refusal naming a field the form does not have goes to the form's own err
   await server(page, refuse(400, { error: "That is not allowed.", field: "nothing_here" }));
   await openForm(page);
   await field(page, "Name").fill("Ana");
-  await done(page).click();
+  await save(page).click();
   await expectInView(page, form(page).getByRole("alert").filter({ hasText: "That is not allowed." }), "the error");
 });
 
@@ -142,7 +143,7 @@ test("a dropped connection says so, and keeps everything typed", async ({ page }
   await field(page, "Name").fill("Ana");
   await field(page, "Email").fill("ana@example.com");
 
-  await done(page).click();
+  await save(page).click();
   await expectInView(
     page,
     form(page).getByRole("alert").filter({
@@ -164,15 +165,15 @@ test("one submit at a time, and the button says it is busy", async ({ page }) =>
   await openForm(page);
   await field(page, "Name").fill("Ana");
 
-  await done(page).click();
-  await expect(done(page)).toHaveAttribute("data-pending", "true");
+  await save(page).click();
+  await expect(save(page)).toHaveAttribute("data-pending", "true");
   // A second press, and Enter in a field, while the first is in flight.
-  await done(page).click({ force: true });
+  await save(page).click({ force: true });
   await field(page, "Name").press("Enter");
   release();
 
   await expect(page.getByText("Saved the test form")).toBeVisible({ timeout: 20_000 });
-  await expect(done(page)).not.toHaveAttribute("data-pending", "true");
+  await expect(save(page)).not.toHaveAttribute("data-pending", "true");
   expect(saves()).toBe(1);
 });
 
@@ -192,15 +193,15 @@ test("busy until the save has been acted on, not only answered", async ({ page }
   await openForm(page);
   await field(page, "Name").fill("Ana");
 
-  await done(page).click();
+  await save(page).click();
   await expect.poll(saves).toBe(1);
-  await expect(done(page)).toHaveAttribute("data-pending", "true");
-  await done(page).click({ force: true });
+  await expect(save(page)).toHaveAttribute("data-pending", "true");
+  await save(page).click({ force: true });
   await field(page, "Name").press("Enter");
   release();
 
   await expect(page.getByText("Saved the test form")).toBeVisible({ timeout: 20_000 });
-  await expect(done(page)).not.toHaveAttribute("data-pending", "true");
+  await expect(save(page)).not.toHaveAttribute("data-pending", "true");
   expect(saves()).toBe(1);
 });
 

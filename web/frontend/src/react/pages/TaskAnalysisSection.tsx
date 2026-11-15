@@ -161,7 +161,7 @@ function StrategiesSection({
       <Card aria-labelledby="separation-heading" className="gap-3">
         <h2
           id="separation-heading"
-          className="flex items-center gap-1 scroll-mt-20 text-lg font-semibold"
+          className="flex items-center gap-1 scroll-mt-32 text-lg font-semibold"
         >
           Which behaviours went with better ranks
           {/* Why a strong-looking coefficient on ONE task is not yet a
@@ -210,7 +210,7 @@ function WeatherSection({ bundle }: { bundle: ReturnType<typeof useTaskAnalysis>
 
   return (
     <Card aria-labelledby="weather-heading" className="gap-3">
-      <h2 id="weather-heading" className="scroll-mt-20 text-lg font-semibold">
+      <h2 id="weather-heading" className="scroll-mt-32 text-lg font-semibold">
         What the weather did
       </h2>
       {/* The organizer's own account first — a human who was there outranks a
@@ -249,7 +249,7 @@ function ThermalsSection({
 
   return (
     <Card aria-labelledby="thermals-heading" className="gap-3">
-      <h2 id="thermals-heading" className="scroll-mt-20 text-lg font-semibold">
+      <h2 id="thermals-heading" className="scroll-mt-32 text-lg font-semibold">
         The day's thermals
       </h2>
       <ThermalsPanel

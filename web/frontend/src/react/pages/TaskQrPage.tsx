@@ -33,7 +33,7 @@ import {
   XCTSK_QR_MAX_BYTES,
 } from "@glidecomp/engine";
 import { NotFound } from "@/react/components/NotFound";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
 import { underTask } from "../lib/crumbs";
 import { idFromSegment, taskQrPath } from "../lib/slug";
@@ -69,18 +69,25 @@ export function TaskQrPage() {
   );
 
   if (notFound) return <NotFound title="Task not found" />;
-  if (!comp || !task) return <Loading>Loading…</Loading>;
 
-  const crumbs = underTask(urlId, comp.name, taskId, task.name);
+  // A read page with nothing to do on it: Back, the title, and no ⋯ (#863).
+  // The bar is there before the task is, so the page does not jump.
+  const bar = (
+    <PageBar title={TITLE} trail={underTask(urlId, comp?.name, taskId, task?.name)} />
+  );
+  if (!comp || !task) {
+    return (
+      <Page bar={bar}>
+        <Loading>Loading…</Loading>
+      </Page>
+    );
+  }
+
   const tooBig =
     payload !== null && new TextEncoder().encode(payload).length > XCTSK_QR_MAX_BYTES;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <Breadcrumbs items={crumbs} current={TITLE} />
-        <h1 className="mt-2 text-2xl font-bold">{TITLE}</h1>
-      </div>
+    <Page bar={bar} className="flex flex-col gap-4">
       {payload === null ? (
         <p className="text-muted-foreground">No route defined for this task yet.</p>
       ) : tooBig ? (
@@ -113,6 +120,6 @@ export function TaskQrPage() {
           </figcaption>
         </figure>
       )}
-    </div>
+    </Page>
   );
 }

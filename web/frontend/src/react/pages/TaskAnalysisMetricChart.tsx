@@ -3,7 +3,7 @@
  *
  * /comp/:compId/task/:taskId/analysis/metrics/:metric — reached by the Expand
  * link beside the chart on the Winning strategies page, and left with the
- * browser's Back. It was a full-screen overlay (MetricChartOverlay) until the
+ * bar's Back (or the browser's). It was a full-screen overlay (MetricChartOverlay) until the
  * "No full-screen overlays" rule in CLAUDE.md: a fixed layer over a scrolled
  * page, with its own Escape, Close button and focus return, all of which a
  * page gets from the browser.
@@ -97,7 +97,9 @@ export function TaskAnalysisMetricChart() {
       section={
         metric
           ? { label: metric.label, lede: "Plotted against rank." }
-          : METRICS_SECTION
+          : // No slug: this is a leaf under the section, not the section, so
+            // the title's menu must not list the sections beside it.
+            { label: METRICS_SECTION.label, lede: METRICS_SECTION.lede }
       }
       parent={metric ? METRICS_SECTION : undefined}
       // The scatter tints the pinned pilot, as it does on the strategies page.
@@ -142,8 +144,9 @@ function FullSizeChart({
  *
  * The plot is always SCATTER_WIDTH units wide and scales to its CSS width, so
  * its aspect decides how much height it can use. The height it can have is
- * the window, less the site header where that header is sticky (it covers
- * the top of whatever is scrolled under it) and the caption below the plot.
+ * the window, less the page's bar where it is sticky (it covers the top of
+ * whatever is scrolled under it; its height includes the class select and
+ * pilot highlight stuck under it) and the caption below the plot.
  *
  * Portrait gains height; landscape asks for a height under the scatter's own
  * floor, which RankScatter ignores, so the chart keeps its natural aspect at

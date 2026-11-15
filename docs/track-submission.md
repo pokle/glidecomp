@@ -12,10 +12,18 @@ signed-out visitor was a button reading "Sign in to submit your track".
 
 ## The flow
 
-**`/submit`** (`src/react/pages/SubmitTrack.tsx`) is a real page, reached from a
-**Submit track** tab in the nav on every page — the SPA header
-(`components/Shell.tsx`) and the prerendered static one (`SiteHeader.astro`)
-both carry it. The homepage hero deliberately does **not**:
+**`/submit`** (`src/react/pages/SubmitTrack.tsx`) is a real page, reached from
+every page through the bar (issue #863): it is one of the three top-level
+places in the main menu and in "Elsewhere" under every title
+(`rac/page-bar.tsx`, and `SiteHeader.astro` on the content pages), and
+**Submit your track** is the first row of ⋯ on the competition and task
+pages, which link here with `submitTrackPath()`. Those two pages used to
+carry it as a button; the owner found that it distracted from the page. A
+closed menu puts no link in the server's HTML, so the bar also renders the
+row as a real link in a visually hidden `<nav aria-label="Page actions">`.
+The form's own button is **Submit**, in the bar's right slot, live once a
+file is chosen; the result appears on the page. The homepage hero deliberately
+does **not** carry it:
 its job is to explain what GlideComp is to somebody who has never seen it, and a
 third competing action there was buying reach with clarity. The hero says the
 words instead, under the two buttons — *"Free · Submit a track and read the

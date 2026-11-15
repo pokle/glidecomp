@@ -3,8 +3,13 @@
  * The canonical footer for every static page, rendered full-width by
  * Base.astro after the page content: brand blurb + link columns on the
  * soft-gray section surface, with a hairline top border (Inscribe-style).
+ * It is page content at the foot of the page, never fixed to the screen.
  */
 const year = new Date().getFullYear();
+
+/** A footer link: a 44 px row for a finger (the app's footer, Shell.tsx). */
+const link =
+  "inline-flex min-h-11 items-center text-muted-foreground transition-colors hover:text-link";
 ---
 
 <!-- `pb-safe` on the surface (so its fill still reaches the bottom edge) and
@@ -13,35 +18,35 @@ const year = new Date().getFullYear();
   <div class="mx-auto w-full max-w-6xl px-gutter-safe py-14">
     <div class="flex flex-wrap justify-between gap-x-10 gap-y-10">
       <div class="max-w-xs">
-        <a href="/" class="font-brand text-lg font-semibold tracking-tight">GlideComp</a>
-        <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
+        <a href="/" class="inline-flex min-h-11 items-center font-brand text-lg font-semibold tracking-tight">GlideComp</a>
+        <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
           Scoring and flight analysis for hang gliding and paragliding
           competitions — every point explained, every track compared.
         </p>
       </div>
       <nav aria-label="Footer" class="flex flex-wrap gap-x-14 gap-y-8">
         <div>
-          <h4 class="mb-4 text-sm font-semibold">Product</h4>
-          <ul class="space-y-2.5 text-sm">
-            <li><a href="/comp" class="text-muted-foreground transition-colors hover:text-link">Competitions</a></li>
-            <li><a href="/scoring" class="text-muted-foreground transition-colors hover:text-link">Scoring guide</a></li>
-            <li><a href="/scoring/gap" class="text-muted-foreground transition-colors hover:text-link">GAP scoring</a></li>
-            <li><a href="/scoring/open-distance" class="text-muted-foreground transition-colors hover:text-link">Open distance</a></li>
-            <li><a href="/scoring/data-cleaning" class="text-muted-foreground transition-colors hover:text-link">Track data cleaning</a></li>
-            <li><a href="/scoring/track-validity" class="text-muted-foreground transition-colors hover:text-link">Track validity</a></li>
+          <h4 class="mb-1 text-sm font-semibold">Product</h4>
+          <ul class="text-sm">
+            <li><a href="/comp" class={link}>Competitions</a></li>
+            <li><a href="/scoring" class={link}>Scoring guide</a></li>
+            <li><a href="/scoring/gap" class={link}>GAP scoring</a></li>
+            <li><a href="/scoring/open-distance" class={link}>Open distance</a></li>
+            <li><a href="/scoring/data-cleaning" class={link}>Track data cleaning</a></li>
+            <li><a href="/scoring/track-validity" class={link}>Track validity</a></li>
           </ul>
         </div>
         <div>
-          <h4 class="mb-4 text-sm font-semibold">Resources</h4>
-          <ul class="space-y-2.5 text-sm">
-            <li><a href="/about" class="text-muted-foreground transition-colors hover:text-link">About</a></li>
-            <li><a href="/assistant" class="text-muted-foreground transition-colors hover:text-link">Use GlideComp from your AI assistant</a></li>
+          <h4 class="mb-1 text-sm font-semibold">Resources</h4>
+          <ul class="text-sm">
+            <li><a href="/about" class={link}>About</a></li>
+            <li><a href="/assistant" class={link}>Use GlideComp from your AI assistant</a></li>
             <li>
               <a
                 href="https://github.com/pokle/glidecomp"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="text-muted-foreground transition-colors hover:text-link"
+                class={link}
               >
                 GitHub
               </a>
@@ -51,7 +56,7 @@ const year = new Date().getFullYear();
                 href="https://www.youtube.com/@poklet"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="text-muted-foreground transition-colors hover:text-link"
+                class={link}
               >
                 YouTube
               </a>
@@ -59,9 +64,9 @@ const year = new Date().getFullYear();
           </ul>
         </div>
         <div>
-          <h4 class="mb-4 text-sm font-semibold">Legal</h4>
-          <ul class="space-y-2.5 text-sm">
-            <li><a href="/legal" class="text-muted-foreground transition-colors hover:text-link">Privacy &amp; Terms</a></li>
+          <h4 class="mb-1 text-sm font-semibold">Legal</h4>
+          <ul class="text-sm">
+            <li><a href="/legal" class={link}>Privacy &amp; Terms</a></li>
           </ul>
         </div>
       </nav>

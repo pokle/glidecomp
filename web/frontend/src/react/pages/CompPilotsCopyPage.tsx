@@ -18,24 +18,33 @@
  * so a same-named pilot is copied and pointed out, for the organiser to
  * delete if it is the same person. The rules are competition-api's
  * roster-copy.ts; this page only shows them.
+ *
+ * The page's name is a sentence, so the bar says "Copy pilots" and the
+ * sentence is its `fullTitle` (rac/page-bar.tsx, issue #863): the ⋯ row that
+ * opened it, the title's menu and the trail print it in full. Step 1 is a
+ * picker (Cancel, and a search that sticks with the bar); step 2 has the
+ * commit in the bar, live only when there is somebody to copy.
  */
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useFilter } from "react-aria-components";
 import { Alert, AlertDescription } from "@/react/rac/alert";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Button } from "@/react/rac/button";
-import { Form, FormErrorBanner, SubmitButton, useFormState } from "@/react/rac/form";
+import { SearchField } from "@/react/rac/field";
+import { Form, FormErrorBanner } from "@/react/rac/form";
 import { NavList, NavRow } from "@/react/rac/nav-list";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
-import { SectionHeader } from "../components/SectionHeader";
+import { RosterToolBar } from "../comp/RosterActions";
 import { useRosterAdminPage, type RosterAdminPage } from "../comp/use-roster-admin-page";
-import { underCompPilots } from "../lib/crumbs";
 import { formatTaskDate } from "../lib/format";
 import { compPilotsCopyPath } from "../lib/slug";
 import { toast } from "../lib/toast";
 import { useSeededResource } from "../lib/use-seeded-resource";
 
-const TITLE = "Copy pilots from another competition";
+/** One line for the bar; the sentence for the title's menu and the trail. */
+const TITLE = "Copy pilots";
+const FULL_TITLE = "Copy pilots from another competition";
 
 type ReadyPage = Extract<RosterAdminPage, { ready: true }>;
 
@@ -69,6 +78,7 @@ function pilots(n: number): string {
 export function CompPilotsCopyPage() {
   const page = useRosterAdminPage({
     current: TITLE,
+    fullTitle: FULL_TITLE,
     canonicalPath: (urlId, name) => compPilotsCopyPath(urlId, name),
   });
   const [params] = useSearchParams();
@@ -87,24 +97,51 @@ function ChooseSource({ page }: { page: ReadyPage }) {
       api.api.comp[":comp_id"].pilot["copy-sources"].$get({ param: { comp_id } }),
   });
 
+  const [query, setQuery] = useState("");
+  const { contains } = useFilter({ sensitivity: "base" });
+  const words = query.trim().split(/\s+/).filter(Boolean);
+  const shown = (data?.comps ?? []).filter((c) => words.every((w) => contains(c.name, w)));
+
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={underCompPilots(page.urlId, page.comp.name)} current={TITLE} />
-      <h1 className="mt-2 text-2xl font-bold">{TITLE}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
+    <Page
+      bar={
+        <PageBar
+          title={TITLE}
+          fullTitle={FULL_TITLE}
+          trail={page.crumbs}
+          cancel={page.leave}
+          below={
+            <SearchField
+              variant="floating"
+              aria-label="Search competitions"
+              placeholder="Search by competition name"
+              value={query}
+              onChange={setQuery}
+            />
+          }
+        />
+      }
+    >
+      <p className="text-sm text-muted-foreground">
         Adds the pilots of one of your other competitions to this one. Nobody already here is
         changed or removed, and you can edit or delete any pilot afterwards.
       </p>
-      <div className="mt-6">
+      {/* The scroll margin keeps a row reached by keyboard out from under the
+          bar and the search field that sticks with it: WCAG 2.4.11. */}
+      <div className="mt-6 [&_a]:scroll-mt-32">
         {notFound ? (
           <p className="text-muted-foreground">Could not load your competitions. Try again.</p>
         ) : !data ? (
           <Loading>Loading your competitions…</Loading>
         ) : data.comps.length === 0 ? (
           <p className="text-muted-foreground">None of your other competitions has pilots.</p>
+        ) : shown.length === 0 ? (
+          <p role="status" className="text-muted-foreground">
+            No competition matches.
+          </p>
         ) : (
           <NavList label="Your competitions">
-            {data.comps.map((c) => (
+            {shown.map((c) => (
               <NavRow
                 key={c.comp_id}
                 to={compPilotsCopyPath(page.urlId, page.comp.name, c.comp_id)}
@@ -121,7 +158,7 @@ function ChooseSource({ page }: { page: ReadyPage }) {
           </NavList>
         )}
       </div>
-    </div>
+    </Page>
   );
 }
 
@@ -134,57 +171,72 @@ function CopyReview({ page, from }: { page: ReadyPage; from: string }) {
       api.api.comp[":comp_id"].pilot.copy.$get({ param: { comp_id }, query: { from: fromId } }),
   });
   const chooseAgain = compPilotsCopyPath(page.urlId, page.comp.name);
-  const crumbs = underCompPilots(page.urlId, page.comp.name);
 
+  // Before there is anything to copy: the same bar, with nothing to commit.
+  const waiting = (body: React.ReactNode) => (
+    <Page
+      bar={
+        <PageBar title={TITLE} fullTitle={FULL_TITLE} trail={page.crumbs} cancel={page.leave} />
+      }
+    >
+      {body}
+    </Page>
+  );
   if (notFound) {
-    return (
-      <div className="max-w-2xl">
-        <Breadcrumbs items={crumbs} current={TITLE} />
-        <h1 className="mt-2 text-2xl font-bold">{TITLE}</h1>
-        <p className="mt-2 text-muted-foreground">
-          That competition was not found, or you are not one of its organisers.{" "}
-          <Link className="underline underline-offset-4" to={chooseAgain}>
-            Choose another competition
-          </Link>
-          .
-        </p>
-      </div>
+    return waiting(
+      <p className="text-muted-foreground">
+        That competition was not found, or you are not one of its organisers.{" "}
+        <Link className="underline underline-offset-4" to={chooseAgain}>
+          Choose another competition
+        </Link>
+        .
+      </p>
     );
   }
-  if (!data || !current) return <Loading>Working out what to copy…</Loading>;
+  if (!data || !current) return waiting(<Loading>Working out what to copy…</Loading>);
 
   const n = data.copy.length;
   const canCopy = n > 0 && !data.error;
+  const sentence = `Copy pilots from ${data.from.name}`;
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={crumbs} current={TITLE} />
-      <Form
-        onSubmit={() =>
-          api.api.comp[":comp_id"].pilot.copy.$post({
-            param: { comp_id: page.urlId },
-            json: { from_comp_id: from },
-          })
+    <Form
+      onSubmit={() =>
+        api.api.comp[":comp_id"].pilot.copy.$post({
+          param: { comp_id: page.urlId },
+          json: { from_comp_id: from },
+        })
+      }
+      onSuccess={async (res) => {
+        const done = (await res!.json()) as { copied: number; from: { name: string } };
+        toast.success(`Copied ${pilots(done.copied)} from ${done.from.name}`);
+        page.leave();
+      }}
+      className="contents"
+    >
+      <Page
+        bar={
+          <RosterToolBar
+            crumbs={page.crumbs}
+            title={TITLE}
+            fullTitle={sentence}
+            onCancel={page.leave}
+            // "Copy 12 pilots" while there is somebody to copy; the bare word,
+            // not live, when there is nobody.
+            commit={canCopy ? `Copy ${pilots(n)}` : "Copy"}
+            canCommit={canCopy}
+            pendingLabel="Copying"
+          />
         }
-        onSuccess={async (res) => {
-          const done = (await res!.json()) as { copied: number; from: { name: string } };
-          toast.success(`Copied ${pilots(done.copied)} from ${done.from.name}`);
-          page.leave();
-        }}
+        className="flex flex-col gap-6"
       >
-        <ReviewHeader
-          title={`Copy pilots from ${data.from.name}`}
-          onCancel={page.leave}
-          submit={
-            canCopy ? (
-              <SubmitButton pendingLabel="Copying">{`Copy ${pilots(n)}`}</SubmitButton>
-            ) : null
-          }
-        />
-        <p className="mt-1 text-sm text-muted-foreground">
-          {`${n} to copy · ${data.skip.length} already here`}
-        </p>
-        <FormErrorBanner className="mt-3" />
-        <div className="mt-4 flex flex-col gap-6">
+        <FormErrorBanner />
+        {/* The bar says "Copy pilots"; the sentence, and from where, is here. */}
+        <div>
+          <p className="font-medium [overflow-wrap:anywhere]">{sentence}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {`${n} to copy · ${data.skip.length} already here`}
+          </p>
+        </div>
           {data.error ? (
             <Alert variant="destructive">
               <AlertDescription>{data.error}</AlertDescription>
@@ -238,37 +290,8 @@ function CopyReview({ page, from }: { page: ReadyPage; from: string }) {
               Choose a different competition
             </Link>
           </p>
-        </div>
-      </Form>
-    </div>
-  );
-}
-
-/** The page's title with Cancel and the submit beside it, as the import's. */
-function ReviewHeader({
-  title,
-  onCancel,
-  submit,
-}: {
-  title: string;
-  onCancel: () => void;
-  submit: React.ReactNode;
-}) {
-  const { pending } = useFormState();
-  return (
-    <SectionHeader
-      as="h1"
-      className="mt-2"
-      title={<span className="[overflow-wrap:anywhere]">{title}</span>}
-      action={
-        <div className="flex gap-2">
-          <Button variant="outline" isDisabled={pending} onPress={onCancel}>
-            Cancel
-          </Button>
-          {submit}
-        </div>
-      }
-    />
+      </Page>
+    </Form>
   );
 }
 

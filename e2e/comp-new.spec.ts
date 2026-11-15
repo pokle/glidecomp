@@ -53,12 +53,14 @@ test.afterEach(async ({ page }) => {
   createdCompId = null;
 });
 
+// The bar's title is one line: "New competition". The sentence is the + that
+// opens the page, and the page's name in the title's menu.
 const heading = (page: Page) =>
-  page.getByRole("heading", { level: 1, name: "Start a new competition" });
+  page.getByRole("heading", { level: 1, name: "New competition" });
 const startLink = (page: Page) => page.getByRole("link", { name: "Start a new competition" });
 const nameField = (page: Page) => page.getByRole("textbox", { name: "Name" });
 const classesField = (page: Page) => page.getByRole("textbox", { name: "Pilot classes" });
-const create = (page: Page) => page.getByRole("button", { name: "Create" });
+const create = (page: Page) => page.getByRole("button", { name: "Create", exact: true });
 
 test.describe("signed in", () => {
   test.beforeEach(async ({ page }) => {
@@ -93,16 +95,18 @@ test.describe("signed in", () => {
     await startLink(page).click();
     await expect(heading(page)).toBeVisible();
 
-    // Nothing typed: the form's own check, under Name, which takes focus.
-    await create(page).click();
-    await expect(nameField(page)).toHaveAccessibleDescription(/Enter a name\./);
-    await expect(nameField(page)).toBeFocused();
+    // Create is in the bar, and live only once the competition has a name
+    // (issue #863). Spaces are not a name.
+    await expect(create(page)).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
+    await nameField(page).fill("   ");
+    await expect(create(page)).toBeDisabled();
     expect(new URL(page.url()).pathname).toBe("/comp/new");
 
     // The server refuses one pilot class (`field: "pilot_classes.1"`): under
     // Pilot classes, which takes focus, and everything typed is kept.
     await nameField(page).fill(COMP_NAME);
-    await expect(nameField(page)).not.toHaveAccessibleDescription(/Enter a name\./);
+    await expect(create(page)).toBeEnabled();
     await classesField(page).fill("open, <b>");
     await create(page).click();
     await expect(classesField(page)).toHaveAccessibleDescription(/must not contain < or >/);
@@ -142,7 +146,7 @@ function expectThumbSized(name: string, box: { width: number; height: number } |
   expect(box!.width, `${name} width`).toBeGreaterThanOrEqual(44);
 }
 
-test("the list's search and + share one row, thumb-sized, that stays at the top", async ({
+test("the + is in the bar and the search under it, thumb-sized, and both stay at the top", async ({
   page,
 }) => {
   // A list long enough to scroll on any screen: the seeded comps, repeated.
@@ -165,32 +169,53 @@ test("the list's search and + share one row, thumb-sized, that stays at the top"
     name: "Search competitions, tasks, pilots and turnpoints",
   });
   const searchGroup = page.getByRole("group").filter({ has: search }).first();
+  const title = page.getByRole("heading", { level: 1, name: "Competitions" });
   await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(40);
 
   await expectNoSidewaysScroll(page);
 
   const plus = await startLink(page).boundingBox();
   const box = await searchGroup.boundingBox();
+  const titleBox = await title.boundingBox();
   expectThumbSized("the + button", plus);
   expect(box!.height, "the search box height").toBeGreaterThanOrEqual(44);
-  // One row: the + sits beside the search, not under it.
-  expect(Math.abs(plus!.y + plus!.height / 2 - (box!.y + box!.height / 2))).toBeLessThan(4);
-  expect(plus!.x).toBeGreaterThanOrEqual(box!.x + box!.width);
+  // The + is in the bar's right slot: on the title's row, to the right of it.
+  expect(
+    Math.abs(plus!.y + plus!.height / 2 - (titleBox!.y + titleBox!.height / 2)),
+    "the + is on the bar's row"
+  ).toBeLessThan(12);
+  expect(plus!.x, "the + is right of the title").toBeGreaterThanOrEqual(
+    titleBox!.x + titleBox!.width
+  );
+  // The search field is the bar's second layer: under that row, not beside the +.
+  expect(box!.y, "the search is under the bar's row").toBeGreaterThanOrEqual(
+    plus!.y + plus!.height
+  );
 
-  // Scrolled to the end of the list, both are still on screen, at the top:
-  // sticky in the page's flow, never fixed to the screen.
+  // Scrolled to the end of the list, both are still on screen, at the top,
+  // where they were: sticky in the page's flow, never fixed to the screen.
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   expect(await page.evaluate(() => window.scrollY), "the list scrolled").toBeGreaterThan(500);
-  const scrolled = await startLink(page).boundingBox();
-  expect(scrolled!.y, "the + stays on screen").toBeGreaterThanOrEqual(0);
-  expect(scrolled!.y, "the + stays near the top").toBeLessThan(200);
-  expect(
-    await startLink(page).evaluate((el) => {
-      for (let n: Element | null = el; n; n = n.parentElement) {
-        if (getComputedStyle(n).position === "fixed") return true;
-      }
-      return false;
-    }),
-    "nothing on this page is fixed to the screen"
-  ).toBe(false);
+  const scrolledPlus = await startLink(page).boundingBox();
+  const scrolledSearch = await searchGroup.boundingBox();
+  expect(scrolledPlus!.y, "the + stays on screen").toBeGreaterThanOrEqual(0);
+  expect(scrolledPlus!.y, "the + stays at the top").toBeLessThan(60);
+  expect(scrolledSearch!.y, "the search stays under the +").toBeGreaterThanOrEqual(
+    scrolledPlus!.y + scrolledPlus!.height
+  );
+  expect(scrolledSearch!.y, "the search stays at the top").toBeLessThan(140);
+  for (const [name, control] of [
+    ["the +", startLink(page)],
+    ["the search", search],
+  ] as const) {
+    expect(
+      await control.evaluate((el) => {
+        for (let n: Element | null = el; n; n = n.parentElement) {
+          if (getComputedStyle(n).position === "fixed") return true;
+        }
+        return false;
+      }),
+      `${name}: nothing on this page is fixed to the screen`
+    ).toBe(false);
+  }
 });

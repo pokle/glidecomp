@@ -26,11 +26,10 @@
 import { useState } from "react";
 import { cleanWaypointCodes, type WaypointFileRecord } from "@glidecomp/engine";
 import type { MapPickDetails, PickedPeak } from "../../analysis/map-provider";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
 import { TextField } from "@/react/rac/field";
 import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
-import { SectionHeader } from "../components/SectionHeader";
+import { Page, PageBar, commitClass } from "@/react/rac/page-bar";
 import type { Crumb } from "../lib/crumbs";
 import { toast } from "../lib/toast";
 import { useUnits } from "../lib/units";
@@ -326,10 +325,13 @@ export function AddWaypointFields({
 }
 
 /**
- * An Add waypoint page: the fields under a kit form, with Cancel and Add on
- * the header row. Nothing is sent — Add hands the record to `onAdd`, which
- * puts it in its editor's draft and says where it went, and then the page
- * leaves (`onLeave`, as Cancel does).
+ * An Add waypoint page: the fields under a kit form, with Cancel and Add in
+ * the page's bar (issue #863). Nothing is sent — Add hands the record to
+ * `onAdd`, which puts it in its editor's draft and says where it went, and
+ * then the page leaves (`onLeave`, as Cancel does).
+ *
+ * Add is live once there are coordinates: they are all a waypoint has to
+ * have (a code left empty is given one).
  */
 export function NewWaypointPage({
   crumbs,
@@ -353,36 +355,40 @@ export function NewWaypointPage({
   const waypoint = useNewWaypoint(seed, taken);
 
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={crumbs} current="Add waypoint" />
-      <Form
-        validate={() => newWaypointProblems(waypoint.state)}
-        onSuccess={() => {
-          const built = buildNewWaypoint(waypoint.state, codes());
-          if (!built) return;
-          if (built.adjusted) toast.warning(built.adjusted);
-          toast.success(onAdd(built.record));
-          onLeave();
-        }}
+    <Form
+      // `contents`, so the bar sticks to the page and not to the form.
+      className="contents"
+      validate={() => newWaypointProblems(waypoint.state)}
+      onSuccess={() => {
+        const built = buildNewWaypoint(waypoint.state, codes());
+        if (!built) return;
+        if (built.adjusted) toast.warning(built.adjusted);
+        toast.success(onAdd(built.record));
+        onLeave();
+      }}
+    >
+      <Page
+        bar={
+          <PageBar
+            title="Add waypoint"
+            trail={crumbs}
+            cancel={onLeave}
+            commit={
+              <SubmitButton
+                className={commitClass}
+                isDisabled={waypoint.state.coords.trim() === ""}
+                pendingLabel="Adding"
+              >
+                Add
+              </SubmitButton>
+            }
+          />
+        }
+        className="flex flex-col gap-4"
       >
-        <SectionHeader
-          as="h1"
-          className="mt-2"
-          title="Add waypoint"
-          action={
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onPress={onLeave}>
-                Cancel
-              </Button>
-              <SubmitButton pendingLabel="Adding">Add</SubmitButton>
-            </div>
-          }
-        />
-        <FormErrorBanner className="mt-3" />
-        <div className="mt-4 flex flex-col gap-4">
-          <AddWaypointFields seed={seed} waypoint={waypoint} />
-        </div>
-      </Form>
-    </div>
+        <FormErrorBanner />
+        <AddWaypointFields seed={seed} waypoint={waypoint} />
+      </Page>
+    </Form>
   );
 }

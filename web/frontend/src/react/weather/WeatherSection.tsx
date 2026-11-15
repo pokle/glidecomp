@@ -11,8 +11,8 @@
  * the day know things it cannot — that the cycle went through at one, that
  * the valley wind switched, that half the field got flushed off launch.
  *
- * Rendered for admins even when there is nothing yet, so there is somewhere
- * to click to add the first note; hidden from everyone else only when there
+ * Rendered for admins even when there is nothing yet, so the page says the
+ * first note is still to be added; hidden from everyone else only when there
  * is nothing to read at all — no notes, no charts, and no answer on its way.
  *
  * Notes are not a scoring input. Saving goes through the task PATCH like
@@ -20,11 +20,11 @@
  * since this is prose) and deliberately does NOT mark scores stale.
  *
  * Editing happens on a routed page, not here (issue #637): the section owns
- * the READING of the notes and links to
+ * the READING of the notes, and the task page's ⋯ menu has "Add notes" /
+ * "Edit notes" (#863: every action is in the bar), which opens
  * comp/TaskWeatherNotes.tsx for the writing. An eight-row
  * textarea in a centred modal was the shape that conversion exists to remove.
  */
-import { LinkButton } from "@/react/rac/button";
 import { SectionHeader } from "@/react/components/SectionHeader";
 import { WeatherNotesBlock } from "./WeatherNotesBlock";
 import { TaskWeatherPanel } from "./TaskWeatherPanel";
@@ -36,7 +36,6 @@ export function WeatherSection({
   notes,
   isAdmin,
   compTimezone,
-  notesHref,
 }: {
   /**
    * Fetched by the page and handed down, not fetched here. The task page's
@@ -48,12 +47,6 @@ export function WeatherSection({
   isAdmin: boolean;
   /** Competition IANA zone; the charts' axis ticks in it. */
   compTimezone: string | null;
-  /**
-   * Where the notes are edited. Built by the caller, which holds the comp and
-   * task names the canonical slug needs — this section knows about weather,
-   * not about URL shapes.
-   */
-  notesHref: string;
 }) {
   const hasNotes = notes.trim().length > 0;
 
@@ -69,16 +62,7 @@ export function WeatherSection({
 
   return (
     <Card>
-      <SectionHeader
-        title="Weather"
-        action={
-          isAdmin ? (
-            <LinkButton variant="outline" size="sm" href={notesHref}>
-              {hasNotes ? "Edit notes" : "Add notes"}
-            </LinkButton>
-          ) : null
-        }
-      />
+      <SectionHeader title="Weather" />
       {hasNotes ? (
         <WeatherNotesBlock notes={notes} className="mt-2 text-sm whitespace-pre-line" />
       ) : isAdmin ? (

@@ -221,6 +221,49 @@ test("General edits the organiser's notes, and the comp page shows them with saf
   await expect(shown).toContainText("Not a link: javascript:alert(1)");
 });
 
+/**
+ * Save is in the bar, and live only while there is something to commit
+ * (issue #863). One exception, held by comp-creation.spec.ts: on a competition
+ * whose settings nobody has saved yet, an untouched Save is the review the
+ * setup guide asks for, so it stays live until the first save.
+ */
+test("Save is live only while something has changed; Scoring's reset is under More actions", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  // Any save marks the settings reviewed. Said here, not left to an earlier
+  // test: a retry starts from a new competition.
+  const reviewed = await page.request.patch(`/api/comp/${compId}`, {
+    data: { name: COMP_NAME },
+  });
+  expect(reviewed.ok(), await reviewed.text()).toBe(true);
+
+  await page.goto(`/comp/${compId}/settings/scoring`);
+  await expect(page.getByRole("heading", { name: "Scoring", exact: true })).toBeVisible();
+  const save = page.getByRole("button", { name: "Save" });
+  await expect(save).toBeDisabled();
+  // A form: Cancel is the way out, where a read page has Back.
+  await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
+
+  const advanced = page.getByText("Advanced scoring settings");
+  await advanced.click();
+  const nominalTime = page.getByRole("textbox", { name: "Nominal time (min)" });
+  const original = await nominalTime.inputValue();
+  await nominalTime.fill("77");
+  await nominalTime.blur();
+  await expect(save).toBeEnabled();
+
+  // Folded away again: the reset opens Advanced, so the reader sees what it
+  // changed. It is the page's one other action, so it is under ⋯.
+  await advanced.click();
+  await expect(nominalTime).toBeHidden();
+  await expect(page.getByRole("button", { name: "Reset to defaults" })).toHaveCount(0);
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Reset to defaults" }).click();
+  await expect(nominalTime).toBeVisible();
+  await expect(nominalTime).toHaveValue(original);
+});
+
 test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
   page,
 }) => {
@@ -230,16 +273,11 @@ test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
 
   const name = page.getByLabel("Name");
   await name.fill(`${COMP_NAME} (edited)`);
-  await expect(page.getByText("Unsaved changes")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save" })).toBeEnabled();
 
-  // exact: the comp-name crumb ("E2E Comp Settings Pages") also contains the
-  // word Settings, and name matching is substring by default.
-  const settingsCrumb = page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: "Settings", exact: true });
-
-  // Keep editing: navigation cancelled, edit retained.
-  await settingsCrumb.click();
+  // Cancel asks before it throws a change away. Keep editing: still here,
+  // edit retained.
+  await page.getByRole("button", { name: "Cancel" }).click();
   const dialog = page.getByRole("alertdialog");
   await expect(dialog.getByText("Discard changes?")).toBeVisible();
   await dialog.getByRole("button", { name: "Keep editing" }).click();
@@ -247,8 +285,17 @@ test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
   await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
   await expect(name).toHaveValue(`${COMP_NAME} (edited)`);
 
-  // Discard: navigation proceeds, and nothing was saved.
-  await settingsCrumb.click();
+  // A link out asks the same question: the title's menu is the trail now
+  // (the "Breadcrumb" landmark is still in the markup, visually hidden).
+  await page.getByRole("button", { name: "General settings: go to another page" }).click();
+  await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
+  await expect(dialog.getByText("Discard changes?")).toBeVisible();
+  await dialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(name).toHaveValue(`${COMP_NAME} (edited)`);
+
+  // Discard: Cancel leaves for the index, and nothing was saved.
+  await page.getByRole("button", { name: "Cancel" }).click();
   await page
     .getByRole("alertdialog")
     .getByRole("button", { name: "Discard changes" })
@@ -280,7 +327,7 @@ test("Back on a dirty sub-page leaves without asking; a reload still asks", asyn
 
   const name = page.getByLabel("Name");
   await name.fill(`${COMP_NAME} (reload)`);
-  await expect(page.getByText("Unsaved changes")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save" })).toBeEnabled();
 
   // A reload with unsaved edits asks first: the browser's own "Leave site?"
   // (beforeunload). Answered "stay", the edits are still there.
@@ -392,11 +439,16 @@ test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY
   // that only means something there.
   await devLogin(page, ADMIN_USER);
 
-  // Comp page → Settings link → index.
+  // Reviewed already, whatever ran before this (see the Save test above).
+  const reviewed = await page.request.patch(`/api/comp/${compId}`, {
+    data: { name: COMP_NAME },
+  });
+  expect(reviewed.ok(), await reviewed.text()).toBe(true);
+
+  // Comp page → its title's menu → Settings → index.
   await page.goto(`/comp/${compId}`);
-  const settingsLink = page.getByRole("link", { name: "Settings", exact: true });
-  await expect(settingsLink).toBeVisible();
-  await settingsLink.click();
+  await page.getByRole("button", { name: `${COMP_NAME}: go to another page` }).click();
+  await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
   await expectNoSidewaysScroll(page, "the settings index");
 
@@ -406,11 +458,21 @@ test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY
   expect(rowBox).not.toBeNull();
   expect(rowBox!.height).toBeGreaterThanOrEqual(44);
 
-  // Index → sub-page → untouched Save → back on the index.
+  // Index → sub-page, whose bar holds Cancel, the title and Save on one row
+  // → an edit → Save → back on the index.
   await general.click();
   await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
   await expectNoSidewaysScroll(page, "the General sub-page");
-  await page.getByRole("button", { name: "Save" }).click();
+  const save = page.getByRole("button", { name: "Save" });
+  await expect(save).toBeDisabled();
+  for (const control of [save, page.getByRole("button", { name: "Cancel" })]) {
+    const box = await control.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+  await page.getByLabel("Notes for every pilot").fill("Briefing 9:30 at the launch shelter.");
+  await expect(save).toBeEnabled();
+  await save.click();
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
   await expectNoSidewaysScroll(page, "the settings index after saving");
 });

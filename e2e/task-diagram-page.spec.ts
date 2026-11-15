@@ -84,8 +84,10 @@ test.afterAll(async ({ playwright }) => {
 
 const compHeading = (page: Page) =>
   page.getByRole("heading", { level: 1, name: COMP_NAME });
+// The bar's title (issue #863) is the page's short name; "Route for <task>"
+// is its name in full, in the title's menu and the trail.
 const diagramHeading = (page: Page) =>
-  page.getByRole("heading", { level: 1, name: `Route for ${TASK_NAME}` });
+  page.getByRole("heading", { level: 1, name: "Route diagram" });
 /** The drawing itself: an image named for the route it shows. */
 const diagram = (page: Page) => page.getByRole("img", { name: /^Task route: ell094/ });
 const glyph = (page: Page) =>
@@ -175,12 +177,19 @@ test("a reload keeps the page, and Back still leaves it", async ({ page }) => {
   await expect(page).toHaveURL(diagramUrl(compId));
   await expect(diagramHeading(page)).toBeVisible();
   await expect(diagram(page)).toBeVisible();
-  // The trail names where it hangs: the task, then the competition.
+  // The trail names where it hangs: the task, then the competition. It ends
+  // on this page, by its name in full.
   const trail = page.getByRole("navigation", { name: "Breadcrumb" });
   await expect(trail.getByRole("link", { name: TASK_NAME, exact: true })).toHaveAttribute(
     "href",
     new RegExp(`/task/[^/]*${taskId}$`)
   );
+  await expect(trail.locator('[aria-current="page"]')).toHaveText(`Route for ${TASK_NAME}`);
+  // A read page with nothing to do on it: the bar has Back to the task, and
+  // no ⋯, no Done and no Close.
+  await expect(page.getByRole("link", { name: `Back to ${TASK_NAME}` })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More actions" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(Done|Close|Back)$/ })).toHaveCount(0);
 
   await page.goBack();
   await expect(page).toHaveURL(compUrl(compId));

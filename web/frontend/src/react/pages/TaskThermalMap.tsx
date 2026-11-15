@@ -18,15 +18,18 @@
  * the band table — is already on the server-rendered thermals section, which
  * stays the one indexed page for it.
  *
- * Leaving: the restore control in the map's corner goes back the way the
- * reader came. Arrived by the section's maximise link (which marks the entry
- * it pushes), that is a real Back, so the section returns as it was left,
- * scroll included (lib/scroll-restoration.ts). Arrived any other way — a
- * shared link — it replaces this entry with the section instead, so Back from
- * there does not land on the map again.
+ * Leaving: the bar's Back goes the way the reader came (#863; the map's own
+ * restore control went, because it did the same thing). Arrived by the
+ * section's maximise link (which marks the entry it pushes), that is a real
+ * Back, so the section returns as it was left, scroll included
+ * (lib/scroll-restoration.ts). Arrived any other way — a shared link — it
+ * replaces this entry with the section instead, so Back from there does not
+ * land on the map again.
+ *
+ * A `fill` page: the map has the screen under the bar to itself, and the page
+ * does not scroll, so every drag belongs to the map.
  */
 import { useSearchParams } from "react-router-dom";
-import { useLeave } from "../lib/leave";
 import { Card } from "@/react/rac/card";
 import { TaskAnalysisFrame } from "../analysis/TaskAnalysisFrame";
 import { useTaskAnalysis } from "../analysis/use-task-report";
@@ -36,7 +39,7 @@ import {
   ThermalMapView,
   shownThermal,
 } from "../analysis/thermals/ThermalsPanel";
-import { compUrlId, taskAnalysisSectionPath, taskThermalMapPath } from "../lib/slug";
+import { compUrlId, taskThermalMapPath } from "../lib/slug";
 import { formatTimeOfDay } from "../lib/time";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 
@@ -44,7 +47,6 @@ export function TaskThermalMap() {
   const bundle = useTaskAnalysis();
   const { compId, taskId, comp, task, report, weather } = bundle;
   const [searchParams] = useSearchParams();
-  const leave = useLeave();
   // The id every link carries: a hidden comp's share key rides along.
   const urlId = compUrlId(comp, compId);
   const thermalsSection = findTaskAnalysisSection("thermals")!;
@@ -63,16 +65,6 @@ export function TaskThermalMap() {
   if (selected) sectionQuery.set("thermal", String(selected.id));
   if (searchParams.get("map") === "0") sectionQuery.delete("map");
   else sectionQuery.set("map", "1");
-  const sectionHref = `${taskAnalysisSectionPath(
-    urlId,
-    comp?.name,
-    taskId,
-    task?.name,
-    thermalsSection.slug
-  )}?${sectionQuery.toString()}`;
-
-  const restore = () => leave(sectionHref);
-
   const time = selected
     ? formatTimeOfDay(new Date(selected.startMs).toISOString(), comp?.timezone ?? undefined)
     : null;
@@ -92,13 +84,13 @@ export function TaskThermalMap() {
         label: thermalsSection.label,
         search: sectionQuery.toString(),
       }}
+      fill
     >
       {({ report }) =>
         report.thermals && report.thermals.shapes.length > 0 ? (
           <ThermalMapView
             thermals={report.thermals}
             weather={weather.data?.weather ?? null}
-            onRestore={restore}
           />
         ) : (
           <Card>

@@ -12,7 +12,7 @@
  * "Scores by task" overflows a phone — issue #640), with a fade at whichever
  * end still has tabs behind it.
  */
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   Tabs as AriaTabs,
   TabList as AriaTabList,
@@ -27,11 +27,34 @@ import {
 
 import { cn } from "@/react/lib/utils";
 
+/** Set under the kit `Tabs`, so its two render passes can be told apart. */
+const InsideTabsContext = createContext(false);
+
 export function Tabs({
   className,
+  children,
   ...props
-}: Omit<TabsProps, "className"> & { className?: string }) {
-  return <AriaTabs className={cn("flex flex-col gap-2", className)} {...props} />;
+}: Omit<TabsProps, "className" | "children"> & {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <AriaTabs className={cn("flex flex-col gap-2", className)} {...props}>
+      <InsideTabsContext.Provider value={true}>{children}</InsideTabsContext.Provider>
+    </AriaTabs>
+  );
+}
+
+/**
+ * True in the pass RAC renders only to collect the tabs (see `TabsContent`):
+ * inside the kit `Tabs`, with no tab list state yet. The page bar asks, so
+ * that in that pass it renders its tab strip and nothing else. On the server
+ * the pass is real markup, in a `<template>`, and it held a second `<h1>`.
+ */
+export function useTabsCollectionPass(): boolean {
+  const inside = useContext(InsideTabsContext);
+  const state = useContext(TabListStateContext);
+  return inside && state === null;
 }
 
 /**
@@ -121,7 +144,7 @@ export function TabList<T extends object>({
           // only ever applies once it overflows — and centred overflow spills
           // equally off BOTH ends, putting the first tab behind a scroll
           // origin that scrollLeft can never reach.
-          "inline-flex h-8 w-fit max-w-full items-center justify-start rounded-lg bg-muted p-[3px] text-muted-foreground",
+          "inline-flex h-8 w-fit max-w-full items-center justify-start rounded-lg bg-muted p-[3px] text-muted-foreground pointer-coarse:h-[3.1875rem]",
           // The scrollbar is hidden because it would eat half of an h-8 pill
           // on platforms that reserve space for one; the fades below and the
           // clipped tab edge are the affordance instead.
@@ -164,7 +187,7 @@ export function Tab({
         // light it was the foreground at 60% opacity, 4.16:1 on the strip's
         // --muted, under the 4.5:1 that text needs. accent-text.test.ts
         // measures any text dimmed by opacity now.
-        "relative inline-flex h-[calc(100%-1px)] flex-1 cursor-default items-center justify-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-all outline-none select-none",
+        "relative inline-flex h-[calc(100%-1px)] flex-1 cursor-default items-center justify-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-all outline-none select-none pointer-coarse:px-5 pointer-coarse:text-base",
         "data-hovered:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
         "data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50",
         "data-selected:bg-background data-selected:text-foreground data-selected:shadow-sm dark:data-selected:border-input dark:data-selected:bg-input/30 dark:data-selected:text-foreground",
@@ -192,4 +215,21 @@ export function TabPanel({
       {...props}
     />
   );
+}
+
+/**
+ * Whatever is inside `<Tabs>` that is neither the tab list nor a panel: the
+ * rest of a page whose tab strip is the page bar's second layer, so that
+ * `Tabs` has to wrap the whole page (rac/page-bar.tsx, `below`).
+ *
+ * RAC renders the children of `Tabs` TWICE: once in a hidden tree, only to
+ * collect the tabs, and once for real. A `Tab` and a `TabPanel` know to do
+ * nothing in the hidden pass; ordinary content does not, so it mounted twice,
+ * ran its effects twice (a freshness poll, a fetch) and portalled a second
+ * copy of any open dialog into the document. This renders its children in the
+ * real pass only. The tab list's state exists only there, which is how the
+ * two passes are told apart with nothing but RAC's public API.
+ */
+export function TabsContent({ children }: { children: React.ReactNode }) {
+  return useTabsCollectionPass() ? null : <>{children}</>;
 }

@@ -3,22 +3,23 @@
  * (pages/CompScoresPage — the canonical scores surface) and the comp hub's
  * compact scores summary (CompScoresSummary): the SSR-seedable fetch +
  * rescore state machine (useCompScores) and the score views (per-class
- * scores, top-3, teams, scores-by-task). View transforms (class rollups,
+ * scores, top-3, teams, scores-by-task: useScoresViews). View transforms (class rollups,
  * top-3, teams) come from the shared scores-views module; the "Scores by
  * task" tab reuses the task page's ScoresSection one task at a time. Built on
  * the RAC kit: the view tabs are ARIA tabs, and each view is a sortable
  * ARIA-grid table (RAC sorting with per-column first-click directions —
  * scores read best-first).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Link as AriaLink,
   DialogTrigger,
+  type Key,
   type SortDescriptor,
 } from "react-aria-components";
 import { Select, SelectItem } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
-import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
+import { TabList, Tab, TabPanel } from "@/react/rac/tabs";
 import { Modal, Dialog, DialogHeader, DialogTitle } from "@/react/rac/dialog";
 import { Button } from "@/react/rac/button";
 import { Explain } from "@/react/rac/explain";
@@ -163,7 +164,26 @@ export function ScoresEmptyState({
   );
 }
 
-export function ScoresViews({
+/**
+ * The tab strip in the bar's second layer is 51 px tall with body-size labels
+ * at every pointer, like every control in the bar (issue #863); on the page it
+ * was that only for a finger.
+ */
+const barTabsClass = "h-[3.1875rem]";
+const barTabClass = "px-5 text-base";
+
+/**
+ * The scores page's views: one tab per class, then "Top 3 per task & class",
+ * "Teams" and "Scores by task".
+ *
+ * A hook, not a component, because the two halves are drawn in different
+ * places (issue #863): `tabList` is the bar's second layer, which sticks with
+ * the bar, and `panels` is the page. The page wraps BOTH in one
+ * `<Tabs {...tabsProps}>`, around its `<Page>`. Until the scores are ready
+ * both halves are null and the Tabs is empty, so the page's tree does not
+ * change shape when they arrive.
+ */
+export function useScoresViews({
   scores,
   compId,
   compName,
@@ -172,7 +192,8 @@ export function ScoresViews({
   defaultTaskId,
   deepLinkTaskId,
 }: {
-  scores: CompScores;
+  /** Null until the scores are ready, and when no class has any. */
+  scores: CompScores | null;
   compId: string;
   /** Comp name, so the deep score tables can build canonical pilot links. */
   compName: string | null;
@@ -193,43 +214,69 @@ export function ScoresViews({
    * fix.
    */
   deepLinkTaskId?: string | null;
-}) {
-  const teams = useMemo(() => aggregateTeams(scores.class_scores), [scores]);
-  const groups = useMemo(() => buildClassGroups(scores.class_scores), [scores]);
-  const firstTab = `scores:${scores.class_scores[0].pilot_class}`;
-  const [tab, setTab] = useState(firstTab);
+}): {
+  tabsProps: { selectedKey: string; onSelectionChange: (key: Key) => void };
+  tabList: ReactNode;
+  panels: ReactNode;
+} {
+  const classScores = scores && scores.class_scores.length > 0 ? scores.class_scores : null;
+  const teams = useMemo(() => (classScores ? aggregateTeams(classScores) : []), [classScores]);
+  const groups = useMemo(() => (classScores ? buildClassGroups(classScores) : []), [classScores]);
+  // The reader's own choices; until they make one, the first class and the
+  // first scorable task, whenever those arrive.
+  const [pickedTab, setPickedTab] = useState<string | null>(null);
+  const [pickedTask, setPickedTask] = useState<string | null>(null);
   const scorableTasks = tasks.filter((t) => t.has_xctsk);
-  const [pickedTaskId, setPickedTaskId] = useState(
-    defaultTaskId ?? scorableTasks[0]?.task_id ?? null
+  const hasScorableTasks = scorableTasks.length > 0;
+  const pickedTaskId = pickedTask ?? defaultTaskId ?? scorableTasks[0]?.task_id ?? null;
+  // Always a string, so the Tabs is controlled from its first render: with
+  // no tabs yet, a key that matches none selects nothing.
+  const tab = classScores ? (pickedTab ?? `scores:${classScores[0].pilot_class}`) : "";
+
+  // Waits for the task list: the competition may load after the page does.
+  const deepLinkReady =
+    !!deepLinkTaskId && scorableTasks.some((t) => t.task_id === deepLinkTaskId);
+  useEffect(() => {
+    if (!deepLinkReady || !deepLinkTaskId) return;
+    setPickedTab("bytask");
+    setPickedTask(deepLinkTaskId);
+    // Re-run only if the link target itself changes (or first becomes
+    // usable), not on task-list refreshes.
+  }, [deepLinkTaskId, deepLinkReady]);
+
+  const tabsProps = {
+    selectedKey: tab,
+    onSelectionChange: (key: Key) => setPickedTab(String(key)),
+  };
+
+  if (!scores || !classScores) return { tabsProps, tabList: null, panels: null };
+
+  const tabList = (
+    <TabList aria-label="Score views" className={barTabsClass}>
+      {classScores.map((cls) => (
+        <Tab key={cls.pilot_class} id={`scores:${cls.pilot_class}`} className={barTabClass}>
+          {cls.pilot_class}
+        </Tab>
+      ))}
+      <Tab id="top3" className={barTabClass}>
+        Top 3 per task &amp; class
+      </Tab>
+      {teams.length > 0 ? (
+        <Tab id="teams" className={barTabClass}>
+          Teams
+        </Tab>
+      ) : null}
+      {hasScorableTasks ? (
+        <Tab id="bytask" className={barTabClass}>
+          Scores by task
+        </Tab>
+      ) : null}
+    </TabList>
   );
 
-  useEffect(() => {
-    if (!deepLinkTaskId) return;
-    if (!scorableTasks.some((t) => t.task_id === deepLinkTaskId)) return;
-    setTab("bytask");
-    setPickedTaskId(deepLinkTaskId);
-    // Re-run only if the link target itself changes, not on task-list refreshes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deepLinkTaskId]);
-
-  return (
+  const panels = (
     <CompNameProvider value={compName}>
-    <Tabs
-      selectedKey={tab}
-      onSelectionChange={(key) => setTab(String(key))}
-    >
-      <TabList aria-label="Score views">
-        {scores.class_scores.map((cls) => (
-          <Tab key={cls.pilot_class} id={`scores:${cls.pilot_class}`}>
-            {cls.pilot_class}
-          </Tab>
-        ))}
-        <Tab id="top3">Top 3 per task &amp; class</Tab>
-        {teams.length > 0 ? <Tab id="teams">Teams</Tab> : null}
-        {scorableTasks.length > 0 ? <Tab id="bytask">Scores by task</Tab> : null}
-      </TabList>
-
-      {scores.class_scores.map((cls) => (
+      {classScores.map((cls) => (
         <TabPanel key={cls.pilot_class} id={`scores:${cls.pilot_class}`}>
           <ScoresTable scores={scores} cls={cls} />
         </TabPanel>
@@ -255,7 +302,7 @@ export function ScoresViews({
         </TabPanel>
       ) : null}
 
-      {scorableTasks.length > 0 && pickedTaskId ? (
+      {hasScorableTasks && pickedTaskId ? (
         <TabPanel id="bytask">
           {/* One task at a time — every task's full tables at once is too
               heavy for long comps. */}
@@ -264,7 +311,7 @@ export function ScoresViews({
             className="mt-2 w-fit"
             selectedKey={pickedTaskId}
             onSelectionChange={(key) => {
-              if (key != null) setPickedTaskId(String(key));
+              if (key != null) setPickedTask(String(key));
             }}
           >
             {scorableTasks.map((t) => (
@@ -285,9 +332,10 @@ export function ScoresViews({
           />
         </TabPanel>
       ) : null}
-    </Tabs>
     </CompNameProvider>
   );
+
+  return { tabsProps, tabList, panels };
 }
 
 // ── Sortable table ────────────────────────────────────────────────────────────

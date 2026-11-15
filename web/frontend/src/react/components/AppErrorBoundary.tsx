@@ -19,6 +19,7 @@
  */
 import { Component, useEffect, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
+import { ChevronLeftIcon } from "lucide-react";
 
 import { Button, LinkButton } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
@@ -69,13 +70,33 @@ function ErrorScreen() {
   }, []);
 
   return (
-    <main
-      id="main-content"
-      className="mx-auto flex max-w-xl flex-col items-start gap-4 px-gutter-safe py-12"
-    >
-      <h1 ref={heading} tabIndex={-1} className="text-2xl font-bold outline-none">
-        Something went wrong
-      </h1>
+    <main id="main-content" className="w-full">
+      {/* The bar's look in plain markup, not `PageBar`: this screen stands
+          alone, outside the Shell and its providers, because any of them may
+          be what failed. Its way out is the home page, a full page load. */}
+      <header className="sticky top-0 z-40 bg-background pt-safe print:hidden">
+        <div className="mx-auto flex w-full max-w-3xl items-center gap-2 px-gutter-safe py-2">
+          <a
+            href="/"
+            aria-label="Back to the home page"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card shadow-card outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <ChevronLeftIcon className="size-5" aria-hidden />
+          </a>
+          <div className="flex h-11 min-w-0 flex-1 items-center justify-center rounded-full border border-border/70 bg-card px-4 shadow-card">
+            <h1
+              ref={heading}
+              tabIndex={-1}
+              className="truncate text-[0.9375rem] font-semibold outline-none"
+            >
+              Something went wrong
+            </h1>
+          </div>
+          {/* Keeps the title centred, as the trailing slot does on a page. */}
+          <span className="size-11 shrink-0" aria-hidden />
+        </div>
+      </header>
+      <div className="mx-auto flex w-full max-w-3xl flex-col items-start gap-4 px-gutter-safe pt-3 pb-12">
       <p className="text-muted-foreground">
         This page hit a problem. Reloading usually fixes it.
       </p>
@@ -85,6 +106,7 @@ function ErrorScreen() {
         <LinkButton variant="outline" href="/">
           Go to the home page
         </LinkButton>
+      </div>
       </div>
     </main>
   );

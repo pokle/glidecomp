@@ -91,6 +91,11 @@ export function useUnsavedChangesGuard(
       // A download saves a file and leaves the page, and its edits, where
       // they are.
       if (anchor.hasAttribute("download")) return;
+      // The page bar's back control is Back, not a link out (issue #863). A
+      // form has Cancel there instead, which asks for itself; a back control
+      // on a page with unsaved work is a draft's list page, and Back keeps
+      // the draft.
+      if (anchor.hasAttribute("data-bar-back")) return;
       const href = anchor.getAttribute("href") ?? "";
       const url = new URL(href, window.location.href);
       // External links fall through to beforeunload; same-page hashes are fine.
@@ -103,6 +108,13 @@ export function useUnsavedChangesGuard(
       // click — then re-run it iff the user confirms.
       e.preventDefault();
       e.stopImmediatePropagation();
+      // A row of a menu (the bar's title menu, ⋯): the menu closes itself on
+      // this same click when it is a touch, and now never sees it. Left open,
+      // it kept the page inert behind the question, and after "Keep editing"
+      // too. Escape is the menu's own way to close.
+      anchor
+        .closest('[role="menu"]')
+        ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       const guard = guardRef.current;
       // One question at a time: a second click while it is on screen is not
       // a second dialog.

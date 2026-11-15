@@ -142,10 +142,10 @@ describe code that no longer exists.
   `ListBox`/`ListBoxItem`, deliberately *in flow* under the textarea rather
   than a ComboBox popover, because on a phone the keyboard would cover a
   floating list), `menu`,
-  `priority-nav` (PriorityNav — a navigation row that never wraps: the links
-  that fit stay in the row and the rest fold into a "More" menu. Used by the
-  app header and the comp page's section bar, issue #639. Its vanilla twin,
-  for the prerendered pages, is in `static/src/components/SiteHeader.astro`),
+  `page-bar` (PageBar/Page — the one bar every page has, and the column under
+  it; see "The page bar" below. It replaced the app header, `breadcrumbs` and
+  `priority-nav`, which are gone. Its vanilla twin, for the prerendered pages,
+  is in `static/src/components/SiteHeader.astro`),
   `tooltip`, `tag-group`, `disclosure`,
   `meter` (DivergingMeter/ProportionMeter — a **measurement**, `role="meter"`;
   NOT ProgressBar, which means task completion. RAC's own `Meter` is imported
@@ -159,8 +159,7 @@ describe code that no longer exists.
   reusing `popoverClass` from select.tsx — **use this, not tooltip, whenever
   the content is prose**: tooltips are hover-only, so touch users never see
   them, and they dismiss before a sentence can be read),
-  `breadcrumbs` (ARIA-native trail — parent links + current page as
-  `aria-current="page"`; see gotcha #11), `radio-group` (RadioGroup/Radio —
+  `radio-group` (RadioGroup/Radio —
   label part of each Radio, same slot pieces as field.tsx), `tree` (Tree/
   TreeItem/TreeItemContent/TreeChevron — hierarchical rows with
   expand/collapse; first consumer is the Dashboard's competition-flights
@@ -325,6 +324,70 @@ Points worth knowing before you reach for one:
   `aria-valuenow`, the absence of a second accessible name, aria-disabled
   without `disabled`) — the failure modes all render identically.
 
+## The page bar (2026-11-15, #863)
+
+Every page of the app renders one bar, `PageBar`, as the first thing inside
+the Shell's `<main>`, through `Page`, which also gives the content its column:
+
+```tsx
+import { Page, PageBar, commitClass } from "@/react/rac/page-bar";
+
+<Page
+  width="wide"                       // "narrow" (default) or "wide"
+  bar={
+    <PageBar
+      title="Scores"                 // one line; the page's <h1>
+      trail={underComp(compId, comp?.name)}          // lib/crumbs.ts
+      related={compPages(compId, comp, isAdmin, "Scores")}
+      actions={[{ id: "csv", label: "CSV spreadsheet", to: csvPath, download: true }]}
+      status={busy ? <Spinner label="Recomputing scores" /> : undefined}
+      below={<TabList aria-label="Class">…</TabList>}
+    />
+  }
+>
+  …the page: information…
+</Page>
+```
+
+The owner's principle: **the page is for information, and every action goes in
+the bar.** The header comment of `rac/page-bar.tsx` is the specification. What
+to know before using it:
+
+- **Three slots.** Left: back to the page above (from `trail`), the word
+  Cancel on a form (`cancel`), or the main menu on a top-level page (no
+  `trail`). Centre: `title` over the tree menu (`trail`, `related`, and the
+  top-level places). Right: `commit` on a form; else `status`, `add` (+) and
+  `actions` (⋯).
+- **A form** is `components/SettingsForm.tsx`, which renders the kit `Form`,
+  the `Page` and the bar together, because the commit button is in the bar and
+  so the form has to wrap it. The form element is `display: contents`, so the
+  bar still sticks to the page. Where Enter in some other field of the page
+  would then submit (the route page's place search), give the `Form` only the
+  bar and the error banner. `FormErrorBanner` is the first thing in the
+  column.
+- **The commit button is live only when there is something to commit.**
+  `dirty` on a form that edits; the required fields on a form that makes
+  something new (`canCommit`). Done is always live.
+- **Pass only the actions this reader may use.** The bar does not know who is
+  signed in beyond its own main menu. `group: true` draws a rule above a row;
+  `children` puts a second menu behind one, which opens BELOW its row.
+- **`below` is a search field, tabs or a class select.** Nothing else sticks.
+  Tabs in `below` mean `Tabs` wraps the `Page`.
+- **`fill`** is a page that is one thing with the screen to itself (a map at
+  full size): the page does not scroll and the Shell's footer is hidden.
+- **Loading**: render the bar before the data, with the fallback labels the
+  crumb builders have ("Competition", "Task"), so the page does not jump.
+- **With the menus closed**, the trail and every ⋯ row that opens a page are
+  still links in the markup, in two visually hidden `<nav>`s. Do not rely on
+  the menus for anything a crawler or a reader without JavaScript needs.
+- **Widths.** The bar is as wide as the column under it.
+- **Sticky offsets.** The bar is 60px and the safe-area inset; with a `below`
+  layer about 120px. A `scroll-mt-*` under it must be at least that.
+- **Measuring in Playwright.** A full-page screenshot under a device
+  descriptor turns `(pointer: coarse)` off for that page. Measure first.
+
+`e2e/page-bar.spec.ts` holds the bar's own rules on a desktop and a phone.
+
 ## Conventions
 
 - Style with the app's existing tokens; use RAC's **data attributes** for
@@ -430,8 +493,12 @@ Points worth knowing before you reach for one:
     RAC Table renders native `<table>` markup. Keep the CLAUDE.md SSR rules
     (no window at module scope, deterministic dates, identical trees); heavy
     admin-only stuff (map) stays behind `lazy()`.
-11. **Breadcrumbs follow the ARIA-native pattern — the last crumb IS the
-    current page.** `rac/breadcrumbs.tsx` uses RAC's `Breadcrumbs`/`Breadcrumb`
+11. **(History: `rac/breadcrumbs.tsx` went with issue #863. The page bar now
+    renders the trail, as the tree in its title menu and as a visually hidden
+    `<nav aria-label="Breadcrumb">` of plain links. The gotcha about RAC's
+    `Breadcrumbs` still holds if the collection is ever used again.)**
+    **Breadcrumbs follow the ARIA-native pattern — the last crumb IS the
+    current page.** `rac/breadcrumbs.tsx` used RAC's `Breadcrumbs`/`Breadcrumb`
     collection: parent crumbs are RAC `Link`s (client-routed via the
     RouterProvider), and the current page is the final crumb rendered as plain
     text with `aria-current="page"` (per the WAI-ARIA breadcrumb pattern). API:
@@ -691,7 +758,8 @@ Points worth knowing before you reach for one:
 
 23. **A Menu is named by its TRIGGER, and a MenuItem cannot carry
     `aria-current`.** Two separate limits, both found building the
-    priority+overflow nav (`rac/priority-nav.tsx`, issue #639), and both quiet:
+    priority+overflow nav (`rac/priority-nav.tsx`, issue #639; deleted with
+    #863, but the page bar's menus obey the same two limits), and both quiet:
     - `MenuTrigger` wires `aria-labelledby` from the button onto the menu, and
       `aria-labelledby` beats `aria-label`. An `aria-label` on the Menu is
       therefore inert — the comp page's two "More" menus were BOTH named

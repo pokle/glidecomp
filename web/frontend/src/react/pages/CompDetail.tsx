@@ -24,15 +24,22 @@ import {
   scoringFormatLabel,
   todayInZone,
 } from "../lib/format";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Disclosure } from "@/react/rac/disclosure";
-import { compCrumbs } from "../lib/crumbs";
+import { NavList, NavRow } from "@/react/rac/nav-list";
+import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
+import { COMP_ANALYSIS_LABEL, compCrumbs, compPages } from "../lib/crumbs";
 import {
   compUrlId,
   idFromSegment,
+  compAnalysisPath,
+  compCopyPath,
   compNewTaskPath,
   compPath,
+  compPilotsPath,
+  compScoresPath,
+  compScoresPdfPath,
   compSettingsPath,
+  compWaypointsPath,
   submitTrackPath,
   taskDiagramPath,
   taskPath,
@@ -41,10 +48,6 @@ import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { SectionHeader } from "../components/SectionHeader";
 import { ActivitySection } from "../comp/ActivitySection";
-import {
-  CompSectionNav,
-  compSectionNavProps,
-} from "../comp/CompSectionNav";
 import { CompScoresSummary } from "../comp/CompScoresSummary";
 import { CompSetupProgress } from "../comp/CompSetupProgress";
 import { CompWrapUp } from "../comp/CompWrapUp";
@@ -85,39 +88,104 @@ export function CompDetail() {
     document.getElementById(location.hash.slice(1))?.scrollIntoView();
   }, [comp, location.hash]);
 
+  const isAdmin = useAdminView(!!comp?.is_admin);
+  // This page is server-rendered, so anything clock-dependent has to settle
+  // after hydration rather than differ from the server's markup.
+  const mounted = useMounted();
+
   if (notFound || !compId) {
     return <NotFound title="Competition not found" />;
   }
 
-  if (!comp) {
-    return (
-      <Loading>Loading competition…</Loading>
-    );
-  }
-
   // The SSR seed ("today" + scores), when the server rendered this URL.
   const seeded = initial;
+  // As it goes in URLs: a hidden comp's share key rides along.
+  const urlId = compUrlId(comp, compId);
 
+  // The bar is there before the competition is, under a stand-in name, so
+  // the page does not jump when it arrives — and the bar is never remounted,
+  // which would drop the focus the router put on its <h1>.
   return (
-    <CompDetailView
-      compId={compId}
-      comp={comp}
-      today={seeded?.today}
-      initialScores={seeded?.scores ?? undefined}
-      initialScoresEtag={seeded?.scoresEtag ?? undefined}
-    />
+    <Page
+      width="wide"
+      bar={
+        <PageBar
+          title={comp?.name ?? "Competition"}
+          trail={compCrumbs()}
+          related={compPages(urlId, comp, isAdmin)}
+          actions={comp ? compActions(urlId, comp, isAdmin, mounted) : []}
+        />
+      }
+    >
+      {comp ? (
+        <CompDetailView
+          compId={compId}
+          comp={comp}
+          isAdmin={isAdmin}
+          today={seeded?.today}
+          initialScores={seeded?.scores ?? undefined}
+          initialScoresEtag={seeded?.scoresEtag ?? undefined}
+        />
+      ) : (
+        <Loading>Loading competition…</Loading>
+      )}
+    </Page>
   );
+}
+
+/**
+ * The competition page's actions, under ⋯ (issue #863): the page is for
+ * information, and every action goes in the bar.
+ */
+function compActions(
+  urlId: string,
+  comp: CompDetailData,
+  isAdmin: boolean,
+  mounted: boolean
+): BarAction[] {
+  const actions: BarAction[] = [];
+  // Submitting is the one thing a pilot comes to a live comp to DO, so it
+  // leads. It goes to /submit with the comp prefilled: from the comp page the
+  // task is still an open question, and that page is where it is answered.
+  // Mount-gated because the close date is read against the visitor's clock
+  // and this page is server-rendered. Not for a hidden comp's link visitors:
+  // the link is for reading a draft, and every write route refuses anyone but
+  // its admins.
+  if (mounted && !isPastCloseDate(comp.close_date) && (!comp.test || isAdmin)) {
+    actions.push({ id: "submit", label: "Submit your track", to: submitTrackPath(urlId) });
+  }
+  // The results record is every task's scores: with no task there is nothing
+  // to keep.
+  if (comp.tasks.length > 0) {
+    actions.push({
+      id: "record",
+      label: "Download the results record (PDF)",
+      to: compScoresPdfPath(urlId, comp.name),
+      download: true,
+      group: true,
+    });
+  }
+  if (isAdmin) {
+    actions.push(
+      { id: "new-task", label: "New task", to: compNewTaskPath(urlId, comp.name), group: true },
+      { id: "copy", label: "Copy to a new competition…", to: compCopyPath(urlId, comp.name) },
+      { id: "settings", label: "Settings", to: compSettingsPath(urlId, comp.name) }
+    );
+  }
+  return actions;
 }
 
 function CompDetailView({
   compId,
   comp,
+  isAdmin,
   today,
   initialScores,
   initialScoresEtag,
 }: {
   compId: string;
   comp: CompDetailData;
+  isAdmin: boolean;
   /** SSR-computed "today" (comp tz) so the section order matches across
    *  hydration. Omitted on client navigations. */
   today?: string;
@@ -125,14 +193,10 @@ function CompDetailView({
   initialScores?: CompScores;
   initialScoresEtag?: string | null;
 }) {
-  const isAdmin = useAdminView(!!comp.is_admin);
-  // This page is server-rendered, so anything clock-dependent has to settle
-  // after hydration rather than differ from the server's markup.
-  const mounted = useMounted();
-  const isClosed = isPastCloseDate(comp.close_date);
+  // As it goes in URLs: a hidden comp's share key rides along.
+  const urlId = compUrlId(comp, compId);
   // Creating a task is a page of its own (#819), not a dialog over this one.
-  // Built from compUrlId so a hidden comp's share key rides along.
-  const newTaskHref = compNewTaskPath(compUrlId(comp, compId), comp.name);
+  const newTaskHref = compNewTaskPath(urlId, comp.name);
 
   // Credit the people who run THIS competition — real `comp_admin` rows,
   // never the site super admin (who can administer without organising).
@@ -156,16 +220,8 @@ function CompDetailView({
   const tasksSection = (
     // break-before-page: when printing, each major section starts a fresh page.
     <Card id="tasks" className="scroll-mt-24 break-before-page">
-      <SectionHeader
-        title="Tasks"
-        action={
-          isAdmin ? (
-            <LinkButton variant="outline" size="sm" href={newTaskHref}>
-              New task
-            </LinkButton>
-          ) : null
-        }
-      />
+      {/* "New task" is in the bar's ⋯, with the page's other actions. */}
+      <SectionHeader title="Tasks" />
       {/* Above the list so the row badges' "see Task warnings above" holds. */}
       <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
       <TasksList
@@ -191,11 +247,10 @@ function CompDetailView({
 
   return (
     <div>
-      <Breadcrumbs items={compCrumbs()} current={comp.name} />
-
-      <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold">{comp.name}</h1>
+      {/* The name is the bar's <h1>; what kind of competition it is leads
+          the page. */}
+      <div>
+        <div className="min-w-0">
           <p className="text-sm text-muted-foreground">{facts.join(" · ")}</p>
           {/* A hidden comp says so, and says who can see it. Its URL carries
               the share key (lib/slug.ts compUrlId), so the organiser's own
@@ -248,40 +303,38 @@ function CompDetailView({
             </p>
           ) : null}
         </div>
-        {/* Submitting is the one thing a pilot comes to a live comp to DO, so
-            it leads. It goes to /submit with the comp prefilled: from the
-            comp page the task is still an open question, and that page is
-            where it is answered. Mount-gated for the same reason as the task
-            page's link — this page is server-rendered. */}
-        {/* Not for a hidden comp's link visitors: the link is for reading a
-            draft, and every write route refuses anyone but its admins. */}
-        {mounted && !isClosed && (!comp.test || isAdmin) ? (
-          <LinkButton size="sm" href={submitTrackPath(compUrlId(comp, compId))}>
-            Submit track
-          </LinkButton>
-        ) : null}
-        {isAdmin ? (
-          <LinkButton
-            variant="outline"
-            size="sm"
-            href={compSettingsPath(compId, comp.name)}
-          >
-            Settings
-          </LinkButton>
-        ) : null}
       </div>
 
-      {/* Counts double as honest signage: "Tasks (0)" says don't bother
-          scrolling; on a populated comp they're at-a-glance facts. Sticky so
-          the page's map survives scrolling into the long sections; sits under
-          the (sticky) app header on sm+, at the very top where the header is
-          static (phones, short landscape). Same bar on every sibling page
-          (scores, waypoints, pilots, analysis) so leaving the hub does not
-          drop the reader out of the set. */}
-      <CompSectionNav {...compSectionNavProps(compId, comp, isAdmin)} />
+      {/* The pages under this competition, as rows: the strip of section
+          links that stuck under the old header is gone (issue #863, decision
+          4), and its links are here and in the menu under the bar's title.
+          Tasks and Activity are sections of this page, below. Real links, so
+          they are in the server's HTML. Pilots is an organiser's page and
+          appears once the user resolves; an open-distance competition has no
+          legs to analyse. */}
+      <nav aria-label="This competition" className="mt-4">
+        <NavList label="This competition">
+          <NavRow to={compScoresPath(urlId, comp.name)} label="Scores" />
+          <NavRow
+            to={compWaypointsPath(urlId, comp.name)}
+            label="Waypoints"
+            value={comp.waypoint_count}
+          />
+          {isAdmin ? (
+            <NavRow
+              to={compPilotsPath(urlId, comp.name)}
+              label="Pilots"
+              value={comp.pilot_count}
+            />
+          ) : null}
+          {comp.scoring_format !== "open_distance" ? (
+            <NavRow to={compAnalysisPath(urlId, comp.name)} label={COMP_ANALYSIS_LABEL} />
+          ) : null}
+        </NavList>
+      </nav>
 
       {/* Admin-only, so absent from SSR markup and the first client paint —
-          it pops in after auth resolves, like the Settings button. */}
+          it pops in after auth resolves, like the organiser's rows of ⋯. */}
       {isAdmin ? (
         <CompSetupProgress
           compId={compId}
@@ -495,11 +548,13 @@ function TasksList({
         >
           {/* No `text-sm`: the task list is what this card is FOR, so it
               reads at the card's body size (issue #704). */}
-          <ul className="mt-1 space-y-0.5">
+          <ul className="mt-1">
             {day.rows.map((row) => (
               <li key={row.key} className="flex items-center gap-4">
+                {/* 44 px tall, and as wide as the row: the whole row is
+                    the way into the task (issue #860 §5). */}
                 <Link
-                  className="group/task min-w-0 flex-1 py-1"
+                  className="group/task block min-w-0 flex-1 py-2.5"
                   to={taskPath(compId, compName, row.task.task_id, row.task.name)}
                 >
                   {row.pilotClass ? (

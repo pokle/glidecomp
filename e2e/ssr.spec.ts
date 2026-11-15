@@ -141,6 +141,13 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html).toContain(pilotName);
     expect(html).toContain(`href="${compScoresPath(compId, compName)}"`);
     expect(html).toContain(`<title>${compName} — GlideComp</title>`);
+    // The pages under the competition are rows of real links on its page
+    // (issue #863, decision 4): the strip of section links is gone.
+    expect(html).toContain('aria-label="This competition"');
+    expect(html).toContain(`href="${compPath(compId, compName)}/waypoints"`);
+    expect(html).not.toContain('aria-label="Sections"');
+    // One <h1>, and it is the bar's.
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
   });
 
   test("/comp/:id/scores shows scores and links to pilot narrative pages", async ({ request }) => {
@@ -154,8 +161,16 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
       new RegExp(`/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}/pilot/[a-z0-9-]+-${pilotId}`)
     );
     expect(html).toContain(`<title>Scores — ${compName} — GlideComp</title>`);
-    expect(html).toContain('aria-label="Sections"');
-    expect(html).toContain("Comp analysis");
+    // The bar's closed menus still leave real links in the markup: the way
+    // back to the competition, and the downloads under ⋯ (issue #863). The
+    // view tabs are the bar's second layer.
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).toContain(`href="${compPath(compId, compName)}"`);
+    expect(html).toContain('aria-label="Page actions"');
+    expect(html).toContain(`href="${compScoresPath(compId, compName)}.csv"`);
+    expect(html).toContain('aria-label="Score views"');
+    // One <h1>, and it is the bar's.
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
   });
 
   test("/comp/:id/scores.csv serves the scores as long-form CSV", async ({ request }) => {
@@ -228,6 +243,15 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html).toContain('id="__SSR_DATA__"');
     // Turnpoints table / route content renders server-side.
     expect(html.toLowerCase()).toMatch(/turnpoint|start|goal/);
+    // The bar (issue #863): one <h1>, the way back to the competition as a
+    // real link, and the ⋯ rows that open a page as real links too — the
+    // task's QR code among them. The previous/next task links are gone: the
+    // other tasks are in the title's menu.
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).toContain('aria-label="Page actions"');
+    expect(html).toMatch(new RegExp(`href="/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}/qr"`));
+    expect(html).not.toContain('aria-label="Task navigation"');
   });
 
   test("task diagram page draws the route in the server HTML, noindexed", async ({
@@ -244,7 +268,9 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html).toContain('id="__SSR_DATA__"');
     // The drawing itself, named for the route it shows.
     expect(html).toMatch(/<svg[^>]*role="img"[^>]*aria-label="Task route: /);
+    // The page's name in full, at the end of the bar's trail.
     expect(html).toContain("Route for ");
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
     // The task page is the indexable form of the same route.
     expect(html).toContain('name="robots" content="noindex"');
   });
@@ -263,8 +289,12 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     // The table content is in the raw server HTML.
     expect(html).toContain(waypoints[0].code);
     expect(html).toContain(`<title>Waypoints — ${compName} — GlideComp</title>`);
-    expect(html).toContain('aria-label="Sections"');
-    expect(html).toContain("Comp analysis");
+    // The strip of section links went into the bar's title menu (issue #863).
+    // What the server's HTML keeps is the way back: the trail, as real links.
+    expect(html).not.toContain('aria-label="Sections"');
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).toContain(`href="${compPath(compId, compName)}"`);
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
     // The map stays client-only — its Suspense fallback is what the server streams.
     expect(html).not.toContain("mapboxgl-canvas");
   });
@@ -275,6 +305,17 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain(pilotName);
+    // One <h1>, and it is the bar's: the pilot's name.
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
+    // The bar's closed menus still leave real links in the markup (issue
+    // #863): the trail, and under ⋯ the link into the analysis viewer, in the
+    // one URL shape that opens with no session (issue #666). React escapes
+    // `&` in attributes.
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).toContain('aria-label="Page actions"');
+    expect(html).toContain(
+      `href="/analysis?compId=${compId}&amp;taskId=${taskId}&amp;pilotId=${pilotId}"`
+    );
     // Some scoring-explanation prose is present in the server HTML.
     expect(html.toLowerCase()).toMatch(/scored|distance|goal|points/);
     // The map is client-only — no rendered mapbox canvas in the server HTML.
@@ -606,6 +647,12 @@ test.describe("SSR — comp & task analysis (public)", () => {
     // The defining SSR property: the loader data is embedded in the raw HTML.
     expect(html).toContain('id="__SSR_DATA__"');
     expect(html).toContain("Task analysis —");
+    // The bar is there warm or cold: one <h1>, the trail as real links, and
+    // under ⋯ the link to the whole-comp report (issue #863).
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).toContain('aria-label="Page actions"');
+    expect(html).toContain("Comp analysis");
     // Branch on the actual server HTML (race-free): warm renders the summary's
     // section boxes and is indexable; cold renders the pending notice and is
     // noindex.
@@ -642,6 +689,7 @@ test.describe("SSR — comp & task analysis (public)", () => {
       const html = await res.text();
       expect(html, slug).toContain('id="__SSR_DATA__"');
       expect(html, slug).toContain(`${heading} —`);
+      expect(html.match(/<h1[\s>]/g), slug).toHaveLength(1);
     }
   });
 
@@ -720,7 +768,13 @@ test.describe("SSR — comp & task analysis (public)", () => {
     const html = await res.text();
     expect(html).toContain('id="__SSR_DATA__"');
     expect(html).toContain(`Comp analysis — ${compName}`);
-    expect(html).toContain('aria-label="Sections"');
+    // The strip of section links is gone (issue #863): the competition's
+    // other pages are in the bar's title menu, and the way back to the
+    // competition is a real link in the markup.
+    expect(html).not.toContain('aria-label="Sections"');
+    expect(html).toContain('aria-label="Breadcrumb"');
+    // One <h1>, and it is the bar's.
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
   });
 
   test("comp analysis of an invalid comp is a 404 noindex shell", async ({ request }) => {

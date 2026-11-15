@@ -191,11 +191,15 @@ differs. Know which surface you're touching:
   Its border used to be `border-destructive/40`, 1.68:1 against the page. Do
   not make a focus border translucent; `accent-text.test.ts` fails on it.
 - Never set `outline: none` without providing a replacement indicator.
-- Focus must not be obscured (WCAG 2.4.11): sticky headers (the 60px chrome,
-  the mobile anchor bar, the pilots page's sticky search bar) and toasts
-  (`sonner`) must not cover the focused element. Rows under a sticky bar carry
-  a `scroll-mt-*` at least as tall as what sticks above them, so focus scrolls
-  a row clear of it (`comp/PilotList.tsx`).
+- Focus must not be obscured (WCAG 2.4.11): the page bar (`rac/page-bar.tsx`,
+  60px and the safe-area inset; about 120px where a search field or tabs stick
+  with it) and toasts (`sonner`) must not cover the focused element. The bar
+  is the only thing that sticks: no page has a second sticky strip, and
+  nothing sticks to the bottom of the screen. Rows under the bar carry a
+  `scroll-mt-*` at least as tall as the bar and its second layer, so focus
+  scrolls a row clear of it (`comp/PilotList.tsx`). A refused Save moves focus
+  to the field, and the field must come to rest below the bar
+  (`e2e/page-bar.spec.ts`).
 - **Focus order follows reading order** (WCAG 2.4.3). When a dialog opens, focus
   moves into it; when it closes, focus returns to the trigger. The route editor
   deep-link (`#edit-route`) and `#scores` redirect must land focus sensibly, not
@@ -210,24 +214,41 @@ differs. Know which surface you're touching:
   `#main-content`, which carries `tabindex="-1"` so focus lands there and not
   just the scroll position. Keep the two in sync, and give any new page shell
   the same link.)*
-- **Landmarks**: one `<header>`, one `<nav aria-label="Main">` (already in
-  `Shell.tsx`), one `<main>`, one `<footer>` per page. The full-screen tools
+- **Landmarks**: one `<main>` and one `<footer>` per page. In the app the page
+  bar is a `<header>` INSIDE `<main>` (`rac/page-bar.tsx`): it holds the
+  page's `<h1>`, which is where focus goes on arrival (`lib/route-focus.ts`),
+  so it cannot sit outside the landmark. The full-screen tools
   (`/analysis.html`, `/replay`) use their top-center breadcrumb bar (IA v2 §3)
   as the nav landmark.
-- **One `<h1>` per page**, and it is the current-page marker (IA v2 makes the
-  H1-below-breadcrumbs the current page). Headings are hierarchical and not
-  skipped (no h2 → h4). `SectionHeader` titles are real headings, not styled
-  text.
+- **One bar on every page, with three slots that always mean the same thing**
+  (issue #863): the way out on the left (back to the page above, Cancel on a
+  form, the main menu on a top-level page), where you are in the centre (the
+  title over a menu of the pages above, beside and under this one), and what
+  you can do on the right (a form's commit button, or ⋯). Consistent
+  navigation (WCAG 3.2.3) is this bar; the content pages carry the same bar
+  in plain markup (`static/src/components/SiteHeader.astro`).
+- **One `<h1>` per page**, and it is the bar's title. Headings are
+  hierarchical and not skipped (no h2 → h4). `SectionHeader` titles are real
+  `<h2>`s, not styled text.
 - **Breadcrumbs** use the same label for the same destination everywhere
-  ("Competitions") and are marked up as a `<nav aria-label="Breadcrumb">`
-  wrapping an ordered list. One component app-wide: `rac/breadcrumbs.tsx`
-  follows the **WAI-ARIA breadcrumb pattern** — ancestor links, then the
-  current page as the final crumb, rendered as plain text with
-  `aria-current="page"`, which gives AT users a "you are here" anchor. Build
-  the ancestor array with the helpers in `lib/crumbs.ts` so a destination's
-  label is identical wherever it appears. (A parents-only variant,
-  `components/Breadcrumbs.tsx`, coexisted through the RAC migration and was
-  removed once every page converted.)
+  ("Competitions"). The trail a reader SEES is the tree in the title's menu.
+  Because a closed menu puts no links in the markup, the bar also renders a
+  `<nav aria-label="Breadcrumb">` wrapping an ordered list, visually hidden,
+  in the **WAI-ARIA breadcrumb pattern**: ancestor links, then the current
+  page as the final crumb, plain text with `aria-current="page"`. It is the
+  "you are here" anchor for AT, the links a crawler follows, and what the
+  `BreadcrumbList` structured data mirrors. Its links are out of the Tab
+  order (a hidden link must not take focus where nobody can see it, WCAG
+  2.4.7): the title's menu is the way to them by keyboard. Build the trail
+  with the helpers in `lib/crumbs.ts` so a destination's label is identical
+  wherever it appears.
+- **Every action that opens a page is a link in the markup.** The ⋯ rows are
+  in a closed menu too, so the bar renders them in a visually hidden
+  `<nav aria-label="Page actions">`. "Submit your track" is the one that
+  matters most: it is the first row of ⋯ on the competition and task pages.
+- **The back control is a link** to the page above, so it works with
+  JavaScript off. The installed app has no browser Back: every page that is
+  not top-level must have it.
 - **Page titles** (WCAG 2.4.2): each SPA route sets a unique, descriptive
   `<title>`; static pages already do.
 
@@ -257,21 +278,28 @@ differs. Know which surface you're touching:
 
 - Pointer targets are **≥ 24×24 CSS px**, or have ≥ 24px spacing. The kit's
   smallest button sizes — `sm` (h-7) and `icon-sm` (size-7), i.e. 28px — clear
-  the bar with room to spare; nothing in `rac/button.tsx` goes below it and
+  that floor with room to spare; nothing in `rac/button.tsx` goes below it and
   nothing new should. Avoid crowding several small targets together (e.g.
   per-row track actions in dense tables).
-- **On a coarse pointer the floor is 44px**, the mobile touch guideline
-  `rac/nav-list.tsx` rows have always met (issue #641). 24px is the standard's
-  conformance line, not a thumb's. Two ways to reach 44, and the neighbours
-  decide which:
+- **Every control in the page bar and every row of its menus is 44px, at
+  every pointer** (`rac/page-bar.tsx`; `e2e/page-bar.spec.ts` measures them on
+  a desktop and a phone). The footer's links are 44px rows.
+- **On a coarse pointer the floor is 44px** for the kit's own controls too
+  (issues #641, #863): buttons, text and search fields, the select and its
+  options, combo-box options, menu rows, tabs and the date field. 24px is the
+  standard's conformance line, not a thumb's. Two ways to reach 44, and the
+  neighbours decide which:
   - Where the control can simply grow, grow it with a `pointer-coarse:` size
-    utility — the NumberField steppers (`rac/field.tsx`), the calendar's
+    utility — the default, `lg` and `icon` buttons, the fields, menu rows and
+    options, tabs, the NumberField steppers (`rac/field.tsx`), the calendar's
     compact day cells (`rac/date-picker.impl.tsx`) and the pilot-class preset
     chips (`comp/fields.tsx`). A real 44px box cannot overlap anything.
-  - Where growing would re-flow what sits beside it — the `Explain` ⓘ trigger,
-    inline in table headers and section titles — use the `touch-target`
-    utility in `react/globals.css`: a centred transparent pseudo-element that
-    paints nothing and only widens where a finger may land.
+  - Where growing would re-flow what sits beside it — the `sm` and `icon-sm`
+    buttons in dense table rows, a search field's clear button, the `Explain`
+    ⓘ trigger inline in table headers and section titles — use the
+    `touch-target` utility in `react/globals.css`: a centred transparent
+    pseudo-element that paints nothing and only widens where a finger may
+    land.
   - Both are `(pointer: coarse)`-only. A mouse is already precise at 24px, and
     on the desktop an invisible 44px box would just steal clicks from its
     neighbours.

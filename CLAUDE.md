@@ -406,11 +406,18 @@ These are the standing imperatives. Each links to the reference that explains it
   - **Small overlays are fine**: a confirmation ("Discard changes?"), a menu,
     a combo box's list, a date picker. Nothing that fills the screen, and
     nothing with text fields that bring up the keyboard.
-  - **No bars fixed to the screen's edges.** A toolbar that should stay in
-    reach is `sticky` in the page's flow (the pilots list's search and +),
-    never `fixed`: a fixed bar has to be moved around the keyboard by hand,
-    and on an iPhone the pilots page's bottom bar once stuck halfway up the
-    screen doing that. A sticky bar at the top never meets the keyboard.
+  - **No bars fixed to the screen's edges.** The page bar (below) is the one
+    thing that stays in reach, and it is `sticky` at the top of the page's
+    flow, never `fixed`: a fixed bar has to be moved around the keyboard by
+    hand, and on an iPhone the pilots page's bottom bar once stuck halfway up
+    the screen doing that. A bar at the top is never under the keyboard. On an iPhone the
+    screen pans when the keyboard opens, which took a sticky bar off the top
+    with Save in it; the page bar follows that pan by one transform
+    (`useKeepOnScreen` in `rac/page-bar.tsx`), the one place the app
+    positions anything from script. Do not add a second.
+    Nothing sticks to the bottom: the route editor, the waypoints page and
+    the altitude review each had a bar there until #863, and each is now the
+    page bar's commit button and ⋯.
   - **A draft goes in `lib/draft-store.ts`** — work not yet saved that
     another page, a reload or Back must find again (a CSV read in the
     browser, a waypoint file or a route edited as a set): this tab's
@@ -455,6 +462,72 @@ These are the standing imperatives. Each links to the reference that explains it
     Back and the sheet scroll reset. `src/react/no-overlays.test.ts` fails
     if any of it comes back, or if SPA code pushes or walks history entries
     by hand rather than through the router.
+- **The page is for information, and every action goes in the bar** (owner
+  decision, 2026-11-15, [#863](https://github.com/pokle/glidecomp/issues/863)).
+  Every page has one bar, `PageBar` in `src/react/rac/page-bar.tsx`, and
+  people learn to look there for what they can do. It replaced the app
+  header, the breadcrumb row, the title row with its buttons, the
+  competition's strip of section links and every bar stuck to the bottom.
+  - **Three slots, always the same.** Left, the way out: back to the page
+    above; Cancel on a form; the main menu on a top-level page. Centre, where
+    you are: the page's title, which is its `<h1>`, over a menu drawn as one
+    tree — up to the pages above, across or down to the pages beside or under
+    this one, and out to the other top-level places. Right, what you can do:
+    a form's commit button; or ⋯ for the page's actions, with + and a status
+    beside it.
+  - **The title is one line.** It may be cut short; the menu prints every
+    level in full. A page whose name is a sentence is an action: the sentence
+    is the ⋯ row that opens it, and the page has a short `title` with the
+    sentence as `fullTitle`. The trail is built by the helpers in
+    `src/react/lib/crumbs.ts`, never inline: the page above is where a page
+    *belongs* in the IA, not where the reader came from.
+  - **A form's commit button is in the bar's right slot**, whatever the form
+    does, with Cancel on the left, which asks before it throws a change away
+    (`components/SettingsForm.tsx` is the form page). A top-level form
+    (Submit track) keeps the main menu there. The one destructive action for
+    the thing being edited stays at the foot of the form. Where the commit
+    produces a result (Submit track, Test IGC, a new API key), the result
+    appears on the page.
+  - **The commit button is live only when there is something to commit**: a
+    change on a form that edits, the required fields on a form that makes
+    something new. The settings pages kept Save live with nothing changed
+    until #863.
+  - **Button wording.** **Save** writes to the server; no other word does.
+    **Create** or **Add** makes something new: Create for a competition, a
+    task or a key; Add for a member of a list. **Done** only closes, or
+    finishes one part of a draft that its page will save later; it is always
+    live, and where it is the bar's commit button it is drawn as Save is. No
+    Done where Back does the same thing. On a page with no bar (Onboarding,
+    the OAuth consent page) and in a dialog's footer, the primary button is
+    last.
+  - **A draft edited over several pages** (route, waypoints) has Save on its
+    list page, live only while the draft differs. "Discard changes" is in ⋯,
+    shown only while there are changes. Back keeps the draft. A mode
+    (Reorder) changes the bar: the title names the mode and the right slot
+    holds Done.
+  - **A page's actions go in ⋯**, grouped by rules, with rare ones behind one
+    row. "Submit your track" is the first row of ⋯ on the competition and
+    task pages. An action stays on the page only when its place says
+    something: "Add turnpoint" under the list. Pass the bar only the actions
+    this reader may use.
+  - **A second layer may stick with the bar** (`below`): a search field,
+    tabs, a class select. Nothing else sticks.
+  - **Every control in the bar and its menus is 44 px**, at every pointer;
+    the kit's own controls are 44 px on a coarse pointer
+    ([docs/accessibility-standard.md](docs/accessibility-standard.md) §4.5).
+  - **A closed menu puts no link in the markup**, so the bar renders the
+    trail and every ⋯ row that opens a page as real links in two visually
+    hidden navs, and its back control is a link. The server-rendered pages
+    and a reader without JavaScript depend on that
+    ([docs/ssr.md](docs/ssr.md)). Build every link with the path helpers, so
+    a hidden competition's share key rides along.
+  - **Every page that is not top-level has a way back.** The installed app
+    has no browser Back, so the bar's is the only one.
+  - **The content pages have the same bar** in plain markup
+    (`static/src/components/SiteHeader.astro`). Sign in, Onboarding and the
+    OAuth consent page stand outside the Shell and have none. The analysis
+    page and the 3D replay keep their own chrome for now.
+  - Coverage: `e2e/page-bar.spec.ts`, on a desktop and a phone.
 - **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
   dialog and piece of shared chrome uses it. Read
   [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)
@@ -485,8 +558,9 @@ These are the standing imperatives. Each links to the reference that explains it
     a page), and a failed save is never a toast. It owns what
     happens when Save does not work, so no page writes that again: an error
     about a field goes UNDER that field, which is focused and scrolled into
-    view; one about no field goes in the form's one banner beside its submit
-    button, focused and scrolled into view the same way; one submit at a
+    view; one about no field goes in the form's one banner, the first thing
+    under the bar that holds its submit button, focused and scrolled into
+    view the same way; one submit at a
     time; a dropped connection keeps what was typed. The server's half is `{ error, field }` on every refusal —
     `validated()` does it for schema failures, and a route that knows which
     input it is refusing says so (`fieldNames` maps it onto the form's field
@@ -520,15 +594,13 @@ These are the standing imperatives. Each links to the reference that explains it
 - **Use Tailwind utilities** — avoid custom CSS where Tailwind has an equivalent.
 - **UI conventions** (see the design-language section of
   [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md)):
-  section-scoped manage actions sit right-aligned on the section header row via
-  `SectionHeader`; breadcrumbs are one component app-wide — the RAC kit's
-  `Breadcrumbs`, ARIA-native (parent links + the current page as a final
-  `aria-current="page"` crumb), with the ancestor array built by the helpers in
-  `src/react/lib/crumbs.ts` rather than inline (the parent crumb is where a page
-  *belongs* in the IA, not where the user came from); every Submit-track entry
-  point goes through the one `SubmitTrackForm`
+  the page's own actions are in the bar (above); `SectionHeader` is a
+  section's `<h2>` row, and an action sits right-aligned on it only where it
+  belongs to that section and its place says something; every Submit-track
+  entry point goes through the one `SubmitTrackForm`
   ([docs/track-submission.md](docs/track-submission.md)), which only the
-  `/submit` page renders — the task and comp pages LINK there with
+  `/submit` page renders — it is a top-level place in the bar's menus, and
+  the task and comp pages LINK there from the first row of ⋯ with
   `submitTrackPath()` (`?comp=&task=` / `?comp=`), never open it in a dialog
   (#820);
   **anything waiting on an API response says
@@ -592,8 +664,9 @@ These are the standing imperatives. Each links to the reference that explains it
     accepted. The snapshot is kept in the waypoints draft, so it holds across
     a visit to one waypoint (`/altitudes/:n`) and a reload. A difference of
     exactly zero prints nothing — the absence of a finding is not a finding —
-    and inside a waypoint Back and Done (and the browser's Back) return to
-    the review's LIST, never out of the review.
+    and inside a waypoint the bar's Back (and the browser's Back) returns to
+    the review's LIST, never out of the review. The page has no Done: Back
+    does the same thing.
   - **The waypoints page is a list of pages, at every width** (sheets until
     #811) — see the
     mobile-first rule above for what it replaced. `comp-waypoints.spec.ts`

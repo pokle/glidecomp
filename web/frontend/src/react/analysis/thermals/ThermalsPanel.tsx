@@ -559,11 +559,11 @@ function RoseLegend() {
 
 /**
  * The rose over its optional satellite backdrop, with the figure's own
- * controls: the Map toggle, the maximise/restore control on the map's own
- * corner (one control, one place — press to fill the screen, press again to
- * come back; the browser Fullscreen API mapbox's own control rides on does
- * not exist on iPhones, so "the screen" is a page of its own, the thermal
- * map at /analysis/thermals/map), the legend, and — once the camera has been
+ * controls: the Map toggle, the maximise control on the map's own corner
+ * (press to fill the screen; the browser Fullscreen API mapbox's own control
+ * rides on does not exist on iPhones, so "the screen" is a page of its own,
+ * the thermal map at /analysis/thermals/map, left with its bar's Back), the
+ * legend, and — once the camera has been
  * panned or zoomed away — Re-centre. One component for the inline detail pane
  * AND the thermal map page, so the two can never disagree about behaviour.
  *
@@ -583,8 +583,8 @@ function RoseLegend() {
  *
  * Maximising is a LINK (#816), not a layer over the page: the full-size
  * figure is a route of its own, so Back, reload and a shared link all work
- * the way they do everywhere else. The restore control on that page is the
- * way back to the section it came from.
+ * the way they do everywhere else. That page's bar has the way back to the
+ * section it came from, so the figure carries no restore control of its own.
  */
 function RoseFigure({
   shape,
@@ -595,7 +595,6 @@ function RoseFigure({
   showMap,
   onShowMapChange,
   maximiseHref,
-  onRestore,
   cooperativeGestures = true,
   fill = false,
   className,
@@ -610,9 +609,6 @@ function RoseFigure({
   onShowMapChange: (on: boolean) => void;
   /** Inline: where the maximise control goes — the thermal map page. */
   maximiseHref?: string;
-  /** On the thermal map page: the restore control's action, back to the
-   * section. Present means this instance IS the full-size one. */
-  onRestore?: () => void;
   /** Two-finger touch pan — on inline maps embedded in the scrolling page. */
   cooperativeGestures?: boolean;
   /** Fill the parent box with the map, rose centred over it (the map page). */
@@ -686,8 +682,9 @@ function RoseFigure({
         )}
       >
         {fill ? (
-          // ThermalMapView's box is 100dvh-8rem tall; 4rem less again keeps
-          // the square clear of the toolbar rows on a landscape screen.
+          // ThermalMapView's box is the screen under the bar, less a few
+          // lines of text (about 100dvh-8rem); 4rem less again keeps the
+          // square clear of the toolbar rows on a landscape screen.
           <div
             ref={roseBoxRef}
             className="w-full max-w-[min(100%,calc(100dvh-12rem))]"
@@ -717,31 +714,19 @@ function RoseFigure({
           </Button>
         ) : null}
       </div>
-      {/* The map's own maximise/restore control, mapbox-style on the map's
-          corner: ONE control in ONE place, whose glyph flips — press to take
-          the whole screen, press the same corner to come back. Maximise is
-          shown while the map is; restore always, so the way back never
-          disappears if the map is toggled off on the map page. */}
-      {onRestore ? (
-        <div className="absolute top-8 right-0 print:hidden">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            aria-label="Restore map size"
-            onPress={onRestore}
-          >
-            <CollapseIcon />
-          </Button>
-        </div>
-      ) : maximiseHref && showMap ? (
+      {/* The map's own maximise control, mapbox-style on the map's corner:
+          press to take the whole screen. Shown while the map is. The map
+          page has no twin of it: its bar's Back is the way home (#863, no
+          second control where Back does the same thing). */}
+      {maximiseHref && showMap ? (
         <div className="absolute top-8 right-0 print:hidden">
           <LinkButton
             variant="outline"
             size="icon-sm"
             aria-label="Maximise map"
             href={maximiseHref}
-            // Marks the entry it pushes: the map page's restore control is
-            // then a real Back, which returns this section with its scroll.
+            // Marks the entry it pushes: the map page's Back is then a real
+            // Back, which returns this section with its scroll.
             routerOptions={openedHere()}
           >
             <ExpandIcon />
@@ -752,20 +737,6 @@ function RoseFigure({
         <RoseLegend />
       </div>
     </div>
-  );
-}
-
-/** Four corners pulling in — ExpandIcon's inverse, for the restore state of
- * the map's maximise control. */
-function CollapseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path
-        d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 
@@ -1072,6 +1043,10 @@ export function ThermalsPanel({
           onBack: back,
         }}
         onWideChange={onWideChange}
+        // Side by side the pane sticks under the page's bar AND the class
+        // select stuck beneath it (about 7rem), not under the bar alone.
+        paneWrapClassName="scroll-mt-28 @5xl:top-28"
+        paneClassName="@5xl:max-h-[calc(100vh-9rem)]"
         master={census}
         detail={<div className="p-4">
         <h3 id={headingId} className="text-sm font-semibold">
@@ -1355,20 +1330,18 @@ export function NoThermalsNote() {
  * linked here — a reload or a shared link has no section underneath.
  *
  * The backdrop is ON by default here (it is what the page is for), and
- * `?map=0` remembers turning it off. The figure's box is the viewport less a
- * margin, never all of it: one finger pans this map (cooperative gestures are
- * off — the map is the page's whole subject), so the page must always keep a
- * strip outside the map to scroll by. Nothing is fixed to the screen.
+ * `?map=0` remembers turning it off. The page is a `fill` page (rac/page-bar):
+ * the figure's box is whatever the screen has left under the bar, and the
+ * page does not scroll, so one finger pans this map (cooperative gestures are
+ * off — the map is the page's whole subject). Nothing is fixed to the screen,
+ * and the way back is the bar's.
  */
 export function ThermalMapView({
   thermals,
   weather,
-  onRestore,
 }: {
   thermals: FieldThermalsSummary;
   weather: TaskWeather | null;
-  /** The restore control: back to the section this page belongs to. */
-  onRestore: () => void;
 }) {
   const units = useUnits();
   const climb = unitDisplay("m/s", units);
@@ -1378,8 +1351,10 @@ export function ThermalMapView({
   const [showMap, setShowMap] = useShowMap(true);
   const altWithUnit = (m: number) => formatAltitude(m, { prefs: units }).withUnit;
   return (
-    <div className="space-y-2">
-      <div className="h-[calc(100dvh-8rem)] min-h-80 w-full">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      {/* min-h-56: a landscape phone, where the bar is not stuck and the
+          page may scroll, still gets a figure worth looking at. */}
+      <div className="relative min-h-56 w-full flex-1">
         {/* `fill`: the MAP spends the whole box — that is what maximising
             is for — and the rose floats over it as a centred square no
             bigger than the box's shorter edge. */}
@@ -1391,9 +1366,11 @@ export function ThermalMapView({
           distanceText={altWithUnit}
           showMap={showMap}
           onShowMapChange={setShowMap}
-          onRestore={onRestore}
           cooperativeGestures={false}
           fill
+          // Pinned to the box rather than sized as a percentage of it: the
+          // box's height comes from flex, which a percentage cannot read.
+          className="absolute inset-0"
         />
       </div>
       <ForecastAttribution weather={weather} />

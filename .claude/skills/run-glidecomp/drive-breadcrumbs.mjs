@@ -1,5 +1,6 @@
 /**
- * Drives the breadcrumb trail on every /comp page as a signed-in super-admin,
+ * Drives the trail in the page bar on every /comp page as a signed-in super-admin
+ * (the bar keeps it in the markup as a visually hidden Breadcrumb nav, #863),
  * and walks the analysis journey the way a user does:
  *   comp detail -> Comp analysis -> one task's Task analysis -> up one level
  * asserting the trail's text and that "up" lands on the TASK — the task
@@ -38,7 +39,7 @@ function pathIds(pathname) {
 }
 
 /**
- * The visible trail, normalised to "A › B › C".
+ * The trail the bar carries, normalised to "A › B › C".
  *
  * `expect` is the trail we're waiting to settle on: these pages fetch the
  * comp/task names after mount (and React keeps the previous route's tree up
@@ -47,12 +48,13 @@ function pathIds(pathname) {
  */
 async function trail(page, expected) {
   const nav = page.getByRole("navigation", { name: "Breadcrumb" });
-  await nav.waitFor({ state: "visible", timeout: 15_000 });
+  // Visually hidden: the trail a reader sees is the tree in the title menu.
+  await nav.waitFor({ state: "attached", timeout: 15_000 });
   // Generous budget: the pilot score page runs its track analysis in the
   // browser before it can name the pilot, which takes tens of seconds here.
   let seen = "";
   for (let i = 0; i < 90; i++) {
-    seen = (await nav.innerText()).replace(/\s+/g, " ").trim();
+    seen = (await nav.locator("li").allTextContents()).map((t) => t.trim()).join(" › ");
     if (seen === expected) return seen;
     await page.waitForTimeout(500);
   }
@@ -95,7 +97,7 @@ async function main() {
   check("comp detail trail", await trail(page, compDetailTrail), compDetailTrail);
 
   // --- 2. Comp detail -> Comp analysis --------------------------------------
-  const caLink = page.getByRole("navigation", { name: "Sections" }).getByRole("link", {
+  const caLink = page.getByRole("navigation", { name: "This competition" }).getByRole("link", {
     name: "Comp analysis",
   });
   await caLink.waitFor({ state: "visible", timeout: 15_000 });
@@ -141,10 +143,9 @@ async function main() {
 
   // --- 4. Up one level from a task analysis lands on the TASK ----------------
   // This is the IA: the task analysis is a child of the task, not of the comp
-  // analysis. The comp analysis is a SIBLING link in the header row (step 5).
-  const upOne = page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: taskName });
+  // analysis. The comp analysis is a SIBLING link, a row of ⋯ (step 5).
+  // "Up" is the bar's back control: a real link to the page above.
+  const upOne = page.getByRole("link", { name: `Back to ${taskName}` });
   await upOne.click();
   await page.waitForURL(/\/comp\/[^/]+\/task\/[^/]+$/);
   const taskTrail = `Competitions › ${comp.name} › ${taskName}`;
@@ -153,7 +154,9 @@ async function main() {
   // --- 5. The sibling "Comp analysis" link back out -------------------------
   await page.goBack({ waitUntil: "domcontentloaded" });
   await page.waitForURL(/\/comp\/[^/]+\/task\/[^/]+\/analysis$/);
-  const sibling = page.getByRole("link", { name: "Comp analysis" }).first();
+  // The sibling link is a row of ⋯ now, as every page action is.
+  await page.getByRole("button", { name: "More actions" }).click();
+  const sibling = page.getByRole("menuitem", { name: "Comp analysis" });
   await sibling.waitFor({ state: "visible", timeout: 15_000 });
   await sibling.click();
   await page.waitForURL(/\/comp\/[^/]+\/analysis$/);

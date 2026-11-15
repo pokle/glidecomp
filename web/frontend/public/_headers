@@ -21,10 +21,6 @@
 /replay*
   Content-Security-Policy-Report-Only: require-trusted-types-for 'script'; trusted-types default lit-html dompurify; report-to csp; report-uri /api/csp-report
 
-# The page-bar prototype (src/react/proto/ProtoApp.tsx) is not for search
-# engines. Nothing links to it; this keeps it out of an index all the same.
-/proto*
-  X-Robots-Tag: noindex, nofollow
 
 # Build output — every filename in these two directories carries a content
 # hash (Vite emits `app-CHvJv1_e.js`, Astro emits `Base.CvppkQhU.css`), so a

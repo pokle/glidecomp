@@ -12,44 +12,39 @@
  * keyboard behaves as on any form, and the list keeps its scroll by the
  * router's restoration. See the overlays rule in CLAUDE.md.
  *
- * **Done saves this pilot, and only this pilot.** An existing pilot is a PATCH
+ * **Save saves this pilot, and only this pilot** (Add, on a new one). It is
+ * in the page's bar, with Cancel on the other side (components/SettingsForm.tsx,
+ * issue #863): live only when something changed, or, on a new pilot, once
+ * there is a name. An existing pilot is a PATCH
  * of the fields that changed (comp/pilot-edit.ts), a new one a POST. A pilot
  * is a row of its own on the server, with its own audited route, so there is
  * nothing to batch — and on a hill with one bar of signal, a morning of
  * roster edits waiting on one Save is a morning one stray tap can lose.
  *
- * It is a kit `Form` (rac/form.tsx), which owns what happens when Done does
+ * It is a kit `Form` (rac/form.tsx), which owns what happens when Save does
  * not work: the form's own checks and the server's refusals land under the
- * field they are about, focused and scrolled into view. Field `name`s are
- * what the server's refusals are mapped onto (SERVER_FIELDS).
+ * field they are about, focused and scrolled into view, and one about no
+ * field in the banner that is first in the column. Field `name`s are what the
+ * server's refusals are mapped onto (SERVER_FIELDS).
  *
- * Leaving with unsaved edits asks first for a reload, a tab close or a link;
- * Back is left to the browser, as on any page.
+ * Leaving with unsaved edits asks first for Cancel, a reload, a tab close or
+ * a link; Back is left to the browser, as on any page.
  *
  * Remove is at the foot, apart from everything else, and asks first — naming
  * the tracks that go with the pilot.
  */
 import { useState } from "react";
 import { Trash2Icon } from "lucide-react";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
 import { TextField } from "@/react/rac/field";
 import { FIELD_NAME, asFieldNames } from "./pilot-field-names";
-import {
-  Form,
-  FormErrorBanner,
-  FormSection,
-  SubmitButton,
-  useFormAction,
-  useFormState,
-} from "@/react/rac/form";
+import { FormSection, useFormAction, useFormState } from "@/react/rac/form";
 import { Radio, RadioGroup } from "@/react/rac/radio-group";
-import { SectionHeader } from "../components/SectionHeader";
+import { SettingsForm } from "../components/SettingsForm";
 import { api } from "../../comp/api";
 import { useConfirm } from "../lib/confirm";
 import { underCompPilots } from "../lib/crumbs";
 import { toast } from "../lib/toast";
-import { useUnsavedChangesGuard } from "../lib/use-unsaved-changes-guard";
 import { formatRankingMonth, listLabel } from "./civl-rankings";
 import { emptyRow, normalizeRow, pilotToRow, type CompPilot, type ParsedRow } from "./csv";
 import { createBody, draftProblems, isBlankDraft, isDirtyDraft, patchBody } from "./pilot-edit";
@@ -112,7 +107,7 @@ export function PilotForm({
   teams: RosterTeam[];
   /** A new pilot's name, from a search that found nobody. */
   initialName?: string;
-  /** Saved, removed, or Done with nothing changed: back to the list. */
+  /** Saved or removed: back to the list. */
   onDone: () => void;
 }) {
   const [start] = useState<ParsedRow>(() =>
@@ -151,65 +146,60 @@ export function PilotForm({
   /** Whether leaving would lose anything. */
   const unsaved = pilot ? isDirtyDraft(start, draft) : !isBlankDraft(draft);
 
-  useUnsavedChangesGuard(unsaved && !finished, {
-    title: "Discard changes?",
-    message: pilot ? `Your changes to ${pilot.name} are not saved.` : "This pilot is not saved.",
-  });
-
   const finish = () => {
     setFinished(true);
     onDone();
   };
 
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={underCompPilots(compId, compName)} current={pilot?.name ?? "New pilot"} />
-      <Form
-        validate={() => (unsaved ? asFieldNames(problems()) : {})}
-        fieldNames={SERVER_FIELDS}
-        onSubmit={async () => {
-          if (!unsaved) return undefined;
-          return pilot
-            ? api.api.comp[":comp_id"].pilot[":comp_pilot_id"].$patch({
-                param: { comp_id: compId, comp_pilot_id: pilot.comp_pilot_id },
-                json: patchBody(pilot, toSend()),
-              })
-            : api.api.comp[":comp_id"].pilot.$post({
-                param: { comp_id: compId },
-                json: createBody(toSend()),
-              });
-        }}
-        onSuccess={async (res) => {
-          if (res) {
-            const saved = (await res.json()) as unknown as CompPilot;
-            toast.success(`Saved ${saved.name}`);
-          }
-          finish();
-        }}
-      >
-        {/* Done where the sheet had it, top right: in reach without
-            scrolling past the whole form. */}
-        <SectionHeader
-          as="h1"
-          className="mt-2"
-          title={normalizeRow(draft).name || pilot?.name || "New pilot"}
-          action={<SubmitButton>Done</SubmitButton>}
-        />
-        <FormErrorBanner className="mt-3" />
-        <div className="mt-4">
-          <PilotFields
-            compId={compId}
-            compClasses={compClasses}
-            pilot={pilot}
-            draft={draft}
-            setDraft={setDraft}
-            teams={teams}
-            onNewTeam={setNewTeam}
-            onRemoved={finish}
-          />
-        </div>
-      </Form>
-    </div>
+    <SettingsForm
+      crumbs={underCompPilots(compId, compName)}
+      title={pilot?.name ?? "New pilot"}
+      validate={() => (unsaved ? asFieldNames(problems()) : {})}
+      fieldNames={SERVER_FIELDS}
+      onSubmit={async () => {
+        if (!unsaved) return undefined;
+        return pilot
+          ? api.api.comp[":comp_id"].pilot[":comp_pilot_id"].$patch({
+              param: { comp_id: compId, comp_pilot_id: pilot.comp_pilot_id },
+              json: patchBody(pilot, toSend()),
+            })
+          : api.api.comp[":comp_id"].pilot.$post({
+              param: { comp_id: compId },
+              json: createBody(toSend()),
+            });
+      }}
+      onSuccess={async (res) => {
+        if (res) {
+          const saved = (await res.json()) as unknown as CompPilot;
+          toast.success(`Saved ${saved.name}`);
+        }
+        finish();
+      }}
+      // Stands down the moment a save or a remove lands, before the page
+      // navigates away.
+      dirty={unsaved && !finished}
+      // Save once something changed; Add once the new pilot has a name (the
+      // class starts chosen, and the form's checks say the rest).
+      canCommit={pilot ? unsaved : !!normalizeRow(draft).name}
+      submitLabel={pilot ? "Save" : "Add"}
+      pendingLabel={pilot ? "Saving" : "Adding"}
+      guard={{
+        title: "Discard changes?",
+        message: pilot ? `Your changes to ${pilot.name} are not saved.` : "This pilot is not saved.",
+      }}
+    >
+      <PilotFields
+        compId={compId}
+        compClasses={compClasses}
+        pilot={pilot}
+        draft={draft}
+        setDraft={setDraft}
+        teams={teams}
+        onNewTeam={setNewTeam}
+        onRemoved={finish}
+      />
+    </SettingsForm>
   );
 }
 
@@ -235,7 +225,7 @@ function PilotFields({
 }) {
   const confirm = useConfirm();
   const { pending } = useFormState();
-  // Its refusal goes in the form's banner, focused, like a failed Done.
+  // Its refusal goes in the form's banner, focused, like a failed Save.
   const removal = useFormAction();
 
   const set = (key: DraftKey, value: string) =>
@@ -389,8 +379,10 @@ function PilotFields({
 
       </div>
 
+      {/* The one destructive action stays at the foot of the form, away from
+          Save, and behind a question. */}
       {pilot ? (
-        <div className="mt-8 border-t border-border pt-4">
+        <div className="mt-2 border-t border-border pt-4">
           <Button
             variant="destructive"
             isPending={removal.pending}

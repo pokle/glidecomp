@@ -45,7 +45,7 @@ export function FootnoteHeading({
   return (
     <Tag
       id={id}
-      className={cn("scroll-mt-20 font-semibold", level === 2 ? "text-lg" : "text-sm")}
+      className={cn("scroll-mt-32 font-semibold", level === 2 ? "text-lg" : "text-sm")}
     >
       {children}
     </Tag>

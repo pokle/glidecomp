@@ -15,25 +15,27 @@
  * comp id is at least four characters (competition-api's sqids.ts), so a real
  * comp is never shadowed by it.
  *
- * It is a kit `Form` (rac/form.tsx): the form's own check and the server's
- * refusals land under the field they are about. Create goes to the new
+ * It is a kit `Form` (rac/form.tsx, through SettingsForm): the form's own
+ * check and the server's refusals land under the field they are about.
+ * Create is in the bar (issue #863), live once there is a name. It goes to the new
  * competition, REPLACING this page in the history, so Back from the new comp
  * returns to the list rather than to a form that has already been used.
  */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { SettingsForm } from "@/react/components/SettingsForm";
+import { SettingsPage } from "@/react/components/SettingsPage";
 import { Button } from "@/react/rac/button";
-import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
-import { SectionHeader } from "../components/SectionHeader";
 import { CategoryField, NameField, PilotClassesField } from "../comp/fields";
 import { compCrumbs } from "../lib/crumbs";
 import { compPath, compUrlId, newCompPath } from "../lib/slug";
 import { useGoToSignIn, useUser } from "../lib/user";
 
-const TITLE = "Start a new competition";
+/** The bar has one line: the short name there, the sentence in its menu. */
+const TITLE = "New competition";
+const FULL_TITLE = "Start a new competition";
 
 /** What was typed into Pilot classes, as the list the server takes. */
 function parseClasses(text: string): string[] {
@@ -53,73 +55,74 @@ export function NewCompPage() {
   const [pilotClasses, setPilotClasses] = useState("open");
 
   useEffect(() => {
-    document.title = `GlideComp - ${TITLE}`;
+    document.title = `GlideComp - ${FULL_TITLE}`;
   }, []);
 
-  if (loading) return <Loading>Loading…</Loading>;
+  if (loading || !user) {
+    // The bar is there before the session is known, so the page does not
+    // jump. Signed out, there is no form to cancel: a page to go back from.
+    return (
+      <SettingsPage crumbs={compCrumbs()} title={TITLE} fullTitle={FULL_TITLE}>
+        {loading ? (
+          <Loading>Loading…</Loading>
+        ) : (
+          <div>
+            <Button type="button" variant="outline" onPress={() => goToSignIn(newCompPath())}>
+              Sign in to start a competition
+            </Button>
+          </div>
+        )}
+      </SettingsPage>
+    );
+  }
 
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={compCrumbs()} current={TITLE} />
-      {user ? (
-        <Form
-          validate={() => ({ name: name.trim() ? null : "Enter a name." })}
-          onSubmit={() =>
-            api.api.comp.$post({
-              json: {
-                name: name.trim(),
-                category,
-                pilot_classes: parseClasses(pilotClasses),
-                // No `test`: a new comp starts hidden, and the setup guide's
-                // last step, "Make public", is where it goes public.
-              },
-            })
-          }
-          onSuccess={async (res) => {
-            const created = (await res!.json()) as {
-              comp_id: string;
-              name: string;
-              test: boolean;
-              share_key?: string | null;
-            };
-            // A new comp starts hidden: open it on the URL that carries its
-            // share key, so the organiser's address bar is the link to share
-            // from the first page they see.
-            navigate(compPath(compUrlId(created, created.comp_id), created.name), {
-              replace: true,
-            });
-          }}
-        >
-          <SectionHeader
-            as="h1"
-            className="mt-2"
-            title={TITLE}
-            action={<SubmitButton pendingLabel="Creating">Create</SubmitButton>}
-          />
-          <FormErrorBanner className="mt-3" />
-          <NewCompFields
-            name={name}
-            setName={setName}
-            category={category}
-            setCategory={setCategory}
-            pilotClasses={pilotClasses}
-            setPilotClasses={setPilotClasses}
-          />
-        </Form>
-      ) : (
-        <>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight">{TITLE}</h1>
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-4"
-            onPress={() => goToSignIn(newCompPath())}
-          >
-            Sign in to start a competition
-          </Button>
-        </>
-      )}
-    </div>
+    <SettingsForm
+      crumbs={compCrumbs()}
+      title={TITLE}
+      fullTitle={FULL_TITLE}
+      // Something typed or changed is something Cancel would throw away.
+      dirty={name !== "" || category !== "hg" || pilotClasses !== "open"}
+      // A form that makes something new: live once it has a name.
+      canCommit={name.trim() !== ""}
+      submitLabel="Create"
+      pendingLabel="Creating"
+      validate={() => ({ name: name.trim() ? null : "Enter a name." })}
+      onSubmit={() =>
+        api.api.comp.$post({
+          json: {
+            name: name.trim(),
+            category,
+            pilot_classes: parseClasses(pilotClasses),
+            // No `test`: a new comp starts hidden, and the setup guide's
+            // last step, "Make public", is where it goes public.
+          },
+        })
+      }
+      onSuccess={async (res) => {
+        const created = (await res!.json()) as {
+          comp_id: string;
+          name: string;
+          test: boolean;
+          share_key?: string | null;
+        };
+        // A new comp starts hidden: open it on the URL that carries its
+        // share key, so the organiser's address bar is the link to share
+        // from the first page they see.
+        navigate(compPath(compUrlId(created, created.comp_id), created.name), {
+          replace: true,
+        });
+      }}
+    >
+      <NewCompFields
+        name={name}
+        setName={setName}
+        category={category}
+        setCategory={setCategory}
+        pilotClasses={pilotClasses}
+        setPilotClasses={setPilotClasses}
+      />
+    </SettingsForm>
   );
 }
 
@@ -140,7 +143,7 @@ function NewCompFields({
   setPilotClasses: (v: string) => void;
 }) {
   return (
-    <div className="mt-4 flex flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <NameField
         name="name"
         value={name}

@@ -133,10 +133,10 @@ test.beforeEach(async ({ page }) => {
 
   await page.goto(`/comp/${compId}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(COMP_NAME);
-  // Admin affordances pop in once /api/auth/me resolves — the Settings link
-  // is the sync point that the super-admin view is active.
+  // Admin affordances pop in once /api/auth/me resolves — the organisers'
+  // Pilots row is the sync point that the super-admin view is active.
   await expect(
-    page.getByRole("link", { name: "Settings", exact: true })
+    page.getByRole("navigation", { name: "This competition" }).getByRole("link", { name: /^Pilots/ })
   ).toBeVisible();
 });
 
@@ -356,171 +356,102 @@ test("scores page: the view tabs stay reachable on a narrow phone", { tag: PHONE
 });
 
 /**
- * Issue #639: the header nav and the comp page's section bar were `flex-wrap`
- * rows, so a phone got them as two and three lines of sticky chrome before the
- * page itself started. They are priority+overflow now — the links that fit stay
- * in the row and the rest fold into a "More" menu.
- *
- * The assertion that matters is not "something is hidden" but "the bar is no
- * taller narrow than it is wide": that is the defect the issue reported, and a
- * row that quietly went back to wrapping would still hide nothing and still
- * pass a count-only check.
+ * Issue #863, decision 4: the strip of section links that stuck under the old
+ * header is gone. Its links are rows on the competition page — full-width, a
+ * finger tall, each a real link — and the same pages are in the menu under the
+ * bar's title on every page of the competition. Tasks and Activity are
+ * sections of the competition page itself.
  */
-test("the section bar folds into More rather than wrapping on a phone", { tag: PHONE_ONLY }, async ({ page }) => {
+test("the competition's pages are rows on its page, a finger tall", async ({ page }) => {
   await page.goto(`/comp/${compId}`);
-  const bar = page.getByRole("navigation", { name: "Sections" });
-  await expect(bar).toBeVisible({ timeout: 15_000 });
-  const overflow = bar.locator("[data-priority-overflow]");
+  const rows = page.getByRole("navigation", { name: "This competition" });
+  await expect(rows).toBeVisible({ timeout: 15_000 });
+  // No strip of section links any more.
+  await expect(page.getByRole("navigation", { name: "Sections" })).toHaveCount(0);
 
-  // Wide enough for every link: nothing folds, and there is no trigger to see.
-  await page.setViewportSize({ width: 1280, height: 812 });
-  await expect(overflow).toHaveAttribute("data-priority-overflow", "0");
-  await expect(bar.getByRole("button", { name: /More/ })).toBeHidden();
-  const wideHeight = (await bar.boundingBox())!.height;
-
-  // 320px is the narrowest viewport the accessibility standard supports
-  // (docs/accessibility-standard.md §3.2), and this bar carries six links.
-  await page.setViewportSize({ width: 320, height: 812 });
-  // Poll it settled BEFORE reading it: `data-priority-overflow` is React state
-  // driven by a ResizeObserver (rac/priority-nav.tsx), so a bare getAttribute
-  // straight after a resize can still read the wide row's 0. It matters twice
-  // here — `folded` is also the expected menu length further down, so reading
-  // it early would assert an empty menu against a menu that is about to fill.
-  await expect
-    .poll(async () =>
-      Number(await overflow.getAttribute("data-priority-overflow"))
-    , { message: "links this narrow have to fold somewhere" })
-    .toBeGreaterThan(0);
-  const folded = Number(await overflow.getAttribute("data-priority-overflow"));
-  expect(
-    (await bar.boundingBox())!.height,
-    "one line at 320px, exactly as at 1280px"
-  ).toBeCloseTo(wideHeight, 0);
-  // And the page still never scrolls sideways (WCAG 1.4.10).
+  const list = (await rows.getByRole("list").boundingBox())!;
+  for (const name of [/^Scores/, /^Waypoints/, /^Pilots/, /^Comp analysis/]) {
+    const row = rows.getByRole("link", { name });
+    await expect(row).toBeVisible();
+    const box = (await row.boundingBox())!;
+    expect(box.height, `${name} is at least 44 px tall`).toBeGreaterThanOrEqual(44);
+    // The whole row is the target, not a label inside it (2 px of border).
+    expect(box.width, `${name} is as wide as the list`).toBeGreaterThanOrEqual(list.width - 2);
+  }
   await expectNoSidewaysScroll(page);
 
-  // Folded is not gone: every link the bar dropped is in the menu, named the
-  // same way, and none of the ones still in the row is repeated there.
-  const inRow = await bar.getByRole("link").allInnerTexts();
-  await bar.getByRole("button", { name: "More sections" }).click();
-  const menu = page.getByRole("menu", { name: "More sections" });
-  const inMenu = await menu.getByRole("menuitem").allInnerTexts();
-  expect(inMenu).toHaveLength(folded);
-  expect(inMenu.filter((label) => inRow.includes(label))).toEqual([]);
-  expect(inMenu).toContain("Activity");
+  // Tasks and Activity are this page's own sections.
+  await expect(page.locator("#tasks")).toBeVisible();
+  await expect(page.locator("#activity")).toBeVisible();
 
-  // An in-page entry still jumps down the page rather than routing away —
-  // a routed href would have started the reader at the top instead.
-  await menu.getByRole("menuitem", { name: "Activity" }).click();
-  await expect
-    .poll(() => page.evaluate(() => Math.round(window.scrollY)))
-    .toBeGreaterThan(100);
-  // Still on the comp page (settled onto its canonical `${slug}-${id}`), not
-  // routed to a new one.
-  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}$`));
-});
+  // A task's row is a link a finger tall too.
+  // A name can hold brackets ("Task 1 (stopped)"): escaped, so they are text.
+  const taskName = comp.tasks[0].name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const task = page.locator("#tasks").getByRole("link", { name: new RegExp(taskName) }).first();
+  expect((await task.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
-/**
- * The section bar used to live only on the hub, so Scores / Waypoints /
- * Comp analysis dropped the reader out of the set they had just clicked.
- * Every destination now carries the same links, with the page being read
- * marked current, and the in-page pair (Tasks, Activity) still reach the
- * hub sections from a sibling page.
- */
-test("the section bar is the same on every competition page", async ({ page }) => {
-  const publicNames = [/Tasks/, "Scores", /Waypoints/, "Comp analysis", "Activity"];
-
-  async function expectBar(current: string | RegExp) {
-    const bar = page.getByRole("navigation", { name: "Sections" });
-    await expect(bar).toBeVisible({ timeout: 15_000 });
-    for (const name of publicNames) {
-      await expect(bar.getByRole("link", { name })).toBeVisible();
-    }
-    await expect(bar.getByRole("link", { name: current })).toHaveAttribute(
-      "aria-current",
-      /^(page|true)$/
-    );
-  }
-
-  // Wide enough that every link stays in the row rather than folding into
-  // More — this spec also runs under the phone project, where the default
-  // width would hide the later links (issue #639).
-  await page.setViewportSize({ width: 1280, height: 812 });
-
-  await page.goto(`/comp/${compId}`);
-  await expectBar(/Tasks/);
-
-  const bar = () => page.getByRole("navigation", { name: "Sections" });
-  await bar().getByRole("link", { name: "Scores" }).click();
+  await rows.getByRole("link", { name: /^Scores/ }).click();
   await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/scores`));
-  await expectBar("Scores");
-
-  await bar().getByRole("link", { name: /Waypoints/ }).click();
-  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/waypoints`));
-  await expectBar(/Waypoints/);
-
-  await bar().getByRole("link", { name: "Comp analysis" }).click();
-  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/analysis`));
-  await expectBar("Comp analysis");
-
-  await bar().getByRole("link", { name: "Activity" }).click();
-  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}(?:\\?.*)?#activity`));
-  await expect(page.locator("#activity")).toBeInViewport();
-  await expectBar("Activity");
-
-  await bar().getByRole("link", { name: /Tasks/ }).click();
-  await expect(page.locator("#tasks")).toBeInViewport();
-  await expectBar(/Tasks/);
 });
 
-test("the app header folds into More rather than wrapping on a phone", { tag: PHONE_ONLY }, async ({ page }) => {
+test("the title's menu lists the competition's pages, with the open one ticked", async ({ page }) => {
+  const pages = ["Scores", "Waypoints", "Pilots", "Comp analysis", "Settings"];
+
+  // On the competition page they are the pages UNDER it.
   await page.goto(`/comp/${compId}`);
-  const nav = page.getByRole("navigation", { name: "Main" });
-  await expect(nav).toBeVisible({ timeout: 15_000 });
-  const overflow = nav.locator("[data-priority-overflow]");
+  await page.getByRole("button", { name: `${COMP_NAME}: go to another page` }).click();
+  for (const name of pages) {
+    await expect(page.getByRole("menuitem", { name, exact: true })).toBeVisible();
+  }
+  await page.getByRole("menuitem", { name: "Scores", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/scores`));
+  await expect(page.getByRole("heading", { level: 1, name: "Scores" })).toBeVisible();
 
-  await page.setViewportSize({ width: 1280, height: 812 });
-  await expect(overflow).toHaveAttribute("data-priority-overflow", "0");
-  const wideHeight = (await nav.boundingBox())!.height;
-
-  await page.setViewportSize({ width: 320, height: 812 });
-  // POLL, don't read once. `data-priority-overflow` is React state driven by a
-  // ResizeObserver (rac/priority-nav.tsx), so it lands a frame or more after
-  // the resize — a bare getAttribute races it and reads the wide row's 0. The
-  // wide assertion above never showed this because toHaveAttribute retries;
-  // this one did not, and lost under a loaded single-worker run.
-  await expect
-    .poll(async () =>
-      Number(await overflow.getAttribute("data-priority-overflow"))
-    )
-    .toBeGreaterThan(0);
-  expect((await nav.boundingBox())!.height).toBeCloseTo(wideHeight, 0);
-
-  // The page being read is "Competitions", and at this width it is one of the
-  // links that folded — so the marking the row would have carried goes with
-  // it, onto the trigger and onto its entry. Otherwise nothing on a phone says
-  // where the reader is.
-  const trigger = nav.getByRole("button", { name: "More pages" });
-  await expect(trigger).toHaveAttribute("data-current", "true");
-  await trigger.click();
-  const menu = page.getByRole("menu", { name: "More pages" });
-  await expect(menu.getByRole("menuitem", { name: "Competitions" })).toHaveAttribute(
-    "data-current",
-    "true"
-  );
-
-  // "Submit track" is the one thing a pilot who has just landed came here to
-  // do, so folding it must not put it out of reach.
-  await menu.getByRole("menuitem", { name: "Submit track" }).click();
-  await expect(page).toHaveURL(/\/submit/);
+  // On one of them they are the pages BESIDE it, and it is the one marked.
+  await page.getByRole("button", { name: "Scores: go to another page" }).click();
+  await expect(page.getByRole("menuitem", { name: COMP_NAME, exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Scores", exact: true })).toBeDisabled();
+  for (const name of pages.filter((n) => n !== "Scores")) {
+    await expect(page.getByRole("menuitem", { name, exact: true })).toBeEnabled();
+  }
+  await page.getByRole("menuitem", { name: "Waypoints", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/waypoints`));
 });
 
-test("scores page: Download menu saves a long-form CSV and offers the Sheets formula", async ({
+test("the competition page's actions are in the bar's menu, Submit your track first", async ({
+  page,
+}) => {
+  await page.goto(`/comp/${compId}`);
+  // None of them is a button on the page any more.
+  const main = page.getByRole("main");
+  await expect(main.getByRole("link", { name: "Submit track", exact: true })).toHaveCount(0);
+  await expect(page.locator("#tasks").getByRole("link", { name: "New task", exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Settings", exact: true })).toBeVisible();
+  const labels = await page.getByRole("menu").getByRole("menuitem").allInnerTexts();
+  // Submit your track is offered until the competition's close date, and is
+  // the first row whenever it is there.
+  const submit = "Submit your track";
+  if (labels.includes(submit)) expect(labels[0]).toBe(submit);
+  expect(labels.filter((label) => label !== submit)).toEqual([
+    "Download the results record (PDF)",
+    "New task",
+    "Copy to a new competition…",
+    "Settings",
+  ]);
+  await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/settings`));
+});
+
+test("scores page: the bar's menu saves a long-form CSV and offers the Sheets formula", async ({
   page,
 }) => {
   await page.goto(`/comp/${compId}/scores`);
-  const download = page.getByRole("button", { name: "Download" });
-  await expect(download).toBeVisible({ timeout: 15_000 });
+  // The downloads are rows of the bar's ⋯ menu (issue #863).
+  await expect(page.getByRole("tablist", { name: "Score views" })).toBeVisible({ timeout: 15_000 });
+  const download = page.getByRole("button", { name: "More actions" });
+  await expect(download).toBeVisible();
 
   // ── The CSV item is a real link, so this is a browser download, not a blob.
   await download.click();
@@ -572,6 +503,15 @@ test("scores page: Download menu saves a long-form CSV and offers the Sheets for
     );
   }
 
+  // The main action is last: Done · New Google Sheet · Copy formula.
+  await expect(
+    dialog.locator("button, a").filter({ hasText: /^(Done|New Google Sheet|Copy formula)$/ })
+  ).toHaveText([
+    "Done",
+    "New Google Sheet",
+    "Copy formula",
+  ]);
+
   // Escape closes it and focus returns to the button that opened the menu.
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
@@ -594,14 +534,15 @@ test("pilots page: a list that opens each pilot's page, and leaving one untouche
   await expect(roster.getByRole("row").first()).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".tabulator")).toHaveCount(0);
 
-  // A row opens that pilot's own page, and Done on an untouched pilot goes
-  // back without a request: each pilot is saved on Done, but only if it
-  // changed.
+  // A row opens that pilot's own page. An untouched pilot has nothing to
+  // save, so Save (in the bar) is not live, and Cancel goes back without a
+  // request or a question.
   const name = (await roster.getByRole("row").first().locator("p.font-medium").innerText()).trim();
   await roster.getByRole("row").first().click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("main").getByRole("textbox", { name: "Name" })).toHaveValue(name);
-  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+  await page.getByRole("button", { name: "Cancel" }).click();
   await expect(roster).toBeVisible();
 
   // Back from an untouched pilot is the browser's Back, back to the list.
@@ -708,13 +649,11 @@ test("scoring settings page shows stored GAP values; leaving saves nothing", asy
     page.getByRole("switch", { name: "Arrival points (HG only)" })
   ).not.toBeChecked();
 
-  // Leave without saving via the breadcrumb — untouched fields arm no guard,
-  // the index renders, and nothing was PATCHed. The Scoring row is scoped to
-  // main because the Shell footer also carries a "Scoring" link.
-  await page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: "Settings", exact: true })
-    .click();
+  // Leave without saving with the bar's Cancel — untouched fields arm no
+  // guard, so it asks nothing; the index renders, and nothing was PATCHed.
+  // The Scoring row is scoped to main because the Shell footer also carries
+  // a "Scoring" link.
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(
     page.getByRole("main").getByRole("link", { name: /^Scoring/ })
   ).toBeVisible();
@@ -753,12 +692,9 @@ test("general settings page: the timezone list filters in flow; leaving saves no
     "Australia/Adelaide"
   );
 
-  // The pick dirtied the form, so leaving prompts; Discard drops the edit
-  // and navigates — and nothing was PATCHed.
-  await page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: "Settings", exact: true })
-    .click();
+  // The pick dirtied the form, so Cancel asks first; Discard drops the edit
+  // and leaves — and nothing was PATCHed.
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   const guard = page.getByRole("alertdialog");
   await expect(guard.getByText("Discard changes?")).toBeVisible();
   await guard.getByRole("button", { name: "Discard changes" }).click();

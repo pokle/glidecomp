@@ -19,19 +19,19 @@
  * moves its start gates, goal deadline and take-off window to the same LOCAL
  * time on this task's day (`rebaseRouteTimes`), puts it into the draft —
  * asking first when that would replace turnpoints already there — and goes
- * back to the route. Nothing is saved until Save on the route.
+ * back to the route. Nothing is saved until Save on the route. A picker:
+ * choosing a row is the commit, so the bar has Cancel and nothing to its
+ * right, and the search field sticks under the bar (#863).
  */
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Button } from "@/react/rac/button";
 import { SearchField } from "@/react/rac/field";
 import { ActionErrorBanner, useAction } from "@/react/rac/form";
 import { NavActionRow, NavList } from "@/react/rac/nav-list";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
 import type { XCTask } from "@glidecomp/engine";
 import { api } from "../../comp/api";
-import { SectionHeader } from "../components/SectionHeader";
 import { formatRouteDistance, rebaseRouteTimes } from "../comp/comp-copy";
 import { routeEditorGate } from "../comp/RouteEditorGate";
 import { fetchWithRetry } from "../comp/types";
@@ -42,6 +42,8 @@ import { taskRouteCopyPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 
 const TITLE = "Copy a route";
+/** The sentence the ⋯ row on the route page says; the title is its short form. */
+const FULL_TITLE = "Copy a route from another competition";
 
 /** How long typing settles before the list is asked again. */
 const SEARCH_DELAY_MS = 250;
@@ -73,7 +75,10 @@ export function TaskRouteCopyPage() {
       ? taskRouteCopyPath(urlId, compName, taskId, taskName)
       : null
   );
-  const gate = routeEditorGate(editor);
+  const gate = routeEditorGate(editor, {
+    title: TITLE,
+    trail: underTaskRoute(urlId, compName, taskId, taskName),
+  });
   if (gate) return gate;
   return <CopyRoute editor={editor} />;
 }
@@ -161,29 +166,30 @@ function CopyRoute({ editor }: { editor: RouteEditorState }) {
 
   const data = result?.data ?? null;
   return (
-    <div className="max-w-2xl">
-      <Breadcrumbs items={underTaskRoute(urlId, compName, taskId, taskName)} current={TITLE} />
-      <SectionHeader
-        as="h1"
-        className="mt-2"
-        title={TITLE}
-        action={
-          <Button variant="outline" onPress={() => editor.leave()}>
-            Cancel
-          </Button>
-        }
-      />
-      <p className="mt-2 text-sm text-muted-foreground">
+    <Page
+      className="flex flex-col gap-4"
+      bar={
+        <PageBar
+          title={TITLE}
+          fullTitle={FULL_TITLE}
+          trail={underTaskRoute(urlId, compName, taskId, taskName)}
+          cancel={() => editor.leave()}
+          below={
+            <SearchField
+              variant="floating"
+              aria-label="Search by competition or task name"
+              placeholder="Search by competition or task name"
+              value={text}
+              onChange={setText}
+            />
+          }
+        />
+      }
+    >
+      <p className="text-sm text-muted-foreground">
         Choose a route to load into {taskName}. It replaces the route; nothing is saved until
         you press Save.
       </p>
-      <div className="mt-6 flex flex-col gap-4">
-        <SearchField
-          aria-label="Search by competition or task name"
-          placeholder="Search by competition or task name"
-          value={text}
-          onChange={setText}
-        />
         <ActionErrorBanner action={action} />
         {failed ? (
           <p className="text-muted-foreground">Could not load the routes. Try again.</p>
@@ -217,8 +223,7 @@ function CopyRoute({ editor }: { editor: RouteEditorState }) {
             ) : null}
           </>
         )}
-      </div>
-    </div>
+    </Page>
   );
 }
 

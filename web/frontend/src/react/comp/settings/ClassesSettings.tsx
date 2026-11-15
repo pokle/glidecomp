@@ -5,13 +5,16 @@
  * dialog.
  */
 import { useState } from "react";
-import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
 import { api } from "@/comp/api";
 import { underCompSettings } from "@/react/lib/crumbs";
 import { ChoiceList } from "@/react/rac/choice-list";
 import { PilotClassesField } from "../fields";
-import type { SettingsGroupProps } from "./CompSettingsIndex";
+import {
+  SETTINGS_GROUP_TITLES,
+  canSaveSettings,
+  type SettingsGroupProps,
+} from "./CompSettingsIndex";
 
 export function ClassesSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   const savedText = comp.pilot_classes.join(", ");
@@ -34,42 +37,41 @@ export function ClassesSettings({ compId, comp, onSaved }: SettingsGroupProps) {
     effectiveDefault !== comp.default_pilot_class;
 
   return (
-    <SettingsPage
+    <SettingsForm
       crumbs={underCompSettings(compId, comp.name)}
-      title="Pilot classes"
+      title={SETTINGS_GROUP_TITLES.classes}
+      fullTitle={`${SETTINGS_GROUP_TITLES.classes} settings`}
+      dirty={dirty}
+      canCommit={canSaveSettings(comp, dirty)}
+      validate={() => ({
+        pilot_classes: classes.length === 0 && "At least one pilot class is required",
+      })}
+      onSubmit={() =>
+        api.api.comp[":comp_id"].$patch({
+          param: { comp_id: compId },
+          json: {
+            pilot_classes: classes,
+            default_pilot_class: effectiveDefault,
+          },
+        })
+      }
+      onSuccess={onSaved}
     >
-      <SettingsForm
-        dirty={dirty}
-        validate={() => ({
-          pilot_classes: classes.length === 0 && "At least one pilot class is required",
-        })}
-        onSubmit={() =>
-          api.api.comp[":comp_id"].$patch({
-            param: { comp_id: compId },
-            json: {
-              pilot_classes: classes,
-              default_pilot_class: effectiveDefault,
-            },
-          })
-        }
-        onSuccess={onSaved}
-      >
-        {/* Named as the API names them, so a refusal lands under its field. */}
-        <PilotClassesField
-          value={pilotClassesText}
-          onChange={setPilotClassesText}
-          wing={comp.category === "pg" ? "pg" : "hg"}
-        />
+      {/* Named as the API names them, so a refusal lands under its field. */}
+      <PilotClassesField
+        value={pilotClassesText}
+        onChange={setPilotClassesText}
+        wing={comp.category === "pg" ? "pg" : "hg"}
+      />
 
-        <ChoiceList
-          label="Default pilot class"
-          name="default_pilot_class"
-          value={effectiveDefault}
-          onChange={setDefaultClass}
-          options={classes.map((cls) => ({ value: cls, label: cls }))}
-          description="Assigned to auto-registered pilots"
-        />
-      </SettingsForm>
-    </SettingsPage>
+      <ChoiceList
+        label="Default pilot class"
+        name="default_pilot_class"
+        value={effectiveDefault}
+        onChange={setDefaultClass}
+        options={classes.map((cls) => ({ value: cls, label: cls }))}
+        description="Assigned to auto-registered pilots"
+      />
+    </SettingsForm>
   );
 }

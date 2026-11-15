@@ -14,7 +14,8 @@
  * their field. Add puts the waypoint into the waypoints DRAFT
  * (comp/waypoints-draft.ts) and goes back the way the reader came — to the
  * list, or to the full-size map with Add from map still armed. Nothing is
- * saved until Save on the list. Back is Cancel, and so is the Cancel button.
+ * saved until Save on the list. Cancel and Add are in the page's bar (#863);
+ * the browser's Back is Cancel too.
  */
 import { useSearchParams } from "react-router-dom";
 import { underCompWaypoints } from "../lib/crumbs";
@@ -32,13 +33,14 @@ export function CompWaypointNewPage() {
 
   useCanonicalPath(compName ? compWaypointsNewPath(urlId, compName) : null);
 
-  const gate = waypointsEditorGate(editor);
+  const crumbs = underCompWaypoints(urlId, compName);
+  const gate = waypointsEditorGate(editor, { title: "Add waypoint", trail: crumbs });
   if (gate) return gate;
   // Mounted once the draft is known, so the code it suggests is unique among
   // the codes the draft holds.
   return (
     <NewWaypointPage
-      crumbs={underCompWaypoints(urlId, compName)}
+      crumbs={crumbs}
       seed={readNewWaypointSeed(searchParams)}
       codes={() => editor.draft.rows.map((r) => r.code)}
       onAdd={(record) => {

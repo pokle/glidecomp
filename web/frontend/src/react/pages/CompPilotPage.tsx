@@ -19,7 +19,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { useLeave } from "../lib/leave";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
@@ -93,27 +93,35 @@ export function CompPilotPage() {
   const isAdmin = useAdminView(!!comp?.is_admin);
 
   if (notFound || !compId) return <NotFound title="Competition not found" />;
+
+  const crumbs = underCompPilots(urlId, comp?.name);
+  const backToList = () => {
+    leave(compPilotsPath(urlId, comp?.name));
+  };
+  // The bar before the data, as the form will have it (Cancel on the left),
+  // so the page does not jump when the pilot arrives.
+  const waiting = (body: React.ReactNode) => (
+    <Page
+      bar={
+        <PageBar
+          title={pilot?.name ?? (pilotId ? "Pilot" : "New pilot")}
+          trail={crumbs}
+          cancel={backToList}
+        />
+      }
+    >
+      {body}
+    </Page>
+  );
   if (!comp || loading || (roster === null && !rosterError)) {
-    return <Loading>Loading pilot…</Loading>;
+    return waiting(<Loading>Loading pilot…</Loading>);
   }
 
-  const crumbs = underCompPilots(urlId, comp.name);
   // Visitors find every pilot in the score tables.
   if (!isAdmin) return <OrganisersOnly to={compScoresPath(urlId, comp.name)} />;
-  if (rosterError) {
-    return (
-      <div>
-        <Breadcrumbs items={crumbs} current="Pilot" />
-        <p className="mt-2 text-muted-foreground">Could not load pilots</p>
-      </div>
-    );
-  }
+  if (rosterError) return waiting(<p className="text-muted-foreground">Could not load pilots</p>);
   // A pilot removed since the link was made (or never on this roster).
   if (pilotId && !pilot) return <NotFound title="Pilot not found" />;
-
-  const backToList = () => {
-    leave(compPilotsPath(urlId, comp.name));
-  };
 
   return (
     <PilotForm

@@ -1,23 +1,35 @@
 /**
- * Account settings — pilot profile, API keys, superadmin links and the
- * delete-account danger zone. Merges the former standalone "My Profile" page
- * (React port of profile.ts) with the account settings (React port of
- * settings.ts); each concern is its own separated card.
+ * Account settings: a list of groups with a page each, as a competition's
+ * settings are (comp/settings/CompSettingsIndex.tsx, issue #863 decision 8).
+ *
+ *   /settings                the index: one row per group
+ *   /settings/:group         account · profile · appearance · units ·
+ *                            assistants · api-keys
+ *   /settings/api-keys/new   the form that makes a key
+ *
+ * It was one page of eight cards, each with its own way of saving. Now a group
+ * that is a form has Save in the bar (`SettingsForm`), a group that applies at
+ * once says "Saved" where the change was made, and a list has + in the bar.
+ * The site admin pages (/admin/users, /admin/cache) hang under this index for
+ * a super admin, and "Delete account" stays on it: an action, not a setting.
+ *
+ * Appearance and Units are kept on the device, so they open signed out; every
+ * other group sends a signed-out reader to sign in and back.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { Button, LinkButton } from "@/react/rac/button";
-import { Card, CardGrid, CardHeader } from "@/react/rac/card";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link as AriaLink } from "react-aria-components";
+import { Button } from "@/react/rac/button";
+import { CardGrid } from "@/react/rac/card";
 import { FieldGroup, TextField } from "@/react/rac/field";
 import {
   ActionErrorBanner,
-  Form,
-  FormErrorBanner,
-  SubmitButton,
   useAction,
   type Refusal,
   type SubmitResponse,
 } from "@/react/rac/form";
+import { NavActionRow, NavList, NavRow, navRowClass } from "@/react/rac/nav-list";
+import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
 import { Radio, RadioGroup } from "@/react/rac/radio-group";
 import { Cell, Column, Row, Table, TableBody, TableHeader } from "@/react/rac/table";
@@ -25,11 +37,38 @@ import { api } from "../../comp/api";
 import { deleteAccount } from "../../auth/client";
 import { storage } from "../../analysis/storage";
 import { useConfirm } from "../lib/confirm";
+import { underSettings, type Crumb } from "../lib/crumbs";
+import { NotFound } from "../components/NotFound";
 import { SettingsForm } from "../components/SettingsForm";
+import { SettingsPage } from "../components/SettingsPage";
 import { useGoToSignIn, useUser } from "../lib/user";
 import { type ThemePreference, useTheme } from "../lib/theme";
 import { setUnit, useUnits, type UnitPreferences } from "../lib/units";
 import { ID_FIELDS, NAME_CONTACT_FIELDS, PROFILE_FIELDS } from "../../auth/account";
+
+/**
+ * The groups, in the index's order. `account` marks the ones that need a
+ * signed-in reader; the other two are this device's own.
+ */
+const GROUPS = [
+  { id: "account", title: "Account", account: true },
+  { id: "profile", title: "Profile", account: true },
+  { id: "appearance", title: "Appearance", account: false },
+  { id: "units", title: "Units", account: false },
+  { id: "assistants", title: "Connected AI Assistants", account: true },
+  { id: "api-keys", title: "API keys", account: true },
+] as const;
+type SettingsGroup = (typeof GROUPS)[number]["id"];
+
+const groupPath = (group: SettingsGroup) => `/settings/${group}`;
+const NEW_API_KEY_PATH = `${groupPath("api-keys")}/new`;
+const groupTitle = (group: SettingsGroup) => GROUPS.find((g) => g.id === group)!.title;
+
+/** Ancestors of the page that makes a key: Settings, then the list of keys. */
+const underApiKeys = (): Crumb[] => [
+  ...underSettings(),
+  { label: groupTitle("api-keys"), to: groupPath("api-keys") },
+];
 
 interface ApiKey {
   id: string;
@@ -72,60 +111,130 @@ function SavedFlash({ nonce }: { nonce: number }) {
   );
 }
 
-
 export function Settings() {
   const { user, loading, isSuperAdmin, previewRole } = useUser();
-  const goToSignIn = useGoToSignIn();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [theme] = useTheme();
+  const units = useUnits();
 
   useEffect(() => {
     document.title = "GlideComp - Settings";
   }, []);
 
-  // Deep links like /settings#connected-ai-assistants (from /assistant): the
-  // sections render only once the user resolves, after the browser's own
-  // jump to the anchor has already missed, so scroll once they exist.
+  // /settings#connected-ai-assistants is the link /assistant gives for
+  // disconnecting one, from when this was one page of sections.
   useEffect(() => {
-    if (!user || !location.hash) return;
-    document.getElementById(location.hash.slice(1))?.scrollIntoView();
-  }, [user, location.hash]);
+    if (location.hash === "#connected-ai-assistants") {
+      navigate(groupPath("assistants"), { replace: true });
+    }
+  }, [location.hash, navigate]);
 
-  if (loading) return <p role="status">Loading…</p>;
-
-  if (!user) {
-    return (
-      <section className="mx-auto flex max-w-3xl flex-col gap-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground">Sign in to manage your account</p>
-          <Button className="mt-4" onPress={() => goToSignIn(`/settings${location.hash}`)}>
-            Sign in
-          </Button>
-        </div>
-        <AppearanceSection />
-        <UnitsSection />
-      </section>
-    );
-  }
+  const row = (group: SettingsGroup, value?: React.ReactNode) => (
+    <NavRow to={groupPath(group)} label={groupTitle(group)} value={value} />
+  );
+  const device = (
+    <NavList>
+      {row("appearance", THEME_OPTIONS.find((o) => o.value === theme)?.label)}
+      {row(
+        "units",
+        UNIT_GROUPS.map(
+          (g) => g.options.find((o) => o.value === units[g.key])?.label ?? units[g.key]
+        ).join(" · ")
+      )}
+    </NavList>
+  );
 
   return (
-    <section className="mx-auto flex max-w-3xl flex-col gap-6">
-      <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-      <AccountSection />
-      <ProfileSection />
-      <AppearanceSection />
-      <UnitsSection />
-      <ConnectedAssistantsSection />
-      <ApiKeysSection />
-      {isSuperAdmin && previewRole === "actual" ? <SuperadminSection /> : null}
-      <DangerZoneSection />
-    </section>
+    <SettingsPage crumbs={[]} title="Settings">
+      {loading ? (
+        <Loading>Loading settings…</Loading>
+      ) : !user ? (
+        <>
+          <p className="text-muted-foreground">Sign in to manage your account</p>
+          {device}
+        </>
+      ) : (
+        <>
+          <NavList>
+            {row("account", user.email)}
+            {row("profile", user.name)}
+          </NavList>
+          {device}
+          <NavList>
+            {row("assistants")}
+            {row("api-keys")}
+          </NavList>
+          {isSuperAdmin && previewRole === "actual" ? (
+            <NavList label="Superadmin">
+              <NavRow to="/admin/users" label="Users" />
+              <NavRow to="/admin/cache" label="Cache" />
+              {/* A Pages Function, not a react-router route. `download` (no
+                  value) forces a save under the server's Content-Disposition
+                  filename, and keeps RAC from client-navigating a URL the SPA
+                  has no route for. */}
+              <li>
+                <AriaLink href="/civl-rankings.csv" download="" className={navRowClass}>
+                  <span className="min-w-0 flex-1 font-medium">CIVL rankings (CSV)</span>
+                </AriaLink>
+              </li>
+            </NavList>
+          ) : null}
+          <DangerZone />
+        </>
+      )}
+    </SettingsPage>
   );
 }
 
+/** /settings/:group — one page per group, dispatched by the route param. */
+export function SettingsGroupPage() {
+  const { group: param } = useParams<{ group: string }>();
+  const { user, loading } = useUser();
+  const goToSignIn = useGoToSignIn();
+  const { pathname } = useLocation();
+  const group = GROUPS.find((g) => g.id === param);
+  const needsSignIn = !!group?.account && !loading && !user;
+
+  useEffect(() => {
+    if (group) document.title = `GlideComp - ${group.title}`;
+  }, [group]);
+  useEffect(() => {
+    if (needsSignIn) goToSignIn(pathname);
+  }, [needsSignIn, goToSignIn, pathname]);
+
+  if (!group) return <NotFound />;
+  // The bar before the account: the page does not jump when it resolves.
+  if (group.account && !user) return <GroupLoading title={group.title} />;
+
+  switch (group.id) {
+    case "account":
+      return <AccountPage />;
+    case "profile":
+      return <ProfilePage />;
+    case "appearance":
+      return <AppearancePage />;
+    case "units":
+      return <UnitsPage />;
+    case "assistants":
+      return <ConnectedAssistantsPage />;
+    case "api-keys":
+      return <ApiKeysPage />;
+  }
+}
+
+function GroupLoading({ title, crumbs = underSettings() }: { title: string; crumbs?: Crumb[] }) {
+  return (
+    <SettingsPage crumbs={crumbs} title={title}>
+      <Loading>Loading…</Loading>
+    </SettingsPage>
+  );
+}
+
+
 // Read-only identity summary. The email is the account's anchor: both Google
 // OAuth and email-code sign-in resolve to the account holding this address.
-function AccountSection() {
+function AccountPage() {
   const { user } = useUser();
   if (!user) return null;
 
@@ -135,11 +244,11 @@ function AccountSection() {
   ];
 
   return (
-    <Card>
-      <CardHeader
-        title="Account"
-        description="Sign in with Google or an emailed code — both use this address."
-      />
+    <SettingsPage
+      crumbs={underSettings()}
+      title={groupTitle("account")}
+      description="Sign in with Google or an emailed code — both use this address."
+    >
       <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-[auto_1fr]">
         {rows.map((row) => (
           <div key={row.label} className="contents">
@@ -148,7 +257,7 @@ function AccountSection() {
           </div>
         ))}
       </dl>
-    </Card>
+    </SettingsPage>
   );
 }
 
@@ -160,17 +269,16 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; description: strin
   { value: "auto", label: "Auto", description: "Follow your device settings" },
 ];
 
-function AppearanceSection() {
+function AppearancePage() {
   const [theme, setTheme] = useTheme();
   const [savedNonce, setSavedNonce] = useState(0);
 
   return (
-    <Card>
-      <CardHeader
-        title="Appearance"
-        description="How GlideComp looks on this device."
-        action={<SavedFlash nonce={savedNonce} />}
-      />
+    <SettingsPage
+      crumbs={underSettings()}
+      title={groupTitle("appearance")}
+      description="How GlideComp looks on this device."
+    >
       {/* RAC's Radio IS the label, so the card styling goes on the Radio
           itself rather than a wrapping <label> with htmlFor. */}
       <RadioGroup
@@ -197,7 +305,8 @@ function AppearanceSection() {
           </Radio>
         ))}
       </RadioGroup>
-    </Card>
+      <SavedFlash nonce={savedNonce} />
+    </SettingsPage>
   );
 }
 
@@ -251,17 +360,16 @@ const UNIT_GROUPS: {
   },
 ];
 
-function UnitsSection() {
+function UnitsPage() {
   const units = useUnits();
   const [savedNonce, setSavedNonce] = useState(0);
 
   return (
-    <Card>
-      <CardHeader
-        title="Units"
-        description="How speeds, altitudes, climb rates and distances are displayed. Synced to your account when you're signed in."
-        action={<SavedFlash nonce={savedNonce} />}
-      />
+    <SettingsPage
+      crumbs={underSettings()}
+      title={groupTitle("units")}
+      description="How speeds, altitudes, climb rates and distances are displayed. Synced to your account when you're signed in."
+    >
       <div className="grid gap-1">
         {UNIT_GROUPS.map((group) => (
           // The group's own label + description ARE the RadioGroup's label
@@ -306,7 +414,7 @@ function UnitsSection() {
                   // track is what separates them in BOTH themes; the earlier
                   // `bg-muted/40` track put the pill within a hair of its own
                   // background in dark mode and the selection vanished.
-                  className="cursor-pointer rounded-md px-3 py-1 font-mono text-[0.8rem] font-medium text-muted-foreground tabular-nums transition-colors [&>span[aria-hidden]]:hidden data-hovered:text-foreground data-selected:bg-card data-selected:text-foreground data-selected:shadow-card data-selected:ring-1 data-selected:ring-border"
+                  className="min-h-11 cursor-pointer items-center rounded-md px-4 font-mono text-[0.8rem] font-medium text-muted-foreground tabular-nums transition-colors [&>span[aria-hidden]]:hidden data-hovered:text-foreground data-selected:bg-card data-selected:text-foreground data-selected:shadow-card data-selected:ring-1 data-selected:ring-border"
                 >
                   {option.label}
                 </Radio>
@@ -315,7 +423,8 @@ function UnitsSection() {
           </RadioGroup>
         ))}
       </div>
-    </Card>
+      <SavedFlash nonce={savedNonce} />
+    </SettingsPage>
   );
 }
 
@@ -329,7 +438,7 @@ const EMPTY_VALUES = Object.fromEntries(
   PROFILE_FIELDS.map((f) => [f.key, ""])
 ) as ProfileValues;
 
-function ProfileSection() {
+function ProfilePage() {
   // The display name is saved to the pilot profile AND to the account (the
   // server keeps the two in step — issue #539), so the header has to be told
   // rather than left holding the name this page load started with.
@@ -341,7 +450,7 @@ function ProfileSection() {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   // "Profile saved", from a save until the next edit. A failed save is the
   // kit form's to report (rac/form.tsx) — under the field the server refused,
-  // or beside Save — never here, and never a toast.
+  // or in the banner at the top of the page — never here, and never a toast.
   const [savedMessage, setSavedMessage] = useState(false);
 
   useEffect(() => {
@@ -389,7 +498,7 @@ function ProfileSection() {
     setValues(normalized);
     setSavedValues(normalized);
     // The name the SERVER stored, not the one typed: it is the account's
-    // now as well, and the account menu is showing the old one until told.
+    // now as well, and the main menu is showing the old one until told.
     if (typeof stored.name === "string") patchUser({ name: stored.name });
     setSavedMessage(true);
   }
@@ -415,53 +524,56 @@ function ProfileSection() {
     />
   );
 
+  const description = "Your pilot details, used when you register for competitions.";
+  if (state !== "ready") {
+    return (
+      <SettingsPage crumbs={underSettings()} title={groupTitle("profile")} description={description}>
+        {state === "loading" ? (
+          <Loading>Loading your profile…</Loading>
+        ) : (
+          <p role="alert">Failed to load profile</p>
+        )}
+      </SettingsPage>
+    );
+  }
+
   return (
-    <Card>
-      <CardHeader
-        title="Profile"
-        description="Your pilot details, used when you register for competitions."
-      />
-      {state === "loading" ? (
-        <Loading>Loading your profile…</Loading>
-      ) : state === "error" ? (
-        <p role="alert">Failed to load profile</p>
-      ) : (
-        // The settings pages' form: Save beside its error, and the guard
-        // against silently losing edits (lib/use-unsaved-changes-guard).
-        <SettingsForm
-          onSubmit={save}
-          onSuccess={saved}
-          validate={() => ({
-            name: values.name.trim() === "" && "Display name is required",
-          })}
-          dirty={dirty}
-          submitLabel="Save profile"
-          pendingLabel="Saving your profile"
-          disableWhenClean
-          guard={{
-            title: "Discard profile changes?",
-            message: "Your profile has unsaved changes. Leaving this page will discard them.",
-          }}
-        >
-          <FieldGroup label="Name &amp; contact">
-            <CardGrid min="15rem">{NAME_CONTACT_FIELDS.map(renderField)}</CardGrid>
-          </FieldGroup>
+    // The form page: Save in the bar, live only while the fields differ from
+    // what is stored, and the guard against silently losing edits
+    // (lib/use-unsaved-changes-guard).
+    <SettingsForm
+      crumbs={underSettings()}
+      title={groupTitle("profile")}
+      description={description}
+      onSubmit={save}
+      onSuccess={saved}
+      validate={() => ({
+        name: values.name.trim() === "" && "Display name is required",
+      })}
+      dirty={dirty}
+      pendingLabel="Saving your profile"
+      guard={{
+        title: "Discard profile changes?",
+        message: "Your profile has unsaved changes. Leaving this page will discard them.",
+      }}
+    >
+      <FieldGroup label="Name &amp; contact">
+        <CardGrid min="15rem">{NAME_CONTACT_FIELDS.map(renderField)}</CardGrid>
+      </FieldGroup>
 
-          {/* Seven short codes — they pack tighter than the contact fields, so
-              a narrower floor lets more sit on a row when there is room. */}
-          <FieldGroup label="Pilot IDs">
-            <CardGrid min="10rem">{ID_FIELDS.map(renderField)}</CardGrid>
-          </FieldGroup>
+      {/* Seven short codes — they pack tighter than the contact fields, so
+          a narrower floor lets more sit on a row when there is room. */}
+      <FieldGroup label="Pilot IDs">
+        <CardGrid min="10rem">{ID_FIELDS.map(renderField)}</CardGrid>
+      </FieldGroup>
 
-          {savedMessage ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              Profile saved. Any matching competition registrations have been linked to this
-              account.
-            </p>
-          ) : null}
-        </SettingsForm>
-      )}
-    </Card>
+      {savedMessage ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Profile saved. Any matching competition registrations have been linked to this
+          account.
+        </p>
+      ) : null}
+    </SettingsForm>
   );
 }
 
@@ -492,21 +604,12 @@ function keyLabelRefusal(refusal: Refusal, body: unknown): Refusal {
     : refusal;
 }
 
-function ApiKeysSection() {
+function ApiKeysPage() {
   const confirm = useConfirm();
   const [keys, setKeys] = useState<ApiKey[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [keyName, setKeyName] = useState("");
-  // The new key's secret, shown in place until Done. React state ONLY: never
-  // the URL, history state or storage, so a reload — or Back and Forward —
-  // shows the list without it, as the warning beside it promises.
-  const [createdKey, setCreatedKey] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   // Revoke's refusal, beside the list it was pressed in (rac/form.tsx).
   const revoke = useAction();
-  const createdHeadingRef = useRef<HTMLHeadingElement>(null);
-  // Done hands focus back to Label: the button it was on is about to go.
-  const formRef = useRef<HTMLDivElement>(null);
 
   const loadKeys = useCallback(async () => {
     setLoadError(null);
@@ -526,12 +629,6 @@ function ApiKeysSection() {
   useEffect(() => {
     void loadKeys();
   }, [loadKeys]);
-
-  // The key appears below the button that made it: take the reader there, so
-  // a screen reader hears that it exists before anything else is pressed.
-  useEffect(() => {
-    if (createdKey) createdHeadingRef.current?.focus();
-  }, [createdKey]);
 
   async function handleRevoke(keyId: string) {
     const confirmed = await confirm({
@@ -560,110 +657,30 @@ function ApiKeysSection() {
   }
 
   return (
-    <Card>
-      <CardHeader
-        title="API keys"
-        description={
-          <>
-            Grant scoring agents programmatic access to your account. Keys
-            expire after 90 days and can't manage your account — creating
-            keys, renaming or deleting the account needs you signed in here.
-            See the{" "}
-            <a
-              href="https://github.com/pokle/glidecomp/blob/master/docs/api.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-4 hover:text-foreground"
-            >
-              API documentation
-            </a>{" "}
-            for endpoints, examples, and rate limits.
-          </>
-        }
-      />
-      {/* On the page, not in a dialog (#821): a dialog with a text field is
-          the overlay CLAUDE.md rules out, for the iPhone keyboard's sake. A
-          kit form, so a refusal lands under Label and never in a toast. */}
-      <div ref={formRef}>
-        <Form
-          className="flex flex-col gap-4"
-          onSubmit={() =>
-            fetch("/api/auth/api-key/create", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({ name: keyName.trim() || undefined }),
-            })
-          }
-          shapeRefusal={keyLabelRefusal}
-          fallback="Failed to create the key. Please try again."
-          onSuccess={async (res) => {
-            const data = (await res!.json()) as { key: string };
-            setKeyName("");
-            setCopied(false);
-            setCreatedKey(data.key);
-            await loadKeys();
-          }}
+    <Page
+      bar={
+        <PageBar
+          title={groupTitle("api-keys")}
+          trail={underSettings()}
+          add={{ label: "Create API key", to: NEW_API_KEY_PATH }}
+        />
+      }
+      className="flex flex-col gap-6"
+    >
+      <p className="text-sm text-muted-foreground">
+        Grant scoring agents programmatic access to your account. Keys expire after 90 days
+        and can't manage your account — creating keys, renaming or deleting the account
+        needs you signed in here. See the{" "}
+        <a
+          href="https://github.com/pokle/glidecomp/blob/master/docs/api.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-4 hover:text-foreground"
         >
-          <TextField
-            name="name"
-            label="Label (optional)"
-            value={keyName}
-            onChange={setKeyName}
-            placeholder="e.g. My scoring agent"
-            description="This key will expire in 90 days. Create a new one when it does."
-          />
-          <div>
-            <SubmitButton pendingLabel="Creating the key">Create API key</SubmitButton>
-          </div>
-          <FormErrorBanner />
-        </Form>
-      </div>
-
-      {createdKey ? (
-        <section
-          aria-labelledby="api-key-created"
-          className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-4"
-        >
-          <div>
-            <h3
-              id="api-key-created"
-              ref={createdHeadingRef}
-              tabIndex={-1}
-              className="font-medium outline-none"
-            >
-              API key created
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              Copy this key now — it won't be shown again.
-            </p>
-          </div>
-          <code className="block rounded-md border bg-muted px-3 py-2 font-mono text-sm break-all">
-            {createdKey}
-          </code>
-          <div className="flex flex-wrap gap-3">
-            <Button
-              onPress={() => {
-                void navigator.clipboard.writeText(createdKey).then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
-                });
-              }}
-            >
-              {copied ? "Copied!" : "Copy"}
-            </Button>
-            <Button
-              variant="outline"
-              onPress={() => {
-                setCreatedKey(null);
-                formRef.current?.querySelector<HTMLInputElement>('input[name="name"]')?.focus();
-              }}
-            >
-              Done
-            </Button>
-          </div>
-        </section>
-      ) : null}
+          API documentation
+        </a>{" "}
+        for endpoints, examples, and rate limits.
+      </p>
 
       <ActionErrorBanner action={revoke} />
       <div>
@@ -726,7 +743,131 @@ function ApiKeysSection() {
           </div>
         )}
       </div>
-    </Card>
+    </Page>
+  );
+}
+
+/**
+ * /settings/api-keys/new — the form that makes a key: Create in the bar. A
+ * page, not a dialog (#821): a dialog with a text field is the overlay
+ * CLAUDE.md rules out, for the iPhone keyboard's sake. A kit form, so a
+ * refusal lands under Label and never in a toast.
+ *
+ * The key is the result, and it takes the form's place on this page: there is
+ * nothing left to create, so the bar has Back to the list where it had Cancel
+ * and Create.
+ */
+export function NewApiKeyPage() {
+  const { user, loading } = useUser();
+  const goToSignIn = useGoToSignIn();
+  const [keyName, setKeyName] = useState("");
+  // The new key's secret, shown in place until the reader leaves. React state
+  // ONLY: never the URL, history state or storage, so a reload — or Back and
+  // Forward — shows the form without it, as the warning beside it promises.
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const createdRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    document.title = "GlideComp - New API key";
+  }, []);
+  useEffect(() => {
+    if (!loading && !user) goToSignIn(NEW_API_KEY_PATH);
+  }, [loading, user, goToSignIn]);
+
+  // Take the reader to the key: scrolled into view, and focused so a screen
+  // reader hears that it exists before anything else is pressed.
+  useEffect(() => {
+    if (!createdKey) return;
+    createdRef.current?.scrollIntoView({ block: "center" });
+    createdRef.current?.focus({ preventScroll: true });
+  }, [createdKey]);
+
+  if (!user) return <GroupLoading title="New API key" crumbs={underApiKeys()} />;
+
+  if (createdKey) {
+    return (
+      <SettingsPage crumbs={underApiKeys()} title="New API key">
+        {/* A live region around a named region: read out when it appears,
+            and somewhere to go back to by landmark. */}
+        <div role="status">
+        <section
+          aria-labelledby="api-key-created"
+          className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-4"
+        >
+          <div>
+            <h2
+              id="api-key-created"
+              ref={createdRef}
+              tabIndex={-1}
+              className="font-medium outline-none"
+            >
+              API key created
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Copy this key now — it won't be shown again.
+            </p>
+          </div>
+          <code className="block rounded-md border bg-muted px-3 py-2 font-mono text-sm break-all">
+            {createdKey}
+          </code>
+          <div>
+            <Button
+              onPress={() => {
+                void navigator.clipboard.writeText(createdKey).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+          </div>
+        </section>
+        </div>
+      </SettingsPage>
+    );
+  }
+
+  return (
+    <SettingsForm
+      crumbs={underApiKeys()}
+      title="New API key"
+      onSubmit={() =>
+        fetch("/api/auth/api-key/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ name: keyName.trim() || undefined }),
+        })
+      }
+      shapeRefusal={keyLabelRefusal}
+      fallback="Failed to create the key. Please try again."
+      onSuccess={async (res) => {
+        const data = (await res!.json()) as { key: string };
+        setKeyName("");
+        setCopied(false);
+        setCreatedKey(data.key);
+      }}
+      dirty={keyName !== ""}
+      // The label is optional: there is always a key to create.
+      canCommit
+      submitLabel="Create"
+      pendingLabel="Creating the key"
+      guard={{
+        title: "Discard this key?",
+        message: "The key has not been created. Leaving this page will discard its label.",
+      }}
+    >
+      <TextField
+        name="name"
+        label="Label (optional)"
+        value={keyName}
+        onChange={setKeyName}
+        placeholder="e.g. My scoring agent"
+        description="This key will expire in 90 days. Create a new one when it does."
+      />
+    </SettingsForm>
   );
 }
 
@@ -754,7 +895,7 @@ function connectedOn(iso: string | null): string | null {
 // assistant is the way most people will reach GlideComp from outside it. The
 // address to connect is always shown, not only while the list is empty — the
 // second assistant needs it as much as the first.
-function ConnectedAssistantsSection() {
+function ConnectedAssistantsPage() {
   const mcpUrl = `${window.location.origin}/mcp`;
   const [copied, setCopied] = useState(false);
   const [assistants, setAssistants] = useState<ConnectedAssistant[] | null>(null);
@@ -798,13 +939,11 @@ function ConnectedAssistantsSection() {
   }
 
   return (
-    // The anchor /assistant's "Disconnect" section links to; scroll-mt clears
-    // the sticky header.
-    <Card id="connected-ai-assistants" className="scroll-mt-20">
-      <CardHeader
-        title="Connected AI Assistants"
-        description="Assistants you've let act as you. Disconnecting one stops it straight away."
-      />
+    <SettingsPage
+      crumbs={underSettings()}
+      title={groupTitle("assistants")}
+      description="Assistants you've let act as you. Disconnecting one stops it straight away."
+    >
       <ActionErrorBanner action={disconnect} />
       <div>
         {loadError ? (
@@ -864,35 +1003,17 @@ function ConnectedAssistantsSection() {
           </a>
         </p>
       </div>
-    </Card>
+    </SettingsPage>
   );
 }
 
-function SuperadminSection() {
-  return (
-    <Card>
-      <CardHeader title="Superadmin" />
-      {/* Two destinations, side by side at their natural width — a full-bleed
-          button implies a weightier action than "open the users list". */}
-      <div className="flex flex-wrap gap-3">
-        <LinkButton variant="outline" href="/admin/users">
-          Users
-        </LinkButton>
-        <LinkButton variant="outline" href="/admin/cache">
-          Cache
-        </LinkButton>
-        {/* A Pages Function, not a react-router route. `download` (no value)
-            forces a save under the server's Content-Disposition filename, and
-            keeps RAC from client-navigating a URL the SPA has no route for. */}
-        <LinkButton variant="outline" href="/civl-rankings.csv" download="">
-          CIVL rankings (CSV)
-        </LinkButton>
-      </div>
-    </Card>
-  );
-}
 
-function DangerZoneSection() {
+/**
+ * "Delete account", on the index as a destructive row (as "Delete
+ * competition" is on a competition's): an action, not a setting, and a level
+ * down it would sit beside a Save button.
+ */
+function DangerZone() {
   const confirm = useConfirm();
   // The refusal beside Delete account: the server's own words where it has
   // some, this page's where it has none (rac/form.tsx).
@@ -922,22 +1043,18 @@ function DangerZoneSection() {
   }
 
   return (
-    <Card className="border-destructive/30">
-      <CardHeader
-        title="Danger zone"
-        description="Permanently delete your account and all associated data. This cannot be undone."
-        action={
-          <Button
-            variant="destructive"
-            isPending={action.pending || leaving}
-            pendingLabel="Deleting your account"
-            onPress={() => void handleDeleteAccount()}
-          >
-            Delete account
-          </Button>
-        }
-      />
+    <>
+      <NavList label="Danger zone">
+        <NavActionRow
+          destructive
+          label="Delete account"
+          description="Permanently delete your account and all associated data. This cannot be undone."
+          isPending={action.pending || leaving}
+          pendingLabel="Deleting your account"
+          onPress={() => void handleDeleteAccount()}
+        />
+      </NavList>
       <ActionErrorBanner action={action} />
-    </Card>
+    </>
   );
 }

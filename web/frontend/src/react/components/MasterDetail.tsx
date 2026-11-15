@@ -56,9 +56,10 @@
  * the widest master (the ranking table) its min-content beside a useful pane.
  *
  * Sticky offsets are dictated by whatever owns the top of the viewport, which
- * is why `stackedTop` exists. Today that is always the Shell's 60px glass
- * header — which is `static` under `sm` and on short viewports, where the pane
- * pins to the very top instead. The task-analysis pages used to carry a fixed
+ * is why `stackedTop` exists. Today that is always the page bar
+ * (rac/page-bar.tsx, #863): 60 px and the top safe area, stuck at every width
+ * — and `static` on short viewports, where the pane pins to the very top
+ * instead. The task-analysis pages used to carry a fixed
  * table-of-contents bar above it and needed their own offset; the report is a
  * page per section now, and small enough to need no rail.
  *
@@ -119,9 +120,11 @@ const WIDE_PX = 64 * 16;
 
 /** What owns the top of the viewport while stacked (see file doc). */
 const STACKED_TOP = {
-  /** The Shell header — static under sm and on short viewports, so the pane
-   * pins flush to the top there. */
-  header: "top-[60px] max-sm:top-0 [@media(max-height:500px)]:top-0",
+  /** The page bar — one bar height (3.75rem and the top safe area) at every
+   * width; static on short viewports, so the pane pins flush to the top
+   * there. */
+  header:
+    "top-[calc(3.75rem+env(safe-area-inset-top,0px))] [@media(max-height:500px)]:top-0",
 } as const;
 
 /**
@@ -132,8 +135,8 @@ const STACKED_TOP = {
 const BLEED = {
   /** Inside a `Card` (p-5). */
   card: "-mx-5 bg-card px-5",
-  /** Directly on a page main (px-4 sm:px-6). */
-  page: "-mx-4 bg-background px-4 sm:-mx-6 sm:px-6",
+  /** Directly on a `Page` (its 1rem gutter, at every width). */
+  page: "-mx-4 bg-background px-4",
 } as const;
 
 /**
@@ -412,9 +415,9 @@ export function MasterDetail({
                   // the two can never disagree about the breakpoint.
                   "@5xl:sticky @5xl:z-10",
                   // Clearing whatever owns the top of the viewport, for the
-                  // scrollIntoView above — the same thing STACKED_TOP names,
-                  // and it is nothing at all on a phone.
-                  "scroll-mt-20 max-sm:scroll-mt-2 [@media(max-height:500px)]:scroll-mt-2",
+                  // scrollIntoView above — the same thing STACKED_TOP names:
+                  // the page bar, at every width.
+                  "scroll-mt-20 [@media(max-height:500px)]:scroll-mt-2",
                   // `print:block` because paper is not a phone: the page
                   // prints whole, both halves, whichever one is on screen.
                   !showingDetail && "hidden @5xl:block print:block"

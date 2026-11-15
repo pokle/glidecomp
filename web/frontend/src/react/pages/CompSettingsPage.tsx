@@ -17,9 +17,11 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
+import { SettingsPage } from "@/react/components/SettingsPage";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
+import { compPages, underComp, underCompSettings } from "../lib/crumbs";
 import { compPath, compUrlId, idFromSegment, compSettingsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
@@ -27,6 +29,7 @@ import type { CompDetailData } from "../comp/types";
 import {
   CompSettingsIndex,
   SETTINGS_GROUPS,
+  SETTINGS_GROUP_TITLES,
   SettingsGroupPage,
   type SettingsGroup,
 } from "../comp/settings/CompSettingsIndex";
@@ -67,7 +70,29 @@ export function CompSettingsPage() {
   }
 
   if (!comp || loading) {
-    return <Loading>Loading settings…</Loading>;
+    // The bar is there before the data, so the page does not jump.
+    if (group === undefined) {
+      return (
+        <SettingsPage
+          crumbs={underComp(compId, comp?.name)}
+          title="Settings"
+          // Only an organiser stays on this page.
+          related={compPages(compId, comp, true, "Settings")}
+        >
+          <Loading>Loading settings…</Loading>
+        </SettingsPage>
+      );
+    }
+    const title = SETTINGS_GROUP_TITLES[group as SettingsGroup];
+    return (
+      <SettingsPage
+        crumbs={underCompSettings(compId, comp?.name)}
+        title={title}
+        fullTitle={`${title} settings`}
+      >
+        <Loading>Loading settings…</Loading>
+      </SettingsPage>
+    );
   }
 
   if (!isAdmin) return <OrganisersOnly to={compPath(compUrlId(comp, compId), comp.name)} />;

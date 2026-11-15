@@ -10,7 +10,9 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
+import { SettingsPage } from "@/react/components/SettingsPage";
 import { Loading } from "@/react/rac/progress";
+import { underTask } from "../lib/crumbs";
 import { idFromSegment, taskPath, taskWeatherPath } from "../lib/slug";
 import { useTaskAdminPage } from "../lib/use-task-admin-page";
 import { TaskWeatherNotes } from "../comp/TaskWeatherNotes";
@@ -32,7 +34,17 @@ export function TaskWeatherPage() {
   });
 
   if (notFound) return <NotFound title="Task not found" />;
-  if (loading || !comp || !task) return <Loading>Loading…</Loading>;
+  if (loading || !comp || !task) {
+    // The bar is there before the data, so the page does not jump.
+    return (
+      <SettingsPage
+        crumbs={underTask(compId, comp?.name, taskId, task?.name)}
+        title="Weather notes"
+      >
+        <Loading>Loading…</Loading>
+      </SettingsPage>
+    );
+  }
 
   // The notes themselves are on the task page, for everyone.
   if (!isAdmin) return <OrganisersOnly to={taskPath(compId, comp.name, taskId, task.name)} />;
