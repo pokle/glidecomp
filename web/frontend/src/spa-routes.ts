@@ -27,6 +27,10 @@ export function isSpaRoute(path: string): boolean {
     // development build and the e2e build (src/react/routes.tsx), and
     // production's _redirects does not name it.
     path === "/__kit/form" ||
+    // The page-bar prototype (src/react/proto/ProtoApp.tsx): unlinked sample
+    // pages, here until the recommendation it is for is settled (#860).
+    path === "/proto" ||
+    path.startsWith("/proto/") ||
     /^\/(submit|profile|settings|onboarding|signin|oauth\/consent)\/?$/.test(path) ||
     /^\/admin\/(users|cache)\/?$/.test(path)
   );
