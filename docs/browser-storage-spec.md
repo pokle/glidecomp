@@ -256,6 +256,12 @@ This ensures:
 
 ## Command Menu Integration
 
+> **Superseded (#869).** The analysis page no longer has a command list, and
+> it lists no stored items. Its ⋯ menu has a **My Flights** row (signed in
+> only), and My Flights lists the stored tracks and tasks; each opens the
+> analysis page with `?storedTrack=` / `?storedTask=`. `storage-menu.ts` was
+> deleted. The section below is kept as the record of the original design.
+
 ### New Menu Groups
 
 Add two new groups to the command menu after "Sample Flights":

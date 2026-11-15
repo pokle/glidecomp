@@ -266,13 +266,13 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       toolbar.className = 'flex items-center gap-1 border-b border-border px-2 py-1.5';
       const hideMap = hiddenAddMethods.includes('map');
       renderInto(toolbar, html`
-        <button type="button" class="te-add-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors" title="Add waypoint">${ICON_PLUS}</button>
-        ${hideMap ? nothing : html`<button type="button" class="te-map-pin-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors ${mapClickMode ? 'bg-primary text-primary-foreground' : ''}" title="Click map to add waypoint">${ICON_MAP_PIN}</button>`}
+        <button type="button" class="te-add-btn inline-flex items-center justify-center rounded p-1.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11 hover:bg-muted transition-colors" title="Add waypoint">${ICON_PLUS}</button>
+        ${hideMap ? nothing : html`<button type="button" class="te-map-pin-btn inline-flex items-center justify-center rounded p-1.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11 hover:bg-muted transition-colors ${mapClickMode ? 'bg-primary text-primary-foreground' : ''}" title="Click map to add waypoint">${ICON_MAP_PIN}</button>`}
         <div class="flex-1"></div>
-        <button type="button" class="te-upload-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground" title="Open .xctsk file">${ICON_UPLOAD} Open\u2026</button>
-        <button type="button" class="te-xcontest-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground ${xcontestInputOpen ? 'bg-muted' : ''}" title="Load XContest task">${ICON_GLOBE} XContest</button>
-        <button type="button" class="te-download-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground disabled:opacity-30 disabled:pointer-events-none" title="Save as .xctsk file">${ICON_DOWNLOAD} Save</button>
-        <button type="button" class="te-clear-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors text-muted-foreground hover:text-danger" title="Clear all waypoints">${ICON_TRASH}</button>
+        <button type="button" class="te-upload-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 pointer-coarse:min-h-11 text-xs hover:bg-muted transition-colors text-muted-foreground" title="Open .xctsk file">${ICON_UPLOAD} Open\u2026</button>
+        <button type="button" class="te-xcontest-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 pointer-coarse:min-h-11 text-xs hover:bg-muted transition-colors text-muted-foreground ${xcontestInputOpen ? 'bg-muted' : ''}" title="Load XContest task">${ICON_GLOBE} XContest</button>
+        <button type="button" class="te-download-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 pointer-coarse:min-h-11 text-xs hover:bg-muted transition-colors text-muted-foreground disabled:opacity-30 disabled:pointer-events-none" title="Save as .xctsk file">${ICON_DOWNLOAD} Save</button>
+        <button type="button" class="te-clear-btn inline-flex items-center justify-center rounded p-1.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11 hover:bg-muted transition-colors text-muted-foreground hover:text-danger" title="Clear all waypoints">${ICON_TRASH}</button>
       `);
       container.appendChild(toolbar);
 
@@ -423,7 +423,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-1.5">
           <span class="font-medium text-sm truncate">${tp.waypoint.name}</span>
-          <span class="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] ${typeClass}">${typeLabel}</span>
+          <span class="shrink-0 rounded bg-muted px-1 py-0.5 text-xs ${typeClass}">${typeLabel}</span>
         </div>
         <div class="flex gap-3 text-xs text-muted-foreground mt-0.5">
           <span title="Radius">${radiusStr}</span>
@@ -432,7 +432,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
           <span title="Cumulative">${cumDist}</span>
         </div>
       </div>
-      ${readOnly ? nothing : html`<button type="button" class="te-delete-btn shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-danger transition-colors opacity-40 hover:opacity-100" title="Delete waypoint">${ICON_X}</button>`}
+      ${readOnly ? nothing : html`<button type="button" class="te-delete-btn touch-target shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-danger transition-colors opacity-40 hover:opacity-100" title="Delete waypoint">${ICON_X}</button>`}
     `);
 
     card.appendChild(header);
@@ -520,25 +520,25 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       renderInto(expanded, html`
         <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="text-[10px] text-muted-foreground uppercase tracking-wider">Name</label>
+            <label class="text-xs text-muted-foreground uppercase tracking-wider">Name</label>
             <input type="text" class="te-field-name w-full rounded border border-border bg-background px-2 py-1 text-sm" value=${tp.waypoint.name}>
           </div>
           <div>
-            <label class="text-[10px] text-muted-foreground uppercase tracking-wider">Type</label>
+            <label class="text-xs text-muted-foreground uppercase tracking-wider">Type</label>
             <select class="te-field-type w-full rounded border border-border bg-background px-2 py-1 text-sm">
               ${TYPE_OPTIONS.map(o => html`<option value=${o.value} ?selected=${o.value === (tp.type || '')}>${o.label}</option>`)}
             </select>
           </div>
           <div>
-            <label class="text-[10px] text-muted-foreground uppercase tracking-wider">Radius (m)</label>
+            <label class="text-xs text-muted-foreground uppercase tracking-wider">Radius (m)</label>
             <input type="number" class="te-field-radius w-full rounded border border-border bg-background px-2 py-1 text-sm" value="${tp.radius}" min="50" step="100">
           </div>
           <div>
-            <label class="text-[10px] text-muted-foreground uppercase tracking-wider">Altitude (m)</label>
+            <label class="text-xs text-muted-foreground uppercase tracking-wider">Altitude (m)</label>
             <input type="number" class="te-field-altitude w-full rounded border border-border bg-background px-2 py-1 text-sm" value="${tp.waypoint.altSmoothed || ''}" placeholder="\u2014">
           </div>
         </div>
-        <div class="text-[10px] text-muted-foreground">
+        <div class="text-xs text-muted-foreground">
           ${tp.waypoint.lat.toFixed(5)}, ${tp.waypoint.lon.toFixed(5)}
         </div>
       `);
@@ -691,7 +691,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         renderInto(item, html`
           <div class="min-w-0">
             <div class="font-medium truncate">${wp.description || wp.name}</div>
-            <div class="text-[10px] text-muted-foreground">${wp.name} \u00b7 ${wp.altitude ? formatAltitude(wp.altitude).withUnit : ''} \u00b7 r=${formatCylinderRadius(wp.radius || 400).withUnit}</div>
+            <div class="text-xs text-muted-foreground">${wp.name} \u00b7 ${wp.altitude ? formatAltitude(wp.altitude).withUnit : ''} \u00b7 r=${formatCylinderRadius(wp.radius || 400).withUnit}</div>
           </div>
         `);
         item.addEventListener('click', () => {
@@ -718,7 +718,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         <input type="text" class="te-coords-input w-full rounded border border-border bg-background px-2 py-1.5 text-sm" placeholder="-36.185, 147.891" autocomplete="off">
         <button type="button" class="te-coords-close absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted text-muted-foreground">${ICON_X}</button>
       </div>
-      <div class="text-[10px] text-muted-foreground mt-1">Enter lat, lon (e.g. from Google Maps)</div>
+      <div class="text-xs text-muted-foreground mt-1">Enter lat, lon (e.g. from Google Maps)</div>
     `);
 
     const insertRef = container.querySelector('.te-list') || container.children[1];
@@ -759,7 +759,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         <input type="text" class="te-xcontest-input w-full rounded border border-border bg-background px-2 py-1.5 text-sm" placeholder="Enter task code (e.g. buje)" autocomplete="off">
         <button type="button" class="te-xcontest-close absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted text-muted-foreground">${ICON_X}</button>
       </div>
-      <div class="te-xcontest-status text-[10px] text-muted-foreground mt-1">Paste an XContest task code and press Enter</div>
+      <div class="te-xcontest-status text-xs text-muted-foreground mt-1">Paste an XContest task code and press Enter</div>
     `);
 
     const insertRef = container.querySelector('.te-list') || container.children[1];
@@ -785,7 +785,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         if (!code) return;
         input.disabled = true;
         statusEl.textContent = 'Loading...';
-        statusEl.className = 'te-xcontest-status text-[10px] text-muted-foreground mt-1';
+        statusEl.className = 'te-xcontest-status text-xs text-muted-foreground mt-1';
         try {
           const result = await fetchTaskByCodeWithRaw(code);
           currentTask = result.task;
@@ -795,7 +795,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
           emitTaskChanged();
         } catch (err) {
           statusEl.textContent = `${err instanceof Error ? err.message : 'Failed to load task'}`;
-          statusEl.className = 'te-xcontest-status text-[10px] text-danger mt-1';
+          statusEl.className = 'te-xcontest-status text-xs text-danger mt-1';
           input.disabled = false;
           input.focus();
         }

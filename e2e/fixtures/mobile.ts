@@ -90,6 +90,10 @@ export const MOBILE_SPEC_FILES = [
   // the task page and the report card on a phone, and its controls were the
   // smallest in the app (#860 §1).
   "replay-bar.spec.ts",
+  // The analysis page's bar and controls (#869): the report card opens it on
+  // a phone, in a tab with no browser Back, and its map and panel controls
+  // were 29-32 px (#860 §1).
+  "analysis-bar.spec.ts",
   // Where a refusal lands on the task's management tools — the manage grid's
   // row actions and the manual-flight page (#808). A task is run from a hill,
   // and a phone is where a refusal can land off-screen.

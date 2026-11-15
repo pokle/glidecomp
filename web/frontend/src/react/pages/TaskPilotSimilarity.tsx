@@ -35,6 +35,7 @@
  * All state round-trips through the URL (`?pilot=`, `?class=`, `?metrics=`) so
  * one reading of the field can be pasted to someone else.
  */
+import { ChartColumnIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFilter, type Selection } from "react-aria-components";
 import { useParams, useSearchParams } from "react-router-dom";
@@ -414,6 +415,7 @@ export function TaskPilotSimilarity() {
         {
           id: "comp-analysis",
           label: COMP_ANALYSIS_LABEL,
+          icon: ChartColumnIcon,
           to: compAnalysisPath(compUrlId(comp, compId), comp?.name),
         },
       ]}
