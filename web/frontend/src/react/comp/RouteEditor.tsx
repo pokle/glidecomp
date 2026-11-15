@@ -49,7 +49,22 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Maximize2Icon, PlusIcon } from "lucide-react";
+import {
+  ArrowRightLeftIcon,
+  ArrowUpDownIcon,
+  CopyIcon,
+  DownloadIcon,
+  FileSpreadsheetIcon,
+  GlobeIcon,
+  ImportIcon,
+  KeyboardIcon,
+  MapPinPlusIcon,
+  Maximize2Icon,
+  MountainIcon,
+  PlusIcon,
+  Trash2Icon,
+  Undo2Icon,
+} from "lucide-react";
 import {
   parseXCTaskAsync,
   toXctskJSON,
@@ -421,6 +436,7 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
   const actions: BarAction[] = [
     {
       id: "map",
+      icon: MapPinPlusIcon,
       label: "New waypoint from the map",
       onAction: () => {
         setAddMode(true);
@@ -432,6 +448,7 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
       ? [
           {
             id: "quick",
+            icon: KeyboardIcon,
             label: "Quick entry",
             to: taskRouteQuickPath(urlId, compName, taskId, taskName),
           },
@@ -439,12 +456,20 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
       : []),
     // Two turnpoints is the least that can be in the wrong order.
     ...(rows.length > 1
-      ? [{ id: "reorder", label: "Reorder turnpoints", onAction: () => setReordering(true) }]
+      ? [
+          {
+            id: "reorder",
+            icon: ArrowUpDownIcon,
+            label: "Reorder turnpoints",
+            onAction: () => setReordering(true),
+          },
+        ]
       : []),
     {
       // Always there so the capability can be found; not available when
       // every turnpoint already has an altitude.
       id: "fill",
+      icon: MountainIcon,
       group: true,
       disabled: fillingAlts || fillableAltCount === 0,
       label: fillingAlts
@@ -457,25 +482,40 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
     {
       // Import and export the whole route: rare, so behind one row.
       id: "transfer",
+      icon: ArrowRightLeftIcon,
       label: "Import or export",
       children: [
-        { id: "import", label: "Import .xctsk…", onAction: () => fileInput.current?.click() },
+        {
+          id: "import",
+          icon: ImportIcon,
+          label: "Import .xctsk…",
+          onAction: () => fileInput.current?.click(),
+        },
         {
           id: "xcontest",
+          icon: GlobeIcon,
           label: "Load from XContest",
           to: taskRouteXContestPath(urlId, compName, taskId, taskName),
         },
         {
           id: "copy",
+          icon: CopyIcon,
           label: "Copy from another competition…",
           to: taskRouteCopyPath(urlId, compName, taskId, taskName),
         },
-        { id: "xctsk", label: "Export .xctsk", group: true, onAction: exportFile },
-        { id: "csv", label: "Export .csv", onAction: exportCsv },
+        {
+          id: "xctsk",
+          icon: DownloadIcon,
+          label: "Export .xctsk",
+          group: true,
+          onAction: exportFile,
+        },
+        { id: "csv", icon: FileSpreadsheetIcon, label: "Export .csv", onAction: exportCsv },
       ],
     },
     {
       id: "clear",
+      icon: Trash2Icon,
       label: "Clear turnpoints",
       destructive: true,
       group: true,
@@ -487,6 +527,7 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
       ? [
           {
             id: "discard",
+            icon: Undo2Icon,
             label: "Discard changes",
             destructive: true,
             onAction: () => void discardChanges(),

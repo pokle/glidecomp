@@ -53,6 +53,7 @@ import {
   type AltitudePair,
 } from "./altitude-check";
 import { pairOf, type AltitudeReviewEntry } from "./waypoints-draft";
+import { ListFilterIcon, MountainIcon } from "lucide-react";
 
 /** Metres, as the file writes them: whole numbers, and the unit spelled out. */
 const metres = (v: number) => `${Math.round(v)} m`;
@@ -118,6 +119,7 @@ export function AltitudeReviewList({
   const actions: BarAction[] = [
     {
       id: "accept-all",
+      icon: MountainIcon,
       label: `Use the map’s altitude for all ${acceptable.length}`,
       disabled: acceptable.length === 0,
       onAction: () => onAccept(acceptable.map((e) => e.id)),
@@ -126,6 +128,7 @@ export function AltitudeReviewList({
       ? [
           {
             id: "show-all",
+            icon: ListFilterIcon,
             label: showAll
               ? `Show only the ${listedCount} to look at`
               : `Show all ${entries.length} waypoints`,

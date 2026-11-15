@@ -9,7 +9,14 @@
  */
 import { Fragment, useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { EyeOffIcon } from "lucide-react";
+import {
+  CloudUploadIcon,
+  CopyIcon,
+  EyeOffIcon,
+  FileTextIcon,
+  PlusIcon,
+  SettingsIcon,
+} from "lucide-react";
 import { NotFound } from "@/react/components/NotFound";
 import { LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
@@ -152,13 +159,19 @@ function compActions(
   // the link is for reading a draft, and every write route refuses anyone but
   // its admins.
   if (mounted && !isPastCloseDate(comp.close_date) && (!comp.test || isAdmin)) {
-    actions.push({ id: "submit", label: "Submit your track", to: submitTrackPath(urlId) });
+    actions.push({
+      id: "submit",
+      icon: CloudUploadIcon,
+      label: "Submit your track",
+      to: submitTrackPath(urlId),
+    });
   }
   // The results record is every task's scores: with no task there is nothing
   // to keep.
   if (comp.tasks.length > 0) {
     actions.push({
       id: "record",
+      icon: FileTextIcon,
       label: "Download the results record (PDF)",
       to: compScoresPdfPath(urlId, comp.name),
       download: true,
@@ -167,9 +180,25 @@ function compActions(
   }
   if (isAdmin) {
     actions.push(
-      { id: "new-task", label: "New task", to: compNewTaskPath(urlId, comp.name), group: true },
-      { id: "copy", label: "Copy to a new competition…", to: compCopyPath(urlId, comp.name) },
-      { id: "settings", label: "Settings", to: compSettingsPath(urlId, comp.name) }
+      {
+        id: "new-task",
+        icon: PlusIcon,
+        label: "New task",
+        to: compNewTaskPath(urlId, comp.name),
+        group: true,
+      },
+      {
+        id: "copy",
+        icon: CopyIcon,
+        label: "Copy to a new competition…",
+        to: compCopyPath(urlId, comp.name),
+      },
+      {
+        id: "settings",
+        icon: SettingsIcon,
+        label: "Settings",
+        to: compSettingsPath(urlId, comp.name),
+      }
     );
   }
   return actions;

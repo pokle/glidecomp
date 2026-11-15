@@ -21,7 +21,7 @@
  * inputs — so the page renders without downloading the tracklog. The
  * IGC is fetched separately, only to draw the track on the map.
  */
-import { MapIcon } from "lucide-react";
+import { ClipboardPenIcon, MapIcon } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "../lib/use-in-view";
 import { useParams } from "react-router-dom";
@@ -402,6 +402,7 @@ export function PilotScoreDetail() {
   if (isAdmin && ready) {
     actions.push({
       id: "manual",
+      icon: ClipboardPenIcon,
       label: "Record a manual flight",
       group: true,
       to: manualFlightPath(

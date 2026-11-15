@@ -23,6 +23,7 @@ import { isBlankRow } from "../comp/route-draft";
 import { routeEditorGate } from "../comp/RouteEditorGate";
 import { RouteMapPane, useRouteGeometry } from "../comp/RouteMapPane";
 import { useRouteEditor } from "../comp/use-route-editor";
+import { MapPinPlusIcon, MapPinXIcon } from "lucide-react";
 
 const TITLE = "Route map";
 
@@ -56,6 +57,7 @@ export function TaskRouteMapPage() {
           actions={[
             {
               id: "new",
+              icon: addMode ? MapPinXIcon : MapPinPlusIcon,
               label: addMode ? "Stop placing a waypoint" : "New waypoint from the map",
               onAction: () => setAddMode(!addMode),
             },

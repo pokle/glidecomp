@@ -13,7 +13,7 @@
  *
  * SSR-safe: `document` is touched only inside an effect.
  */
-import { ChartColumnIcon } from "lucide-react";
+import { ChartColumnIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
@@ -247,6 +247,7 @@ export function TaskAnalysisFrame({
   if (isAdmin) {
     actions.push({
       id: "recompute",
+      icon: RefreshCwIcon,
       label: "Recompute",
       group: true,
       onAction: refresh,

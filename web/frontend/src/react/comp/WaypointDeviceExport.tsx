@@ -38,6 +38,7 @@ import { Checkbox } from "@/react/rac/checkbox";
 import type { BarAction } from "@/react/rac/page-bar";
 import { downloadFile } from "../lib/format";
 import { slugify } from "./csv";
+import { ArrowLeftRightIcon, DownloadIcon, QrCodeIcon, SmartphoneIcon } from "lucide-react";
 
 const WaypointQR = lazy(() => import("./WaypointQR"));
 
@@ -108,12 +109,14 @@ export function useWaypointDeviceExport({
   const actions: BarAction[] = [
     {
       id: "device-files",
+      icon: openInApp ? SmartphoneIcon : DownloadIcon,
       label: openInApp ? "Open in a flight app" : "Download",
       children: [
         // Swap rides with the format choice: picking a file and deciding what
         // the device will call each point is one decision, made in one place.
         {
           id: "swap",
+          icon: ArrowLeftRightIcon,
           label: `Swap code & name: ${swap ? "on" : "off"}`,
           onAction: () => setSwap(!swap),
         },
@@ -138,6 +141,7 @@ export function useWaypointDeviceExport({
     },
     {
       id: "qr",
+      icon: QrCodeIcon,
       label: showQR ? "Hide QR" : "QR code",
       disabled: qrTooBig,
       onAction: () => setShowQR(!showQR),

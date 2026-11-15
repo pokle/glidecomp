@@ -69,7 +69,17 @@ import {
 import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
-import { ChartColumnIcon, MapIcon, QrCodeIcon, ShareIcon } from "lucide-react";
+import {
+  ChartColumnIcon,
+  CloudUploadIcon,
+  FlaskConicalIcon,
+  MapIcon,
+  NotebookPenIcon,
+  QrCodeIcon,
+  RouteIcon,
+  SettingsIcon,
+  ShareIcon,
+} from "lucide-react";
 import { underComp, taskSiblings, TASK_ANALYSIS_LABEL } from "../lib/crumbs";
 import { compUrlId, idFromSegment, compPath, submitTrackPath, taskPath, taskAnalysisPath, taskQrPath, taskSettingsPath, taskRoutePath, taskTestIgcPath, taskWeatherPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -216,7 +226,12 @@ export function TaskDetail() {
       (!task.submissions_closed || isAdmin) &&
       (!comp?.test || isAdmin)
     ) {
-      actions.push({ id: "submit", label: "Submit your track", to: submitHref });
+      actions.push({
+        id: "submit",
+        icon: CloudUploadIcon,
+        label: "Submit your track",
+        to: submitHref,
+      });
     }
 
     const share: BarAction[] = [];
@@ -271,16 +286,19 @@ export function TaskDetail() {
       manage.push(
         {
           id: "route",
+          icon: RouteIcon,
           label: hasRoute ? "Edit route" : "Create route",
           to: taskRoutePath(compId, comp.name, taskId, task.name),
         },
         {
           id: "settings",
+          icon: SettingsIcon,
           label: "Task settings",
           to: taskSettingsPath(compId, comp.name, taskId, task.name),
         },
         {
           id: "notes",
+          icon: NotebookPenIcon,
           label: task.weather_notes.trim().length > 0 ? "Edit notes" : "Add notes",
           to: taskWeatherPath(compId, comp.name, taskId, task.name),
         }
@@ -291,6 +309,7 @@ export function TaskDetail() {
       if (task.xctsk) {
         manage.push({
           id: "igc",
+          icon: FlaskConicalIcon,
           label: "Create test IGC",
           to: taskTestIgcPath(compUrlId(comp, compId), comp.name, taskId, task.name),
         });

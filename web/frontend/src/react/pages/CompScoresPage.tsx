@@ -38,6 +38,7 @@ import { useScoresDownload } from "../comp/ScoresDownload";
 import type { CompDetailData } from "../comp/types";
 import { useInitialData } from "../lib/initial-data";
 import type { CompScoresLoaderData } from "../loaders";
+import { RefreshCwIcon } from "lucide-react";
 
 export function CompScoresPage() {
   const { compId: compParam } = useParams<{ compId: string }>();
@@ -97,6 +98,7 @@ export function CompScoresPage() {
     if (isAdmin) {
       actions.push({
         id: "recompute",
+        icon: RefreshCwIcon,
         label: "Recompute scores",
         group: true,
         // One recompute at a time: the bar's spinner says it is under way.
