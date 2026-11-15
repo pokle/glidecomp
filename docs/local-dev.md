@@ -411,8 +411,32 @@ still waiting for the answer. Both crashes in that run fell inside
 `createScoredComp`'s burst of uploads (`e2e/fixtures/scored-comp.ts`), and
 each upload starts a recompute of the task's scores in the background. That
 burst is a lead, not a finding. It did not reproduce locally, even under CPU
-load, and CI keeps no request log to check it against: wrangler prints its
-requests to stdout, which Playwright's `webServer` discards.
+load, and that run kept no request log to check it against. The next crash
+will name its request (below).
+
+**Reading a crash: the session log.** wrangler prints a line for each request
+on stdout, and Playwright's `webServer` throws a server's stdout away. So
+`web/scripts/dev-workers.sh` also copies everything wrangler prints, and its
+own banners, into `web/.wrangler/dev-workers.log` (`DEV_WORKERS_LOG`
+overrides). Each line carries a UTC time to the millisecond, with the colour
+codes taken out. The file is emptied when the supervisor starts and kept across
+restarts.
+
+- wrangler writes a request's line only once it has **answered**
+  (`[wrangler:info] POST /api/… 201 Created (431ms)`), so the request a crash
+  cuts off would never appear. The dev-router therefore also writes a line as
+  each request **arrives** (`[dev-router] → POST /api/…`). A request that
+  arrived and has no wrangler line before the `dev-workers: wrangler dev died`
+  banner was in flight when wrangler died.
+- `bash web/scripts/wrangler-crashes.sh` prints the 60 lines before each death
+  (pass a number for more), or one line saying there was none. CI runs it after
+  every e2e run, green ones included, because a crash that recovers is the
+  usual case. A run with a crash also gets a "wrangler dev died" warning on its
+  summary. The whole file is in the job's uploaded Playwright report.
+- There is no file when the supervisor's output is a terminal. Copying the
+  output would make wrangler's stdout a pipe, and wrangler offers its hotkeys,
+  `q` among them, only to a terminal. You can read a terminal yourself.
+  `bun run dev` and every e2e run do keep the file.
 
 **Every failing spec passing in isolation** is the tell for shared-state trouble.
 The e2e suite writes to the *persistent* local D1 (`web/.wrangler/state`), so

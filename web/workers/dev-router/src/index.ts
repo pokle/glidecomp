@@ -23,12 +23,41 @@
  * proxies all of `/api` straight here.) `test/routes.test.ts` pins every path.
  */
 
-interface Env {
+/** The siblings this Worker dispatches to, over service bindings. */
+interface Bindings {
   AUTH_API: Fetcher;
   COMPETITION_API: Fetcher;
   AIRSCORE_API: Fetcher;
   MCP_API: Fetcher;
 }
+
+interface Env extends Bindings {
+  /**
+   * Set (to anything) by web/scripts/dev-workers.sh when it is keeping its
+   * session log — see ARRIVAL_MARK.
+   */
+  DEV_ROUTER_LOG_ARRIVALS?: string;
+}
+
+/**
+ * How a line that says a request has ARRIVED begins. wrangler puts the
+ * Worker's name in front of everything a Worker logs in a multi-config
+ * session, so in its output the line reads `[dev-router] → POST /api/…`.
+ *
+ * wrangler writes its own line for a request (`[wrangler:info] POST … 201
+ * Created (431ms)`) only once the request has answered. When `wrangler dev`
+ * dies mid-request — `Error: Network connection lost.`, which it treats as
+ * fatal (see web/scripts/dev-workers.sh) — the request it was serving is
+ * therefore the one request the log never names. Every request passes through
+ * here first, so a line on arrival closes that gap: in the session log, a
+ * request that arrived and has no wrangler line before the crash banner was in
+ * flight when wrangler died.
+ *
+ * Only while dev-workers.sh is keeping that log, which copies these lines into
+ * the file and keeps them off the terminal. Kept in sync with the `case` in its
+ * log_lines().
+ */
+const ARRIVAL_MARK = "→";
 
 /**
  * Path prefix → the binding that serves it. A prefix matches the path exactly
@@ -45,7 +74,7 @@ interface Env {
  */
 const READINESS_PATH = "/__ready";
 
-const ROUTES: Array<[string, keyof Env]> = [
+const ROUTES: Array<[string, keyof Bindings]> = [
   ["/api/auth", "AUTH_API"],
   ["/api/airscore", "AIRSCORE_API"],
   ["/api/comp", "COMPETITION_API"],
@@ -88,7 +117,7 @@ const ROUTES: Array<[string, keyof Env]> = [
  * the supervisor in `web/scripts/dev-workers.sh` is bringing wrangler back.
  */
 async function readiness(env: Env): Promise<Response> {
-  const probes: Array<[keyof Env, string]> = [
+  const probes: Array<[keyof Bindings, string]> = [
     ["AUTH_API", "/api/auth/me"],
     ["COMPETITION_API", "/api/comp"],
     ["AIRSCORE_API", "/api/airscore"],
@@ -119,7 +148,10 @@ async function readiness(env: Env): Promise<Response> {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const { pathname } = new URL(request.url);
+    const { pathname, search } = new URL(request.url);
+    if (env.DEV_ROUTER_LOG_ARRIVALS) {
+      console.log(`${ARRIVAL_MARK} ${request.method} ${pathname}${search}`);
+    }
 
     if (pathname === READINESS_PATH) return readiness(env);
 

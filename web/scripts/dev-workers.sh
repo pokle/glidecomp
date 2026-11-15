@@ -48,6 +48,35 @@
 #     already in use" once per attempt and buries the real story;
 #   * restart forever — DEV_WORKERS_MAX_RESTARTS is the ceiling, so a genuinely
 #     sick stack still fails the run rather than spinning.
+#
+# ── The session log ──
+#
+# Restarting gets the run back; it does not say WHY wrangler died. The only
+# record of what was in flight is wrangler's own request lines
+# (`[wrangler:info] POST /api/comp/…/igc/… 201 Created (431ms)`), which it
+# prints on stdout, and nobody keeps them: Playwright's `webServer` discards a
+# server's stdout, and wrangler's debug log (~/.config/.wrangler/logs) records
+# no requests at all. CI run 43686074965 lost wrangler twice and could not say
+# which request either crash was serving.
+#
+# So everything wrangler prints, and every banner below, is also appended to
+# DEV_WORKERS_LOG (web/.wrangler/dev-workers.log), each line stamped with UTC
+# time to the millisecond so it lines up with a CI log. It is emptied when this
+# script starts and kept across restarts, so one file holds the requests before
+# a crash and the restart after it. CI prints the lines around each crash and
+# uploads the file with the Playwright report (.github/workflows/deploy.yml).
+#
+# wrangler names a request only once it has ANSWERED, so the request a crash
+# cuts off would be the one the file never names. The dev-router therefore
+# writes a line as each request arrives (`[dev-router] → POST /api/…`), while
+# DEV_ROUTER_LOG_ARRIVALS is set — which this script does only when it is
+# keeping the file, and only the file gets those lines. A request that arrived
+# with no wrangler line after it, before a crash banner, was in flight.
+#
+# Only when stdout is NOT a terminal (Playwright, `bun run dev`, CI). Copying it
+# makes wrangler's stdout a pipe, and wrangler offers its hotkeys — `q`
+# included, which the quit check below relies on — only to a TTY. A person at a
+# terminal has the output in front of them anyway.
 
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -74,6 +103,49 @@ bun run db:migrate
 state_dir="$(mktemp -d)"
 served_flag="$state_dir/served"
 trap 'rm -rf "$state_dir"' EXIT
+
+session_log=""
+if [ ! -t 1 ]; then
+  session_log="${DEV_WORKERS_LOG:-web/.wrangler/dev-workers.log}"
+  mkdir -p "$(dirname "$session_log")"
+  : >"$session_log"
+fi
+
+# Pass each line through unchanged, and append it to the session log with a UTC
+# timestamp and without its colour codes — under Playwright wrangler colours its
+# output, and `GET` wrapped in escapes is a line no grep finds. Builtins only
+# (EPOCHREALTIME, printf's %()T, an extglob substitution), because running
+# `date` or `sed` for every line would fork once per request.
+log_lines() {
+  local line plain now frac esc=$'\e'
+  shopt -s extglob
+  export TZ=UTC
+  exec 3>>"$session_log"
+  while IFS= read -r line || [ -n "$line" ]; do
+    plain=${line//$esc\[*([0-9;])m/}
+    # The dev-router's arrival lines (ARRIVAL_MARK in
+    # web/workers/dev-router/src/index.ts, behind the Worker name wrangler puts
+    # in front) are for the file alone: on the terminal they would double
+    # every request.
+    case $plain in
+      "[dev-router] → "*) ;;
+      *) printf '%s\n' "$line" ;;
+    esac
+    now=${EPOCHREALTIME/,/.}
+    frac=${now#*.}
+    printf '%(%Y-%m-%dT%H:%M:%S)T.%sZ %s\n' "${now%.*}" "${frac:0:3}" "$plain" >&3
+  done
+}
+
+# A supervisor message: to stderr, as always, and into the session log so it
+# sits among the requests it interrupted.
+say() {
+  if [ -n "$session_log" ]; then
+    printf '%s\n' "$@" | log_lines >&2
+  else
+    printf '%s\n' "$@" >&2
+  fi
+}
 
 # NOTE: deliberately no `set -m` here. Job control would put wrangler in its own
 # process group, which reads as an improvement — you could then reap the whole
@@ -152,16 +224,28 @@ restarts=0
 while true; do
   rm -f "$served_flag"
 
-  bunx wrangler dev \
-    --config web/workers/dev-router/wrangler.toml \
-    --config web/workers/auth-api/wrangler.toml \
-    --config web/workers/competition-api/wrangler.toml \
-    --config web/workers/airscore-api/wrangler.toml \
-    --config web/workers/mcp-api/wrangler.toml \
-    --persist-to web/.wrangler/state \
-    --port "$PORT" \
-    --inspector-port "$INSPECTOR_PORT" \
-    "$@" &
+  wrangler_args=(
+    --config web/workers/dev-router/wrangler.toml
+    --config web/workers/auth-api/wrangler.toml
+    --config web/workers/competition-api/wrangler.toml
+    --config web/workers/airscore-api/wrangler.toml
+    --config web/workers/mcp-api/wrangler.toml
+    --persist-to web/.wrangler/state
+    --port "$PORT"
+    --inspector-port "$INSPECTOR_PORT"
+    "$@"
+  )
+  # Process substitution, not a pipe: `$!` stays wrangler's own pid, so the
+  # `wait` below still gets ITS exit status. The two copiers are wrangler's
+  # children, in this process group, so stop_tree and Playwright's group kill
+  # reach them too; after a crash they finish on their own once wrangler's
+  # output closes.
+  if [ -n "$session_log" ]; then
+    bunx wrangler dev "${wrangler_args[@]}" --var DEV_ROUTER_LOG_ARRIVALS:1 \
+      > >(log_lines) 2> >(log_lines >&2) &
+  else
+    bunx wrangler dev "${wrangler_args[@]}" &
+  fi
   wrangler_pid=$!
 
   watch_for_listening &
@@ -200,14 +284,14 @@ while true; do
   fi
 
   if [ ! -f "$served_flag" ]; then
-    echo "dev-workers: wrangler dev exited ($status) without ever serving :$PORT." >&2
-    echo "dev-workers: that is a startup failure, not a mid-run crash — read the error above." >&2
+    say "dev-workers: wrangler dev exited ($status) without ever serving :$PORT." \
+      "dev-workers: that is a startup failure, not a mid-run crash — read the error above."
     exit "$fail_status"
   fi
 
   restarts=$((restarts + 1))
   if [ "$restarts" -gt "$MAX_RESTARTS" ]; then
-    echo "dev-workers: wrangler dev has now died $restarts times (limit $MAX_RESTARTS). Giving up." >&2
+    say "dev-workers: wrangler dev has now died $restarts times (limit $MAX_RESTARTS). Giving up."
     exit "$fail_status"
   fi
 
@@ -216,18 +300,18 @@ while true; do
   # or a `workerd` orphaned by a hard kill — and restarting into that would only
   # spell "Address already in use" five times over.
   if ! wait_port_free "$PORT" || ! wait_port_free "$INSPECTOR_PORT"; then
-    echo "dev-workers: wrangler dev died (exit $status), but :$PORT or :$INSPECTOR_PORT is still held." >&2
-    echo "dev-workers: something outlived it — \`bun run kill-dev\` clears leftovers, and" >&2
-    echo "dev-workers: DEV_API_PORT / DEV_INSPECTOR_PORT move this session out of another's way." >&2
+    say "dev-workers: wrangler dev died (exit $status), but :$PORT or :$INSPECTOR_PORT is still held." \
+      "dev-workers: something outlived it — \`bun run kill-dev\` clears leftovers, and" \
+      "dev-workers: DEV_API_PORT / DEV_INSPECTOR_PORT move this session out of another's way."
     exit "$fail_status"
   fi
 
-  echo "" >&2
-  echo "────────────────────────────────────────────────────────────────────────" >&2
-  echo "dev-workers: wrangler dev died (exit $status) — restarting it ($restarts/$MAX_RESTARTS)." >&2
-  echo "dev-workers: usually 'Error: Network connection lost.' reported by the" >&2
-  echo "dev-workers: ProxyWorker, which wrangler treats as fatal. The Workers are" >&2
-  echo "dev-workers: coming back on :$PORT; D1 and R2 state on disk is untouched." >&2
-  echo "────────────────────────────────────────────────────────────────────────" >&2
-  echo "" >&2
+  say "" \
+    "────────────────────────────────────────────────────────────────────────" \
+    "dev-workers: wrangler dev died (exit $status) — restarting it ($restarts/$MAX_RESTARTS)." \
+    "dev-workers: usually 'Error: Network connection lost.' reported by the" \
+    "dev-workers: ProxyWorker, which wrangler treats as fatal. The Workers are" \
+    "dev-workers: coming back on :$PORT; D1 and R2 state on disk is untouched." \
+    "────────────────────────────────────────────────────────────────────────" \
+    ""
 done
