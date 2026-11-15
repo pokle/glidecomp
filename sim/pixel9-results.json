@@ -1,0 +1,221 @@
+{
+  "env": {
+    "w": 412,
+    "h": 790,
+    "dpr": 2.625,
+    "coarse": true,
+    "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML"
+  },
+  "results": [
+    {
+      "name": "pointer is coarse",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "comps: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "comps: bar targets ≥ 44",
+      "ok": false,
+      "detail": "Clear search 40x40"
+    },
+    {
+      "name": "comp: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "comp: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "scores: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "scores: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "task: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "task: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "card: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "card: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "pilots: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "pilots: bar targets ≥ 44",
+      "ok": false,
+      "detail": "Clear search 40x40"
+    },
+    {
+      "name": "waypoints: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "waypoints: bar targets ≥ 44",
+      "ok": false,
+      "detail": "Clear search 40x40"
+    },
+    {
+      "name": "settings: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "settings: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "general: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "general: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "route: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "route: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "routemap: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "routemap: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "analysis: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "analysis: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "submit: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "submit: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "account: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "account: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "flights: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "flights: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "about: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "gap: no sideways scroll",
+      "ok": false,
+      "detail": "94px over"
+    },
+    {
+      "name": "title menu rows ≥ 44",
+      "ok": true,
+      "detail": "43 rows, min 44"
+    },
+    {
+      "name": "title menu stays on screen",
+      "ok": true,
+      "detail": "{\"top\":60,\"bottom\":778.0952758789062,\"left\":73.33333587646484,\"right\":337.33333587646484,\"vh\":790,\"vw\":412}"
+    },
+    {
+      "name": "a tap outside closes the menu",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "second menu stays on screen",
+      "ok": true,
+      "detail": "[{\"l\":81,\"r\":313,\"t\":60,\"b\":350},{\"l\":48,\"r\":310,\"t\":301,\"b\":538}]"
+    },
+    {
+      "name": "Back (the bar) restores the list's scroll",
+      "ok": true,
+      "detail": "2204.952392578125 → 2204.952392578125"
+    },
+    {
+      "name": "Back (Android system) restores the list's scroll",
+      "ok": true,
+      "detail": "2204.952392578125 → 2204.952392578125"
+    },
+    {
+      "name": "keyboard: the bar stays at the top and Save is on screen",
+      "ok": true,
+      "detail": "{\"vvTop\":0,\"vvH\":742,\"inner\":790,\"barTop\":0,\"barBottom\":60,\"saveTop\":8,\"fieldTop\":476,\"fieldBottom\":520}"
+    },
+    {
+      "name": "keyboard: the field is above the keyboard and not under the bar",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "refused Save: the field is focused, below the bar, and the bar stays",
+      "ok": true,
+      "detail": "{\"focused\":\"name\",\"fieldTop\":99,\"barBottom\":60,\"barTop\":0,\"msg\":true}"
+    }
+  ]
+}

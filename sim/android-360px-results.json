@@ -1,0 +1,106 @@
+{
+  "env": {
+    "w": 360,
+    "h": 676,
+    "dpr": 3,
+    "coarse": true,
+    "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML"
+  },
+  "results": [
+    {
+      "name": "pointer is coarse",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "comps: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "comps: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "comp: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "comp: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "scores: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "scores: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "task: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "task: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "card: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "card: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "waypoints: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "waypoints: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "analysis: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "analysis: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "submit: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "submit: bar targets ≥ 44",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "home: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "gap: no sideways scroll",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}
