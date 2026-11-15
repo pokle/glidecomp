@@ -122,7 +122,9 @@ const GLASS =
 const ICON = "pointer-events-auto size-11 rounded-full";
 
 /** Classes for a form's commit button in the trailing slot. */
-export const commitClass = "h-11 rounded-full px-5 text-[0.9375rem]";
+// Narrower padding on a phone: a top-level title beside + and Sign in has
+// 360 px to share, and "Competitions" was cut short there.
+export const commitClass = "h-11 rounded-full px-4 text-[0.9375rem] sm:px-5";
 
 /** The two widths a page's column, and its bar with it, can have. */
 export type PageWidth = "narrow" | "wide";
@@ -218,7 +220,7 @@ export function PageBar({
   const centre = (
     <div
       className={cn(
-        "pointer-events-auto relative flex h-11 min-w-0 flex-1 flex-col justify-center rounded-full px-4 text-center",
+        "pointer-events-auto relative flex h-11 min-w-0 flex-1 flex-col justify-center rounded-full px-3 text-center sm:px-4",
         GLASS
       )}
     >
