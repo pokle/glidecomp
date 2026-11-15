@@ -410,7 +410,11 @@ These are the standing imperatives. Each links to the reference that explains it
     thing that stays in reach, and it is `sticky` at the top of the page's
     flow, never `fixed`: a fixed bar has to be moved around the keyboard by
     hand, and on an iPhone the pilots page's bottom bar once stuck halfway up
-    the screen doing that. A sticky bar at the top never meets the keyboard.
+    the screen doing that. A bar at the top is never under the keyboard. On an iPhone the
+    screen pans when the keyboard opens, which took a sticky bar off the top
+    with Save in it; the page bar follows that pan by one transform
+    (`useKeepOnScreen` in `rac/page-bar.tsx`), the one place the app
+    positions anything from script. Do not add a second.
     Nothing sticks to the bottom: the route editor, the waypoints page and
     the altitude review each had a bar there until #863, and each is now the
     page bar's commit button and ⋯.

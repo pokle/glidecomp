@@ -15,8 +15,9 @@
  *                              actions, with + and a status beside it
  *
  * It is `sticky`, never `fixed` (CLAUDE.md, "No bars fixed to the screen's
- * edges"): a bar stuck to the top never meets the keyboard, so nothing here
- * moves itself around one. Every control in it, and every row of its menus, is
+ * edges"): the keyboard comes up from the bottom, so a bar at the top is never
+ * under it. On an iPhone the screen pans when the keyboard opens, and the bar
+ * follows it (`useKeepOnScreen`, below). Every control in it, and every row of its menus, is
  * 44 px at every pointer.
  *
  * The title is ONE line and may be cut short; the menu under it prints every
@@ -44,7 +45,14 @@
  * ground: text on them has the same contrast whatever scrolls beneath
  * (accessibility standard §3.1). Keep the scrim.
  */
-import { createContext, useContext, type MouseEvent, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 import { Button as AriaButton, MenuTrigger, SubmenuTrigger } from "react-aria-components";
 import {
@@ -362,9 +370,13 @@ export function PageBar({
   );
 
   const linkActions = flatten(actions).filter((a) => a.to && !a.disabled);
+  const headerRef = useKeepOnScreen();
 
   return (
-    <header className="pointer-events-none sticky top-0 z-40 pt-safe [@media(max-height:500px)]:static print:hidden">
+    <header
+      ref={headerRef}
+      className="pointer-events-none sticky top-0 z-40 pt-safe [@media(max-height:500px)]:static print:hidden"
+    >
       {/* Under the floating controls the page fades out as it scrolls beneath. */}
       <div
         aria-hidden
@@ -421,6 +433,46 @@ export function PageBar({
       ) : null}
     </header>
   );
+}
+
+/**
+ * Keeps the bar on screen while an iPhone's keyboard is up.
+ *
+ * The bar is `sticky`, which sticks it to the top of the LAYOUT viewport. When
+ * the keyboard opens, iOS Safari does not shrink that viewport or scroll the
+ * page: it pans the VISUAL viewport down inside it to bring the focused field
+ * above the keyboard. Everything stuck to the top of the page goes off the top
+ * of the screen with it, and on a form that is Cancel and Save (found on the
+ * simulators for issue #863; a field in the lower half of any form does it).
+ *
+ * So the bar follows the visual viewport: shifted down by exactly as far as
+ * the screen has panned, and by nothing the rest of the time. It is the one
+ * place the app positions anything from script, and it is deliberately the
+ * smallest thing that works: one transform, from one number the browser
+ * reports, with no keyboard height, no guess at when the keyboard opened and
+ * nothing fixed to the screen. On every other browser the offset is always 0.
+ */
+function useKeepOnScreen() {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const el = ref.current;
+    if (!viewport || !el) return;
+    const follow = () => {
+      // Pinch-zoom pans the visual viewport too; the bar stays with the page then.
+      const top = viewport.scale === 1 ? Math.max(0, viewport.offsetTop) : 0;
+      el.style.transform = top > 0 ? `translateY(${top}px)` : "";
+    };
+    follow();
+    viewport.addEventListener("resize", follow);
+    viewport.addEventListener("scroll", follow);
+    return () => {
+      viewport.removeEventListener("resize", follow);
+      viewport.removeEventListener("scroll", follow);
+      el.style.transform = "";
+    };
+  }, []);
+  return ref;
 }
 
 function flatten(actions: BarAction[]): BarAction[] {
