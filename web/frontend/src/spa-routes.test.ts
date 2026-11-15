@@ -4,7 +4,7 @@ import { STATIC_PAGE_ROUTES } from "./dev-routing";
 
 describe("isSpaRoute", () => {
   it("is true for the app's own pages", () => {
-    for (const path of ["/comp", "/comp/corryong-cup-vzuq/task/task-1-abcd", "/u/me", "/settings", "/submit", "/signin"]) {
+    for (const path of ["/comp", "/comp/corryong-cup-vzuq/task/task-1-abcd", "/u/me", "/settings", "/submit", "/signin", "/proto", "/proto/comp/corryong"]) {
       expect(isSpaRoute(path), path).toBe(true);
     }
   });
