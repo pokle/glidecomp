@@ -60,6 +60,16 @@ differs. Know which surface you're touching:
   (`--foreground`/`--background`, `--muted-foreground`/`--muted`,
   `--primary-foreground`/`--primary`, `--destructive`…), verify the ratio in
   both `:root` and `.dark`.
+- **The accent is two colours: a fill and a text colour.** `--primary` is the
+  fill, and `--primary-foreground` is its label (`bg-primary
+  text-primary-foreground`). `--link` is the accent as text: a link, a chip's
+  label, a tick (`text-link`, or `color: var(--link)` in a hand-written
+  stylesheet). Do not use the fill as text. A blue that is light enough to
+  fill a button is too light to read on a light surface, and on dark it is the
+  other way round, so one colour cannot do both. When the accent was one
+  colour (iOS system blue, until 2026-11), every primary button's label was at
+  4.02:1 in light and 3.65:1 in dark. `src/react/accent-text.test.ts` holds
+  the ratios for both themes and fails on `text-primary`.
 - **Non-text contrast ≥ 3:1** (WCAG 1.4.11) for UI component boundaries and
   states that convey meaning: input borders, the focus ring (`--ring`),
   checkbox/radio marks, chart/track lines and legends on the analysis and

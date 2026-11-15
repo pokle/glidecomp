@@ -106,7 +106,7 @@ export function ChoiceList({
                 <CheckIcon
                   aria-hidden
                   className={cn(
-                    "size-4 shrink-0 text-primary",
+                    "size-4 shrink-0 text-link",
                     !isSelected && "invisible"
                   )}
                 />

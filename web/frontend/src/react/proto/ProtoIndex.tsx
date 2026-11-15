@@ -52,7 +52,7 @@ const SCENARIOS: Array<{ group: string; rows: Array<{ to: string; label: string;
       {
         to: TASK,
         label: "A task",
-        look: "Eight actions in ⋯, where there were six pills and two buttons. Submit stays on the page.",
+        look: "Nine actions in ⋯, where there were six pills and three buttons. Submit your track is the first row.",
       },
       {
         to: `${TASK}/pilot/rory`,
@@ -117,7 +117,7 @@ const SCENARIOS: Array<{ group: string; rows: Array<{ to: string; label: string;
       {
         to: `${TASK}/route/quick`,
         label: "Quick entry",
-        look: "Cancel, title, Use route. The whole route as one typed line.",
+        look: "Cancel, title, Done. The whole route as one typed line; Done puts it in the draft, and Save on Route saves it.",
       },
     ],
   },
