@@ -23,11 +23,12 @@
  * with the sentence as `fullTitle`.
  */
 import type { ReactNode } from "react";
-import { Button as AriaButton, MenuTrigger } from "react-aria-components";
+import { Button as AriaButton, MenuTrigger, SubmenuTrigger } from "react-aria-components";
 import {
   CheckIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
+  ChevronRightIcon,
   EllipsisIcon,
   MenuIcon,
   PlusIcon,
@@ -56,6 +57,10 @@ export interface BarAction {
   group?: boolean;
   /** For organisers: left out for a reader who is signed out. */
   admin?: boolean;
+  /** Shown, but not available just now. */
+  disabled?: boolean;
+  /** A group of actions behind this row, opened as a second menu. */
+  children?: BarAction[];
 }
 
 export interface Related {
@@ -257,22 +262,7 @@ export function PageBar({
     </div>
   );
 
-  const actionItems: ReactNode[] = [];
-  for (const a of shown) {
-    if (a.group && actionItems.length > 0) actionItems.push(<MenuSeparator key={`${a.id}-rule`} />);
-    actionItems.push(
-      <MenuItem
-        key={a.id}
-        id={a.id}
-        href={a.to}
-        routerOptions={a.to ? openedHere() : undefined}
-        onAction={a.onAction}
-        className={cn(ROW, a.destructive && "text-destructive data-focused:text-destructive")}
-      >
-        {a.label}
-      </MenuItem>
-    );
-  }
+  const actionItems = menuItems(shown);
 
   const hasGroup = !!status || !!add || shown.length > 0;
   const trailing = (
@@ -351,6 +341,43 @@ export function PageBar({
   );
 }
 
+/** The rows of an actions menu: rules between groups, a second menu behind a row with children. */
+function menuItems(actions: BarAction[]): ReactNode[] {
+  const items: ReactNode[] = [];
+  for (const a of actions) {
+    if (a.group && items.length > 0) items.push(<MenuSeparator key={`${a.id}-rule`} />);
+    if (a.children) {
+      items.push(
+        <SubmenuTrigger key={a.id}>
+          <MenuItem id={a.id} className={ROW}>
+            <span className="min-w-0 flex-1">{a.label}</span>
+            <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          </MenuItem>
+          {/* Below the row, not beside it: a phone has no room beside. */}
+          <Menu placement="bottom end" className="max-w-[calc(100vw-2rem)] min-w-56">
+            {menuItems(a.children)}
+          </Menu>
+        </SubmenuTrigger>
+      );
+      continue;
+    }
+    items.push(
+      <MenuItem
+        key={a.id}
+        id={a.id}
+        href={a.to}
+        routerOptions={a.to ? openedHere() : undefined}
+        onAction={a.onAction}
+        isDisabled={a.disabled}
+        className={cn(ROW, a.destructive && "text-destructive data-focused:text-destructive")}
+      >
+        {a.label}
+      </MenuItem>
+    );
+  }
+  return items;
+}
+
 /** A top-level page's leading control: the places the app starts from, and the account. */
 function MainMenu({ className }: { className: string }) {
   const { options, setOption } = useProtoOptions();
@@ -389,6 +416,9 @@ function MainMenu({ className }: { className: string }) {
   );
 }
 
+/** The content column every prototype page uses. */
+export const pageClass = "mx-auto flex w-full max-w-3xl flex-col gap-5 px-gutter-safe pt-3 pb-16";
+
 /** A prototype page: its bar, then its content in the app's gutter. */
 export function ProtoPage({
   bar,
@@ -403,10 +433,7 @@ export function ProtoPage({
     <>
       {bar}
       <div
-        className={cn(
-          "mx-auto flex w-full max-w-3xl flex-col gap-5 px-gutter-safe pt-3 pb-16",
-          className
-        )}
+        className={cn(pageClass, className)}
       >
         {children}
       </div>

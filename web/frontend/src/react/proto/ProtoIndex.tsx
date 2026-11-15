@@ -97,17 +97,27 @@ const SCENARIOS: Array<{ group: string; rows: Array<{ to: string; label: string;
     ],
   },
   {
-    group: "Drafts",
+    group: "The route editor, with the real map",
     rows: [
       {
         to: `${TASK}/route`,
         label: "Route",
-        look: "⋯ and Save share the trailing slot. Save is live only while the draft differs.",
+        look: "The app's own map, turnpoint list and start and goal panels. Save is top right; the eleven buttons that sat under the list are in ⋯.",
+      },
+      {
+        to: `${TASK}/route/map`,
+        label: "Route map at full size",
+        look: "The map with the screen to itself. Tap a waypoint to add it to the route; ⋯ places a new one.",
       },
       {
         to: `${TASK}/route/3`,
         label: "A turnpoint",
-        look: "A page of a draft: Done and Back both return to Route. Nothing is saved until Save there.",
+        look: "A page of the draft. Done checks the coordinates and goes back; nothing is saved until Save on Route.",
+      },
+      {
+        to: `${TASK}/route/quick`,
+        label: "Quick entry",
+        look: "Cancel, title, Use route. The whole route as one typed line.",
       },
     ],
   },

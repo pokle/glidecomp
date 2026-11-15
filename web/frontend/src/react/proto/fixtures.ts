@@ -92,26 +92,6 @@ export const SCORES = {
   ],
 };
 
-export interface Turnpoint {
-  id: string;
-  role: string;
-  code: string;
-  radius: number;
-  leg: string;
-}
-
-export const ROUTE: Turnpoint[] = [
-  { id: "1", role: "Take-off", code: "ELLIOT", radius: 400, leg: "—" },
-  { id: "2", role: "Start", code: "ELLIOT", radius: 3000, leg: "3.0 km" },
-  { id: "3", role: "", code: "KANGCK", radius: 1500, leg: "4.9 km" },
-  { id: "4", role: "", code: "BIGARA", radius: 5000, leg: "2.9 km" },
-  { id: "5", role: "", code: "TOOMA", radius: 2000, leg: "28.9 km" },
-  { id: "6", role: "", code: "LIGHTH", radius: 400, leg: "11.1 km" },
-  { id: "7", role: "", code: "DWYERS", radius: 7000, leg: "16.2 km" },
-  { id: "8", role: "End of speed section", code: "KHANCO", radius: 1000, leg: "13.2 km" },
-  { id: "9", role: "Goal", code: "KHANCO", radius: 1000, leg: "0.0 km" },
-];
-
 /** Comps a roster can be copied from: the long-named action's page. */
 export const OTHER_COMPS = [
   { id: "c2025", name: "Corryong Cup 2025", detail: "58 pilots · Jan 2025" },

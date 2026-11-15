@@ -23,7 +23,13 @@ import { CompHub, CompSettings, CompSettingsForm, ReportCard, Scores, Task } fro
 import { OptionsProvider } from "./options";
 import { CopyPilots, EditPilot, NewPilot, Pilots } from "./PilotPages";
 import { Missing, ProtoIndex } from "./ProtoIndex";
-import { RoutePage, TurnpointPage } from "./RoutePages";
+import {
+  AddWaypointPage,
+  QuickEntryPage,
+  RouteMapPage,
+  RoutePage,
+  TurnpointPage,
+} from "./RoutePages";
 import { Competitions, MyFlights, NewComp, SubmitTrack } from "./TopLevelPages";
 
 export function ProtoApp() {
@@ -63,6 +69,13 @@ export function ProtoApp() {
               <Route path="comp/corryong/task/:taskId" element={<Task />} />
               <Route path="comp/corryong/task/:taskId/pilot/:pilotId" element={<ReportCard />} />
               <Route path="comp/corryong/task/:taskId/route" element={<RoutePage />} />
+              {/* Static segments, which rank above a turnpoint's id by themselves. */}
+              <Route path="comp/corryong/task/:taskId/route/map" element={<RouteMapPage />} />
+              <Route path="comp/corryong/task/:taskId/route/quick" element={<QuickEntryPage />} />
+              <Route
+                path="comp/corryong/task/:taskId/route/add-waypoint"
+                element={<AddWaypointPage />}
+              />
               <Route
                 path="comp/corryong/task/:taskId/route/:turnpointId"
                 element={<TurnpointPage />}
