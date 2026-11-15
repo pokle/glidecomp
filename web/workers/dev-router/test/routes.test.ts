@@ -8,7 +8,7 @@
  * matched `/api/u//…`. Every public track link 404'd, and it took a full e2e
  * run to notice.
  */
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import router from "../src/index";
 
 /** Stand-in bindings: each records the request and reports which one it was. */
@@ -183,5 +183,49 @@ describe("dev-router readiness", () => {
     expect(res.status).toBe(503);
     const body = (await res.json()) as { workers: Record<string, string> };
     expect(body.workers.COMPETITION_API).toBe("status 500");
+  });
+});
+
+describe("dev-router arrival lines", () => {
+  // wrangler names a request only once it has answered, so the request a crash
+  // cuts off is the one its log never shows. These lines are what the session
+  // log in web/scripts/dev-workers.sh reads instead.
+  const logged: string[] = [];
+  const spy = spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+    logged.push(args.join(" "));
+  });
+  afterEach(() => {
+    logged.length = 0;
+    spy.mockClear();
+  });
+
+  it("names a request on arrival, before any Worker sees it", async () => {
+    const order: string[] = [];
+    const env = {
+      ...stubEnv().env,
+      COMPETITION_API: {
+        fetch: () => {
+          order.push(`dispatched after ${logged.length} line(s)`);
+          return Promise.resolve(new Response("ok"));
+        },
+      },
+      DEV_ROUTER_LOG_ARRIVALS: "1",
+    };
+    await router.fetch(
+      new Request("http://localhost:8790/api/comp/wuhu/task/wuhu/igc/dwnx?force=1", {
+        method: "POST",
+      }),
+      env as never
+    );
+    // wrangler adds "[dev-router] " in front; dev-workers.sh matches the two.
+    expect(logged).toEqual(["→ POST /api/comp/wuhu/task/wuhu/igc/dwnx?force=1"]);
+    expect(order).toEqual(["dispatched after 1 line(s)"]);
+  });
+
+  it("says nothing unless dev-workers.sh asked for the lines", async () => {
+    const { env } = stubEnv();
+    await router.fetch(new Request("http://localhost:8790/api/comp"), env as never);
+    expect(logged).toEqual([]);
+    expect(spy).not.toHaveBeenCalled();
   });
 });

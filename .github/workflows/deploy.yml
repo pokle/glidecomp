@@ -230,6 +230,15 @@ jobs:
           # instead of quietly tripling the bill on a green run.
           E2E_SHARD: ${{ matrix.shard }}
 
+      # Every run, not only a failed one: a wrangler crash usually costs one
+      # retried test and a green run now, so a green run is where the evidence
+      # turns up. Prints the requests leading up to each death from the session
+      # log web/scripts/dev-workers.sh keeps (and a warning annotation, so a
+      # crash is visible on the run's summary); says one line when there was none.
+      - name: Show the requests around any wrangler crash
+        if: always()
+        run: bash web/scripts/wrangler-crashes.sh
+
       - name: Dump wrangler logs on failure
         if: failure()
         run: |
@@ -252,10 +261,16 @@ jobs:
           name: playwright-report-${{ matrix.shard }}
           # test-results/ holds the per-failure trace.zip files referenced by
           # playwright.config.ts's `trace: "retain-on-failure"`. They're
-          # separate from the HTML report, so include both paths.
+          # separate from the HTML report, so include both paths. The session
+          # log is web/scripts/dev-workers.sh's record of every request, for
+          # reading a wrangler crash in full.
           path: |
             playwright-report/
             test-results/
+            web/.wrangler/dev-workers.log
+          # The session log is under a dot-directory, which upload-artifact
+          # (since v4.4) leaves out unless told otherwise.
+          include-hidden-files: true
           retention-days: 7
 
   # The OTHER e2e suite: e2e/ssr.spec.ts against the BUILT output served by the
@@ -343,6 +358,15 @@ jobs:
       - name: Run SSR E2E tests
         run: bun run test:e2e:ssr
 
+      # Every run, not only a failed one: a wrangler crash usually costs one
+      # retried test and a green run now, so a green run is where the evidence
+      # turns up. Prints the requests leading up to each death from the session
+      # log web/scripts/dev-workers.sh keeps (and a warning annotation, so a
+      # crash is visible on the run's summary); says one line when there was none.
+      - name: Show the requests around any wrangler crash
+        if: always()
+        run: bash web/scripts/wrangler-crashes.sh
+
       - name: Dump wrangler logs on failure
         if: failure()
         run: |
@@ -365,6 +389,9 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            web/.wrangler/dev-workers.log
+          # See the E2E job: the session log is under a dot-directory.
+          include-hidden-files: true
           retention-days: 7
 
   deploy:
