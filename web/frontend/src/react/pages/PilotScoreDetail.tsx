@@ -501,6 +501,30 @@ export function PilotScoreDetail() {
     }
   };
 
+  // The map answers the steps that are anchored to it, which today are all in
+  // the Flight section. Those sections stay beside the map; the rest of the
+  // page follows in MasterDetail's `after`, so on a phone the pinned map
+  // scrolls away once the reader is past the last step it can show. Found
+  // from the data rather than by section id, so a later section that gains an
+  // anchor keeps the map with it. The first section (Flight, or "Why this
+  // tracklog was excluded") always stays, anchors or not.
+  const lastAnchored = explanation.sections.reduce(
+    (last, section, i) =>
+      section.items.some((item) => data.eventsByItem.has(item.id)) ? i : last,
+    0,
+  );
+  const mapSections = explanation.sections.slice(0, lastAnchored + 1);
+  const restSections = explanation.sections.slice(lastAnchored + 1);
+  const renderSection = (section: (typeof explanation.sections)[number]) => (
+    <ExplanationSection
+      key={section.id}
+      section={section}
+      selectedItem={selectedItem}
+      hasAnchor={(item) => data.eventsByItem.has(item.id)}
+      onItemClick={onItemClick}
+    />
+  );
+
   return (
     <Page width="wide" bar={bar}>
       {/* The pilot's name is the bar's title, and the page's <h1>. */}
@@ -568,6 +592,11 @@ export function PilotScoreDetail() {
           (WCAG 2.4.11). The component brings the "Hide map" fold — remembered,
           so a reader who reads the words says so once — and the scroll-margin
           clearance that keeps focus clear of the stuck pane.
+
+          The pane stays only beside the sections whose steps it can show;
+          the rest of the page is `after`, so on a phone the map scrolls off
+          once the reader is past them, rather than covering a third of the
+          screen for the glossary.
 
           `storageKey`: the noun is "map" here and on the waypoints page, and
           those are different decisions on very different pages. */}
@@ -671,15 +700,14 @@ export function PilotScoreDetail() {
                 quality={data.trackQuality}
                 inExplanation={data.entry.track_excluded != null}
               />
-              {explanation.sections.map((section) => (
-                <ExplanationSection
-                  key={section.id}
-                  section={section}
-                  selectedItem={selectedItem}
-                  hasAnchor={(item) => data.eventsByItem.has(item.id)}
-                  onItemClick={onItemClick}
-                />
-              ))}
+              {mapSections.map(renderSection)}
+            </div>
+          }
+          // Read on from the explanation, but nothing here moves the map: on
+          // a phone the map lets go before this (see MasterDetail's `after`).
+          after={
+            <div className="mt-4 space-y-4">
+              {restSections.map(renderSection)}
               {data.entry.track_excluded ? <TrackValidityDocLink /> : null}
               {/* Closes the loop from this task back to the competition. Loads
                   after hydration — see TaskInCompScores for why it is not in the
