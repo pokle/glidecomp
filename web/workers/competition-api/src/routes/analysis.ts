@@ -379,6 +379,11 @@ export const analysisRoutes = new Hono<AuthedEnv>()
       // Classes are never mixed (engine aggregate.ts), so a comp with an
       // open and a floater class produces one aggregate each.
       const byClass = new Map<string, CompTaskResult[]>();
+      // Which tasks each class's aggregate covers, parallel to its
+      // taskLabels. The labels alone cannot say: a comp that sets one task per
+      // class per day labels both "T1", so the page could not tell an Open
+      // reader which of the two task analyses is theirs.
+      const tasksByClass = new Map<string, { task_id: string; pilot_count: number }[]>();
       const taskLabels: string[] = [];
       const includedTasks: {
         task_id: string;
@@ -418,6 +423,12 @@ export const analysisRoutes = new Hono<AuthedEnv>()
             totals: cls.totals,
           });
           byClass.set(cls.pilot_class, list);
+          const classTasks = tasksByClass.get(cls.pilot_class) ?? [];
+          classTasks.push({
+            task_id: encodeId(alphabet, taskIdNum),
+            pilot_count: cls.report.pilots.length,
+          });
+          tasksByClass.set(cls.pilot_class, classTasks);
         }
       }
 
@@ -451,6 +462,7 @@ export const analysisRoutes = new Hono<AuthedEnv>()
         const compRanking = rankingByClass.get(pilotClass);
         return {
           pilot_class: pilotClass,
+          tasks: tasksByClass.get(pilotClass) ?? [],
           aggregate: aggregateComp(
             taskResults,
             compRanking ? { compRanking } : undefined

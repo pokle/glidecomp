@@ -93,6 +93,9 @@ export const MOBILE_SPEC_FILES = [
   // a phone, in a tab with no browser Back, and its map and panel controls
   // were 29-32 px (#860 §1).
   "analysis-bar.spec.ts",
+  // The comp analysis's task list and class picker: this page is read on a
+  // phone as well as on a big screen, and its task links were 20 px tall.
+  "comp-analysis.spec.ts",
   // Where a refusal lands on the task's management tools — the manage grid's
   // row actions and the manual-flight page (#808). A task is run from a hill,
   // and a phone is where a refusal can land off-screen.

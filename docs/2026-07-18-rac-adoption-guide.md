@@ -371,8 +371,13 @@ to know before using it:
 - **Pass only the actions this reader may use.** The bar does not know who is
   signed in beyond its own main menu. `group: true` draws a rule above a row;
   `children` puts a second menu behind one, which opens BELOW its row.
-- **`below` is a search field, tabs or a class select.** Nothing else sticks.
-  Tabs in `below` mean `Tabs` wraps the `Page`.
+- **`below` is a search field, tabs or a class picker.** Nothing else sticks.
+  Tabs in `below` mean `Tabs` wraps the `Page`. A picker between views of the
+  same content, with no panels of its own, is `SegmentedControl`
+  (`rac/segmented-control.tsx`, a radio group): its segments, not the strip,
+  are the 44 px targets, so the strip is 51 px with its padding. In a
+  fit-content strip give the segments `flex-none`, or they shrink and
+  truncate their own labels.
 - **`fill`** is a page that is one thing with the screen to itself (a map at
   full size): the page does not scroll and the Shell's footer is hidden.
 - **Loading**: render the bar before the data, with the fallback labels the
