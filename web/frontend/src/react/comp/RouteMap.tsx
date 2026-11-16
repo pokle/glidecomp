@@ -63,10 +63,11 @@ export default function RouteMap({
    */
   focus?: { lat: number; lon: number; key: number } | null;
   /**
-   * Show the place-search box above the map. Off by default, and meant for
+   * Show the search box above the map. Off by default, and meant for
    * editing surfaces: a brand-new competition has no waypoints to fit to, so
    * the map opens on the whole globe and searching is the only way to reach
-   * the valley the organiser is setting up. Each search is a billed geocoding
+   * the valley the organiser is setting up. Once there are waypoints it finds
+   * those too, by code or name. Each place search is a billed geocoding
    * request, so leave it off on read-only public views.
    */
   placeSearch?: boolean;
@@ -224,6 +225,8 @@ export default function RouteMap({
         <div className="shrink-0 border-b border-border bg-card p-1.5">
           <PlaceSearchField
             isDisabled={!provider}
+            waypoints={waypoints}
+            onWaypointPick={(wp) => provider?.panTo(wp.lat, wp.lon)}
             onPick={(place) => {
               if (!provider) return;
               if (place.bounds) provider.fitToBounds(place.bounds);

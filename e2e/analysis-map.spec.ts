@@ -207,8 +207,47 @@ test("place search reaches the Mapbox geocoder", async ({ page, context }) => {
   const search = page.getByRole("combobox", { name: "Search for a place" });
   await search.click();
   await search.fill("Corryong");
-  await expect(page.getByRole("option").first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("option").first()).toContainText(/Corryong/i);
+
+  // Matched by its context, so a waypoint whose name contains the query could
+  // never stand in for the geocoder's answer.
+  // Scoped to the suggestions: once the list closes, the map's style picker
+  // has <option>s of its own.
+  const options = page.getByRole("listbox").getByRole("option");
+  await expect(options.filter({ hasText: "Victoria, Australia" }).first()).toContainText(
+    "Corryong",
+    { timeout: 15_000 }
+  );
+
+  // The same box finds the comp's own waypoints, and lists them ahead of the
+  // geocoder's places. This query has no recording, so the page answers it
+  // here (a page route beats the fixture's context route) with one place,
+  // which is what lets the order be checked.
+  await page.route("**/search/geocode/v6/forward?*q=ELLIOT*", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({
+        features: [
+          {
+            properties: {
+              mapbox_id: "test-elliotville",
+              name: "Elliotville",
+              place_formatted: "Testland",
+              coordinates: { longitude: 147.9, latitude: -36.2 },
+            },
+          },
+        ],
+      }),
+    })
+  );
+  await search.fill("ELLIOT");
+  await expect(options.nth(1)).toContainText("Testland", { timeout: 15_000 });
+  await expect(options.first()).toContainText("Waypoint ELLIOT");
+  await expect(options).toHaveCount(2);
+  await options.first().click();
+  // Picking it settles the field on the waypoint and closes the list.
+  await expect(search).toHaveValue("ELLIOT");
+  await expect(search).toHaveAttribute("aria-expanded", "false");
 
   mapbox.assertComplete();
 });
