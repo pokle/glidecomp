@@ -185,14 +185,20 @@ export function TaskAnalysis() {
               excludedHref={`${hrefFor("method")}#${EXCLUDED_PILOTS_ID}`}
             />
 
-            {boxes.map((box) => (
-              <SectionBox
-                key={box.key}
-                href={box.href}
-                label={box.label}
-                facts={box.facts}
-              />
-            ))}
+            {/* One stack, spaced like the comp list's cards (space-y-2.5):
+                these are rows of one list, not sections of a page, so they
+                sit closer than the frame's space-y-6 between the basis and
+                the list. */}
+            <div className="space-y-2.5">
+              {boxes.map((box) => (
+                <SectionBox
+                  key={box.key}
+                  href={box.href}
+                  label={box.label}
+                  facts={box.facts}
+                />
+              ))}
+            </div>
           </>
         );
       }}
@@ -220,7 +226,9 @@ function SectionBox({
   return (
     <Link
       to={href}
-      className="rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      // `block`: an `<a>` is inline by default, and vertical margin does
+      // nothing to an inline box, so the stack's spacing collapsed to ~2 px.
+      className="block rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       <Card className="gap-2 transition-colors hover:bg-accent/40">
         <h2 className="text-lg font-semibold">{label}</h2>
