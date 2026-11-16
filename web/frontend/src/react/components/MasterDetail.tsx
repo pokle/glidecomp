@@ -19,7 +19,10 @@
  * - STACKED (narrow), THE DETAIL IS PINNED. It is first in the DOM, sticks to
  *   the top of the viewport while any of the master is on screen, and
  *   releases with the master's last row — so a row picked at the bottom
- *   changes a detail that is right there. A "Hide <noun>" toggle folds the
+ *   changes a detail that is right there. Content that follows on from the
+ *   master but never drives the detail goes in `after` (see below), so the
+ *   pane lets go where its rows end rather than covering the rest of the
+ *   page. A "Hide <noun>" toggle folds the
  *   pane away for readers who only want the list, and the answer is REMEMBERED
  *   (per `storageKey`, defaulting to `detailLabel`) — a reader who came for
  *   the words should not have to dismiss the same pane on every page. A caller
@@ -62,6 +65,30 @@
  * instead. The task-analysis pages used to carry a fixed
  * table-of-contents bar above it and needed their own offset; the report is a
  * page per section now, and small enough to need no rail.
+ *
+ * ## `after`: the rest of the column, without the pane
+ *
+ * A pinned pane is only worth its height while the rows that drive it are on
+ * screen. The report card's map answers the Flight section's steps and
+ * nothing below them, yet it used to stay stuck over the validity, distance
+ * and time sections, the glossary and all. `after` is what follows the
+ * master in the same column, read on from it, but outside the pane's reach.
+ *
+ * Sticky stops at the end of its parent, so the release costs no script:
+ *
+ * - STACKED, the pane, the handle and the master share one wrapper, and
+ *   `after` comes after that wrapper. When the master's last row has gone by,
+ *   the wrapper's bottom edge takes the pane up and off the screen with it.
+ *   Scrolling back up into the master pins it again.
+ * - SIDE BY SIDE, that wrapper is `display: contents`, so its three children
+ *   are grid items as they always were. `after` goes in a second row under
+ *   the master, and the pane and the handle span both rows, so the column
+ *   stays pinned beside the whole page. Next to the text it covers nothing,
+ *   so there is no reason to let it go there.
+ *
+ * Nothing in `after` can be covered by the pane, so it needs only the page
+ * bar's clearance for focus, not the pane's. Without `after` the DOM is
+ * exactly what it was.
  *
  * ## `navigation`: one pane at a time, stacked
  *
@@ -239,6 +266,7 @@ export function MasterDetail({
   fold: foldProp,
   navigation,
   onWideChange,
+  after,
 }: {
   master: ReactNode;
   /** null renders the master alone (no pane, no toggle, no scroll margins). */
@@ -305,6 +333,13 @@ export function MasterDetail({
   /** Told, from a ResizeObserver, whether the layout is currently side by
    * side. For behaviour only — never for anything rendered (see file doc). */
   onWideChange?: (wide: boolean) => void;
+  /**
+   * What follows the master in its column but never drives the detail (see
+   * the file doc). Stacked, the pinned pane lets go when the master ends
+   * instead of staying over this. Side by side, the pane stays pinned beside
+   * it. Not for `navigation`, whose stacked pane is never pinned.
+   */
+  after?: ReactNode;
 }) {
   const prefsKey = storageKey ?? detailLabel;
   // Folded away only while stacked — side by side there is no screen to
@@ -391,7 +426,169 @@ export function MasterDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showingDetail, wide]);
 
-  if (detail === null) return <>{master}</>;
+  if (detail === null) {
+    return (
+      <>
+        {master}
+        {after}
+      </>
+    );
+  }
+  // `after` only means something beside a PINNED pane.
+  const split = after != null && !navigation;
+
+  const pair = (
+    <>
+      <div
+        ref={paneWrapRef}
+        className={cn(
+          navigation
+            ? cn(
+                // Stacked there is nothing to pin against: the pane IS the
+                // view, and the page scrolls it. Hidden while the list is
+                // the view — by the same container query as the split, so
+                // the two can never disagree about the breakpoint.
+                "@5xl:sticky @5xl:z-10",
+                // Clearing whatever owns the top of the viewport, for the
+                // scrollIntoView above — the same thing STACKED_TOP names:
+                // the page bar, at every width.
+                "scroll-mt-20 [@media(max-height:500px)]:scroll-mt-2",
+                // `print:block` because paper is not a phone: the page
+                // prints whole, both halves, whichever one is on screen.
+                !showingDetail && "hidden @5xl:block print:block"
+              )
+            : cn(
+                // Stacked, the pane pins to the top and the master pages
+                // beneath it, covered edge to edge by the bleed surface.
+                "sticky z-10 pb-3",
+                STACKED_TOP[stackedTop],
+                BLEED[bleed],
+                "@5xl:mx-0 @5xl:bg-transparent @5xl:px-0 @5xl:pb-0"
+              ),
+          // Side by side it becomes the sticky right-hand column, where it
+          // pins against the Shell's 60px glass header and covers nothing.
+          // order-3: list, handle, pane.
+          "@5xl:top-20 @5xl:order-3",
+          // Side by side with `after`, the pane's grid area is both rows,
+          // so it stays pinned beside `after` too (see the file doc).
+          split && "@5xl:row-span-2",
+          // Paper has no viewport to pin to.
+          "print:static print:z-auto print:m-0 print:bg-transparent print:p-0",
+          hideDetailInPrint && "print:hidden",
+          paneWrapClassName
+        )}
+      >
+        {/* Nothing at all when the caller hoisted the fold: the row exists
+            to carry ONE right-aligned button, so leaving it empty would
+            spend the height this was meant to give back. The scroll
+            clearances below then over-clear by the row that is no longer
+            stuck (~2.25rem), which is the safe direction for WCAG 2.4.11 —
+            a focused row stops a little lower than it needs to, never
+            behind the pane. */}
+        {navigation || !foldProp ? (
+          <div
+            className={cn(
+              "flex pb-1 @5xl:hidden print:hidden",
+              navigation ? "justify-start pb-2" : "justify-end",
+              paneWidthClassName
+            )}
+          >
+            {navigation ? (
+              <Button variant="outline" size="sm" onPress={navigation.onBack}>
+                <ArrowLeftIcon className="size-4" />
+                {navigation.backLabel}
+              </Button>
+            ) : (
+              <DetailFoldButton fold={fold} detailLabel={detailLabel} />
+            )}
+          </div>
+        ) : null}
+        <div
+          id={detailId}
+          ref={paneRef}
+          // A region, not a bare div: it is read before the master it
+          // belongs to, so it has to say what it is. tabIndex makes the
+          // capped, scrollable box reachable without a mouse (WCAG 2.1.1),
+          // and is where focus lands on a stacked navigation.
+          role="region"
+          aria-labelledby={detailHeadingId}
+          aria-label={detailAriaLabel}
+          tabIndex={0}
+          className={cn(
+            "rounded-lg border bg-card outline-none",
+            paneWidthClassName,
+            navigation
+              ? // Stacked the pane is the whole view, so it takes the page's
+                // scroll rather than a cap of its own; the cap comes back
+                // with the side-by-side column.
+                "@5xl:max-h-[calc(100vh-7rem)] @5xl:overflow-y-auto"
+              : "overflow-y-auto max-h-[19rem] sm:max-h-[23rem] @5xl:max-h-[calc(100vh-7rem)]",
+            "focus-visible:ring-2 focus-visible:ring-ring/50",
+            "print:max-h-none print:overflow-visible",
+            !navigation && collapsed && "hidden @5xl:block",
+            paneClassName
+          )}
+        >
+          {detail}
+        </div>
+      </div>
+      <SplitHandle
+        share={masterShare}
+        detailLabel={detailLabel}
+        detailId={detailId}
+        masterId={masterId}
+        gridRef={gridRef}
+        spanRows={split}
+        onShareChange={(next) => {
+          setMasterShare(next);
+          writeStoredMasterShare(prefsKey, next);
+        }}
+        onReset={() => {
+          const next = clampMasterShare(defaultMasterShare);
+          setMasterShare(next);
+          writeStoredMasterShare(prefsKey, next);
+        }}
+      />
+      <div
+        id={masterId}
+        ref={masterRef}
+        // Focus target for the way back out of a stacked detail. -1 keeps it
+        // out of the tab order: it is a destination, not a stop.
+        tabIndex={navigation ? -1 : undefined}
+        className={cn(
+          "min-w-0 outline-none @5xl:order-1",
+          navigation
+            ? showingDetail && "hidden @5xl:block print:block"
+            : cn(
+                // Focus must not stop behind the pinned pane (WCAG 2.4.11).
+                // Its stacked height is a constant cap, so its bottom edge
+                // is a constant too: 60px sticky offset + the ~2.25rem
+                // toggle row + the pane's 19rem (sm: 23rem) cap + its pb-3.
+                // Rows AND cells, because RAC's grid navigation scrolls
+                // whichever it moved focus to; buttons and links because a
+                // master need not be a table at all — the report card's is
+                // an explanation whose steps are buttons, and nothing there
+                // would otherwise be covered by this. Written out rather
+                // than composed: Tailwind scans for whole class strings, so
+                // a selector built from parts compiles to nothing.
+                // Folded, only the toggle row is stuck, so the clearance
+                // shrinks with it rather than shoving rows mid-screen.
+                collapsed
+                  ? "[&_tr]:scroll-mt-28 [&_td]:scroll-mt-28 [&_th]:scroll-mt-28 [&_button]:scroll-mt-28 [&_a]:scroll-mt-28"
+                  : cn(
+                      "[&_tr]:scroll-mt-[26rem] [&_td]:scroll-mt-[26rem] [&_th]:scroll-mt-[26rem] [&_button]:scroll-mt-[26rem] [&_a]:scroll-mt-[26rem]",
+                      "sm:[&_tr]:scroll-mt-[30rem] sm:[&_td]:scroll-mt-[30rem] sm:[&_th]:scroll-mt-[30rem] sm:[&_button]:scroll-mt-[30rem] sm:[&_a]:scroll-mt-[30rem]"
+                    )
+              ),
+          // Side by side the pane is a column that covers nothing, but a
+          // focused row still has to clear the Shell's glass header.
+          "@5xl:[&_tr]:scroll-mt-24 @5xl:[&_td]:scroll-mt-24 @5xl:[&_th]:scroll-mt-24 @5xl:[&_button]:scroll-mt-24 @5xl:[&_a]:scroll-mt-24"
+        )}
+      >
+        {master}
+      </div>
+    </>
+  );
 
   return (
     <div ref={containerRef} className="@container">
@@ -404,150 +601,27 @@ export function MasterDetail({
           gridTemplateColumns: `minmax(0, ${masterShare}fr) auto minmax(0, ${1 - masterShare}fr)`,
         }}
       >
-        <div
-          ref={paneWrapRef}
-          className={cn(
-            navigation
-              ? cn(
-                  // Stacked there is nothing to pin against: the pane IS the
-                  // view, and the page scrolls it. Hidden while the list is
-                  // the view — by the same container query as the split, so
-                  // the two can never disagree about the breakpoint.
-                  "@5xl:sticky @5xl:z-10",
-                  // Clearing whatever owns the top of the viewport, for the
-                  // scrollIntoView above — the same thing STACKED_TOP names:
-                  // the page bar, at every width.
-                  "scroll-mt-20 [@media(max-height:500px)]:scroll-mt-2",
-                  // `print:block` because paper is not a phone: the page
-                  // prints whole, both halves, whichever one is on screen.
-                  !showingDetail && "hidden @5xl:block print:block"
-                )
-              : cn(
-                  // Stacked, the pane pins to the top and the master pages
-                  // beneath it, covered edge to edge by the bleed surface.
-                  "sticky z-10 pb-3",
-                  STACKED_TOP[stackedTop],
-                  BLEED[bleed],
-                  "@5xl:mx-0 @5xl:bg-transparent @5xl:px-0 @5xl:pb-0"
-                ),
-            // Side by side it becomes the sticky right-hand column, where it
-            // pins against the Shell's 60px glass header and covers nothing.
-            // order-3: list, handle, pane.
-            "@5xl:top-20 @5xl:order-3",
-            // Paper has no viewport to pin to.
-            "print:static print:z-auto print:m-0 print:bg-transparent print:p-0",
-            hideDetailInPrint && "print:hidden",
-            paneWrapClassName
-          )}
-        >
-          {/* Nothing at all when the caller hoisted the fold: the row exists
-              to carry ONE right-aligned button, so leaving it empty would
-              spend the height this was meant to give back. The scroll
-              clearances below then over-clear by the row that is no longer
-              stuck (~2.25rem), which is the safe direction for WCAG 2.4.11 —
-              a focused row stops a little lower than it needs to, never
-              behind the pane. */}
-          {navigation || !foldProp ? (
+        {split ? (
+          <>
+            {/* Stacked, the pane's containing block: it ends where the master
+                does, and takes the pane with it. Side by side it is not a
+                box at all, and its children are the grid's items. */}
+            <div className="@5xl:contents">{pair}</div>
             <div
               className={cn(
-                "flex pb-1 @5xl:hidden print:hidden",
-                navigation ? "justify-start pb-2" : "justify-end",
-                paneWidthClassName
+                "min-w-0 @5xl:order-4 @5xl:col-start-1 @5xl:row-start-2",
+                // Nothing here is ever under the pane, so focus clears only
+                // the page bar (stacked) or the glass header (side by side).
+                "[&_tr]:scroll-mt-20 [&_td]:scroll-mt-20 [&_th]:scroll-mt-20 [&_button]:scroll-mt-20 [&_a]:scroll-mt-20",
+                "@5xl:[&_tr]:scroll-mt-24 @5xl:[&_td]:scroll-mt-24 @5xl:[&_th]:scroll-mt-24 @5xl:[&_button]:scroll-mt-24 @5xl:[&_a]:scroll-mt-24"
               )}
             >
-              {navigation ? (
-                <Button variant="outline" size="sm" onPress={navigation.onBack}>
-                  <ArrowLeftIcon className="size-4" />
-                  {navigation.backLabel}
-                </Button>
-              ) : (
-                <DetailFoldButton fold={fold} detailLabel={detailLabel} />
-              )}
+              {after}
             </div>
-          ) : null}
-          <div
-            id={detailId}
-            ref={paneRef}
-            // A region, not a bare div: it is read before the master it
-            // belongs to, so it has to say what it is. tabIndex makes the
-            // capped, scrollable box reachable without a mouse (WCAG 2.1.1),
-            // and is where focus lands on a stacked navigation.
-            role="region"
-            aria-labelledby={detailHeadingId}
-            aria-label={detailAriaLabel}
-            tabIndex={0}
-            className={cn(
-              "rounded-lg border bg-card outline-none",
-              paneWidthClassName,
-              navigation
-                ? // Stacked the pane is the whole view, so it takes the page's
-                  // scroll rather than a cap of its own; the cap comes back
-                  // with the side-by-side column.
-                  "@5xl:max-h-[calc(100vh-7rem)] @5xl:overflow-y-auto"
-                : "overflow-y-auto max-h-[19rem] sm:max-h-[23rem] @5xl:max-h-[calc(100vh-7rem)]",
-              "focus-visible:ring-2 focus-visible:ring-ring/50",
-              "print:max-h-none print:overflow-visible",
-              !navigation && collapsed && "hidden @5xl:block",
-              paneClassName
-            )}
-          >
-            {detail}
-          </div>
-        </div>
-        <SplitHandle
-          share={masterShare}
-          detailLabel={detailLabel}
-          detailId={detailId}
-          masterId={masterId}
-          gridRef={gridRef}
-          onShareChange={(next) => {
-            setMasterShare(next);
-            writeStoredMasterShare(prefsKey, next);
-          }}
-          onReset={() => {
-            const next = clampMasterShare(defaultMasterShare);
-            setMasterShare(next);
-            writeStoredMasterShare(prefsKey, next);
-          }}
-        />
-        <div
-          id={masterId}
-          ref={masterRef}
-          // Focus target for the way back out of a stacked detail. -1 keeps it
-          // out of the tab order: it is a destination, not a stop.
-          tabIndex={navigation ? -1 : undefined}
-          className={cn(
-            "min-w-0 outline-none @5xl:order-1",
-            navigation
-              ? showingDetail && "hidden @5xl:block print:block"
-              : cn(
-                  // Focus must not stop behind the pinned pane (WCAG 2.4.11).
-                  // Its stacked height is a constant cap, so its bottom edge
-                  // is a constant too: 60px sticky offset + the ~2.25rem
-                  // toggle row + the pane's 19rem (sm: 23rem) cap + its pb-3.
-                  // Rows AND cells, because RAC's grid navigation scrolls
-                  // whichever it moved focus to; buttons and links because a
-                  // master need not be a table at all — the report card's is
-                  // an explanation whose steps are buttons, and nothing there
-                  // would otherwise be covered by this. Written out rather
-                  // than composed: Tailwind scans for whole class strings, so
-                  // a selector built from parts compiles to nothing.
-                  // Folded, only the toggle row is stuck, so the clearance
-                  // shrinks with it rather than shoving rows mid-screen.
-                  collapsed
-                    ? "[&_tr]:scroll-mt-28 [&_td]:scroll-mt-28 [&_th]:scroll-mt-28 [&_button]:scroll-mt-28 [&_a]:scroll-mt-28"
-                    : cn(
-                        "[&_tr]:scroll-mt-[26rem] [&_td]:scroll-mt-[26rem] [&_th]:scroll-mt-[26rem] [&_button]:scroll-mt-[26rem] [&_a]:scroll-mt-[26rem]",
-                        "sm:[&_tr]:scroll-mt-[30rem] sm:[&_td]:scroll-mt-[30rem] sm:[&_th]:scroll-mt-[30rem] sm:[&_button]:scroll-mt-[30rem] sm:[&_a]:scroll-mt-[30rem]"
-                      )
-                ),
-            // Side by side the pane is a column that covers nothing, but a
-            // focused row still has to clear the Shell's glass header.
-            "@5xl:[&_tr]:scroll-mt-24 @5xl:[&_td]:scroll-mt-24 @5xl:[&_th]:scroll-mt-24 @5xl:[&_button]:scroll-mt-24 @5xl:[&_a]:scroll-mt-24"
-          )}
-        >
-          {master}
-        </div>
+          </>
+        ) : (
+          pair
+        )}
       </div>
     </div>
   );
@@ -565,6 +639,7 @@ function SplitHandle({
   detailId,
   masterId,
   gridRef,
+  spanRows,
   onShareChange,
   onReset,
 }: {
@@ -573,6 +648,8 @@ function SplitHandle({
   detailId: string;
   masterId: string;
   gridRef: RefObject<HTMLDivElement | null>;
+  /** Run the whole height when the pane spans `after`'s row too. */
+  spanRows: boolean;
   onShareChange: (share: number) => void;
   onReset: () => void;
 }) {
@@ -640,6 +717,7 @@ function SplitHandle({
       className={cn(
         "group relative z-20 hidden w-7 cursor-col-resize touch-none select-none self-stretch",
         "@5xl:flex @5xl:order-2 print:hidden",
+        spanRows && "@5xl:row-span-2",
         "pointer-coarse:w-11",
         "justify-center outline-none",
         "hover:bg-muted/60 focus-visible:bg-muted/60",

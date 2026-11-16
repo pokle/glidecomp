@@ -257,6 +257,65 @@ test.describe("the pilot report card", () => {
     await page.setViewportSize({ width: 1400, height: 900 });
     await expect(page.getByRole("button", { name: /^(Hide|Show) map$/ })).toBeHidden();
   });
+
+  /**
+   * The map stays only beside the steps it can show.
+   *
+   * Every step that moves the map is in the Flight section, so on a phone
+   * the pinned map is worth its height there and nowhere below it. The
+   * sections that follow are MasterDetail's `after`: sticky stops at the end
+   * of its parent, so the map scrolls off with the last step and pins again
+   * on the way back up. Measured, not asserted from classes: a pane whose
+   * parent did not end where it should would still carry every right class.
+   *
+   * Side by side the map is a column that covers nothing, so it stays pinned
+   * beside the whole page, the glossary included.
+   */
+  test("on a phone the map scrolls off after the flight; side by side it stays", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 780 });
+    await page.goto(cardUrl);
+
+    const map = page.getByRole("region", { name: "Track map" });
+    await expect(map).toBeVisible({ timeout: 30_000 });
+    const steps = page.locator('button[title="Show on map"]');
+    await expect(steps.first()).toBeVisible();
+
+    // The last step that moves the map, at the foot of the screen: the map
+    // must still be pinned above it, or tapping it changes nothing in view.
+    const scrollTo = (target: "lastStep" | "bottom") =>
+      page.evaluate((where) => {
+        if (where === "bottom") {
+          window.scrollTo(0, document.documentElement.scrollHeight);
+          return;
+        }
+        const all = document.querySelectorAll('button[title="Show on map"]');
+        all[all.length - 1].scrollIntoView({ block: "end" });
+      }, target);
+    await scrollTo("lastStep");
+    expect(await page.evaluate(() => window.scrollY), "the step is below the fold").toBeGreaterThan(0);
+    await expect(map).toBeInViewport();
+    await expect(steps.last()).toBeInViewport();
+
+    // Past the flight, the map has gone up and off the screen with it —
+    // scrolled away, not folded.
+    await scrollTo("bottom");
+    await expect(map).not.toBeInViewport();
+    await expect(map).toBeVisible();
+    const box = await map.boundingBox();
+    expect(box!.y + box!.height, "the map went UP, off the top").toBeLessThanOrEqual(0);
+
+    // Back up into the flight, and it pins again.
+    await scrollTo("lastStep");
+    await expect(map).toBeInViewport();
+
+    // Side by side: pinned beside everything, down to the foot of the page.
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await scrollTo("bottom");
+    expect(await page.evaluate(() => window.scrollY), "a page long enough to scroll").toBeGreaterThan(0);
+    await expect(map).toBeInViewport();
+  });
   /**
    * The anonymous reader (issue #666).
    *
