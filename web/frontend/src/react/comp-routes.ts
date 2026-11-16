@@ -189,11 +189,6 @@ export const COMP_SSR_ROUTES = [
     why: "The route and the public results; the admin's tools on it are client-only.",
   },
   {
-    name: "taskDiagram",
-    path: "/comp/:compId/task/:taskId/diagram",
-    why: "The route diagram at full size (#814). Always noindex: the task page is the indexable form.",
-  },
-  {
     name: "pilot",
     path: "/comp/:compId/task/:taskId/pilot/:pilotId",
     why: "The report card: how one pilot's score was worked out.",
@@ -237,8 +232,20 @@ export const LEGACY_TASK_ANALYSIS: CompRoute = {
   why: "The per-task analysis while it hung off the comp report; 301s to /comp/:c/task/:t/analysis.",
 };
 
+/**
+ * The task's route at full size, a page for two weeks of November 2026
+ * (#814). The task page draws the same route, so the URL goes there.
+ */
+export const LEGACY_TASK_DIAGRAM: CompRoute = {
+  path: "/comp/:compId/task/:taskId/diagram",
+  why: "The route diagram while it had a page of its own; 301s to /comp/:c/task/:t.",
+};
+
 /** Every redirect the Function answers itself, ahead of both tables above. */
-export const COMP_REDIRECT_ROUTES: readonly CompRoute[] = [LEGACY_TASK_ANALYSIS];
+export const COMP_REDIRECT_ROUTES: readonly CompRoute[] = [
+  LEGACY_TASK_ANALYSIS,
+  LEGACY_TASK_DIAGRAM,
+];
 
 // ── The pattern syntax ───────────────────────────────────────────────────────
 

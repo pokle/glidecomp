@@ -27,7 +27,6 @@ import {
   loadCompScores,
   loadCompWaypoints,
   loadTaskDetail,
-  loadTaskDiagram,
   loadPilotScoreDetail,
   loadCompAnalysis,
   loadTaskAnalysis,
@@ -46,6 +45,7 @@ import {
   COMP_SHELL_ROUTES,
   COMP_SSR_ROUTES,
   LEGACY_TASK_ANALYSIS as LEGACY_TASK_ANALYSIS_ROUTE,
+  LEGACY_TASK_DIAGRAM as LEGACY_TASK_DIAGRAM_ROUTE,
   compRouteRegExp,
   type CompSsrRouteName,
 } from "../../web/frontend/src/react/comp-routes";
@@ -60,7 +60,6 @@ import {
   compWaypointsPath,
   compAnalysisPath,
   taskPath,
-  taskDiagramPath,
   taskAnalysisPath,
   taskAnalysisSectionPath,
   taskAnalysisMetricPath,
@@ -169,6 +168,13 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = COMP_SHELL_ROUTES.map((r) => compRouteReg
  * `m[1]` is the comp's segment, `m[2]` the task's, `m[3]` "/similar" or nothing.
  */
 const LEGACY_TASK_ANALYSIS = compRouteRegExp(LEGACY_TASK_ANALYSIS_ROUTE.path);
+
+/**
+ * The task's route at full size, a page of its own for two weeks of November
+ * 2026 (#814), 301'd in onRequest to the task page, which draws the same
+ * route. `m[1]` is the comp's segment and `m[2]` the task's, carried across.
+ */
+const LEGACY_TASK_DIAGRAM = compRouteRegExp(LEGACY_TASK_DIAGRAM_ROUTE.path);
 
 type RouteRun = (f: FetchFn, m: RegExpMatchArray, origin: string) => Promise<Rendered>;
 
@@ -319,40 +325,6 @@ const ROUTE_RUNS: { [K in CompSsrRouteName]: { run: RouteRun } } = {
                 [data.task.name, taskPath(compId, data.comp?.name, taskId, data.task.name)],
               ])
             ),
-        },
-      };
-    },
-  },
-  taskDiagram: {
-    // The task's route at full size (#814 — it was an overlay over the comp
-    // page). Server-rendered because the SVG costs nothing to draw here and a
-    // reader on a weak signal gets the route in the first response; noindexed
-    // because it says nothing the task page does not, and the task page is the
-    // indexable form.
-    async run(f, m, origin) {
-      const urlCompId = idFromSegment(m[1]);
-      const taskId = idFromSegment(m[2]);
-      const data = await loadTaskDiagram(f, urlCompId, taskId);
-      // The id this viewer's URLs carry: plus the share key on a hidden comp.
-      const compId = compUrlId(data.comp, urlCompId);
-      const c = data.comp;
-      const t = data.task;
-      const canonical = taskDiagramPath(compId, c.name, taskId, t.name);
-      return {
-        data,
-        canonicalPath: canonical,
-        head: {
-          title: `Route for ${t.name} — ${c.name}`,
-          description: `The route of ${t.name} (${c.name}), drawn at full size, on GlideComp.`,
-          noindex: true,
-          extra: jsonLd(
-            breadcrumb(origin, [
-              ["Competitions", "/comp"],
-              [c.name, compPath(compId, c.name)],
-              [t.name, taskPath(compId, c.name, taskId, t.name)],
-              ["Route diagram", canonical],
-            ])
-          ),
         },
       };
     },
@@ -621,6 +593,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return canonicalRedirect(url.origin + to + url.search, cookie, pathCarriesShareKey(path));
   }
 
+  // The route diagram's own page is gone; the task page draws the route.
+  const diagram = path.match(LEGACY_TASK_DIAGRAM);
+  if (diagram) {
+    const to = `/comp/${diagram[1]}/task/${diagram[2]}`;
+    return canonicalRedirect(url.origin + to + url.search, cookie, pathCarriesShareKey(path));
+  }
+
   // Private SPA-only routes under /comp: served as the plain shell (they
   // fetch their own data client-side), but marked noindex — there is nothing
   // here for a crawler, and the pages are admin-gated by the API anyway.
@@ -659,7 +638,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const match = ROUTES.map((r) => ({ r, m: path.match(r.pattern) })).find((x) => x.m);
   // Not one of the SSR routes. Valid SPA-only /comp routes (the pilots roster
   // and the other shell pages) were already handled above via
-  // NOINDEX_SHELL_ROUTES, and the old task-analysis URL by its redirect, so
+  // NOINDEX_SHELL_ROUTES, and the two superseded URLs by their redirects, so
   // reaching here means the path matches no known /comp route at all (e.g.
   // /comp/<id>/asdf) — it is a genuine 404. Render the SPA shell (react-router
   // shows its NotFound page) but with a real 404 status + noindex, rather than

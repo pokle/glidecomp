@@ -394,6 +394,47 @@ test("the competition's pages are rows on its page, a finger tall", async ({ pag
   await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/scores`));
 });
 
+/**
+ * The Tasks list is a grouped list per flying day, and each task is ONE row
+ * that is the link. The rows used to be text links with the route glyph as a
+ * second link beside them and a fold button on each day — three targets
+ * where a phone wants one big one.
+ */
+test("tasks list: each task is one row-wide link under its day's heading", async ({ page }) => {
+  await page.goto(`/comp/${compId}`);
+  const tasks = page.locator("#tasks");
+  await expect(tasks.getByRole("heading", { level: 2, name: "Tasks" })).toBeVisible({
+    timeout: 15_000,
+  });
+
+  // One heading per flying day, and nothing to fold.
+  const days = new Set(comp.tasks.map((t) => t.task_date));
+  await expect(tasks.getByRole("heading", { level: 3 })).toHaveCount(days.size);
+  await expect(tasks.locator("[aria-expanded]")).toHaveCount(0);
+
+  // The glyph is the row's picture, not a second link beside the task's.
+  await expect(tasks.getByRole("link", { name: /^Show the route for/ })).toHaveCount(0);
+
+  const task = comp.tasks.find((t) => t.has_xctsk)!;
+  const row = tasks.locator(`a[href$="-${task.task_id}"]`).first();
+  await expect(row).toContainText(task.name);
+  await expect(row).toContainText(task.pilot_classes[0]);
+  await expect(row.locator("svg").first()).toBeVisible();
+
+  // Measured, not asserted from classes: the link is the whole row, so it is
+  // as wide as the list it sits in and at least the 44px a finger needs.
+  const list = row.locator("xpath=ancestor::ul[1]");
+  const rowBox = (await row.boundingBox())!;
+  const listBox = (await list.boundingBox())!;
+  expect(rowBox.height).toBeGreaterThanOrEqual(44);
+  expect(rowBox.width).toBeGreaterThanOrEqual(listBox.width - 4);
+  await expectNoSidewaysScroll(page);
+
+  await row.click();
+  await expect(page).toHaveURL(new RegExp(`/task/[^/]*${task.task_id}$`));
+  await expect(page.getByRole("heading", { level: 1, name: task.name })).toBeVisible();
+});
+
 test("the title's menu lists the competition's pages, with the open one ticked", async ({ page }) => {
   const pages = ["Scores", "Waypoints", "Pilots", "Comp analysis", "Settings"];
 

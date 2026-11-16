@@ -19,7 +19,9 @@ answered the way it is:
   `ROUTE_RUNS`, a `Record` over the routes' names, so a route without a loader
   (or a loader without a route) does not compile.
 - `COMP_SHELL_ROUTES` — the plain SPA shell, `noindex`.
-- `LEGACY_TASK_ANALYSIS` — a 301 (below).
+- `COMP_REDIRECT_ROUTES` — 301s: `LEGACY_TASK_ANALYSIS` (below), and
+  `LEGACY_TASK_DIAGRAM`, the route diagram's own page of November 2026, which
+  goes to the task page.
 
 The Function builds its regexes from those tables. `comp-routes.test.ts` reads
 `routes.tsx` and fails unless every `/comp` route in it is answered exactly once,
@@ -29,11 +31,11 @@ copy drifted — read the module for the current set.
 
 **Server-rendered**: the competitions list; a competition's hub, its scores
 (`?task=` deep-links the scores-by-task view), its waypoints and its COMP
-analysis; a task's page, its route diagram at full size (#814), each pilot's
-report card, the TASK analysis, each of its sections (`/analysis/:section`) and
-one metric's chart at full size (`/analysis/metrics/:metric`, #815). The route
-diagram and the metric chart are always `noindex`: each is a bigger copy of
-something an indexable page already shows. An unknown metric is a 404.
+analysis; a task's page, each pilot's report card, the TASK analysis, each of
+its sections (`/analysis/:section`) and one metric's chart at full size
+(`/analysis/metrics/:metric`, #815). The metric chart is always `noindex`: it
+is a bigger copy of something an indexable page already shows. An unknown
+metric is a 404.
 
 A cold task-analysis report server-renders its pending notice and is noindexed
 **per request**, not shell-noindexed. The section route's pattern is built from

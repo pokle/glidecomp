@@ -13,7 +13,6 @@ import {
   taskAnalysisMetricPath,
   metricSegment,
   taskQrPath,
-  taskDiagramPath,
   taskTestIgcPath,
   compNewTaskPath,
   taskThermalMapPath,
@@ -147,7 +146,6 @@ describe("path builders", () => {
   test("the task's leaf pages hang off the task", () => {
     const args = ["voqc", "Corryong Cup 2026", "zqfs", "Task 3 (Open)"] as const;
     const task = "/comp/corryong-cup-2026-voqc/task/task-3-open-zqfs";
-    expect(taskDiagramPath(...args)).toBe(`${task}/diagram`);
     expect(taskTestIgcPath(...args)).toBe(`${task}/test-igc`);
     expect(taskQrPath(...args)).toBe(`${task}/qr`);
     expect(taskAnalysisSectionPath(...args, "strategies")).toBe(`${task}/analysis/strategies`);
@@ -202,7 +200,6 @@ describe("hidden competitions' share links", () => {
   test("the key rides into the task's leaf pages, and into creating a task", () => {
     const args = [compUrlId(hidden, "vzuq"), "Corryong Cup 2027", "abcd", "Task 1"] as const;
     const task = "/comp/corryong-cup-2027-vzuq_7hq2m9xk4rwd/task/task-1-abcd";
-    expect(taskDiagramPath(...args)).toBe(`${task}/diagram`);
     expect(taskTestIgcPath(...args)).toBe(`${task}/test-igc`);
     expect(taskQrPath(...args)).toBe(`${task}/qr`);
     expect(taskThermalMapPath(...args)).toBe(`${task}/analysis/thermals/map`);
@@ -210,7 +207,7 @@ describe("hidden competitions' share links", () => {
       "/comp/corryong-cup-2027-vzuq_7hq2m9xk4rwd/task/new"
     );
     // And each of those is still a path whose comp segment carries the key.
-    for (const path of [taskDiagramPath(...args), taskThermalMapPath(...args)]) {
+    for (const path of [taskQrPath(...args), taskThermalMapPath(...args)]) {
       expect(pathCarriesShareKey(path)).toBe(true);
     }
   });

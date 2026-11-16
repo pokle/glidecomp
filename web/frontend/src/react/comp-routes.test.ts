@@ -156,7 +156,6 @@ describe("the path builders land where the tables say", () => {
     [slug.compWaypointsPath(...c), "ssr"],
     [slug.compAnalysisPath(...c), "ssr"],
     [slug.taskPath(...t), "ssr"],
-    [slug.taskDiagramPath(...t), "ssr"],
     [slug.pilotPath(...p), "ssr"],
     [slug.taskAnalysisPath(...t), "ssr"],
     [slug.taskAnalysisSectionPath(...t, "thermals"), "ssr"],

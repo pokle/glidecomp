@@ -31,10 +31,11 @@ review comments there, and aligns with
 >   "Every task alike: the comp hub groups them by day and class, no hero"):**
 >   the featured card is gone too. There is no hero and no privileged task —
 >   `pages/CompDetail.tsx` renders one list, grouped by date (newest day first,
->   each day a `Disclosure` open by default) and then by pilot class within the
->   day, in the order the organisers declared the classes. A task flown by
->   several classes gets a row under each. Rows carry only the link, the setup
->   badges and the route glyph; every action lives on the task page.
+>   each day a `NavList` under its date since 2026-11; a `Disclosure` before
+>   that) and then by pilot class within the day, in the order the organisers
+>   declared the classes. A task flown by several classes gets a row under
+>   each. The whole row is the link to the task and carries the route glyph,
+>   the class and the setup badges; every action lives on the task page.
 > - **The task page split public results from management**: a public top-3
 >   podium + link to the scores page; the old scores grid is the admin-only
 >   "Manage pilots & tracks" section.
