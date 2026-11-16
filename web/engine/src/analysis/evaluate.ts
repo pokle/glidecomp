@@ -12,6 +12,7 @@ import { spearman, spearmanNoiseFloor } from './stats';
 import { ALL_METRICS } from './registry';
 import type { FlightPhase } from './phase-partition';
 import { extractThermalShapes, summariseThermalShape } from './thermal-shape';
+import { describeThermalPlace } from './thermal-place';
 import type {
   CorrelationVerdict,
   TaskAnalysisBasis,
@@ -133,7 +134,10 @@ function buildThermals(field: FieldContext): FieldThermalsSummary | undefined {
       kept = shapes.filter((s) => keep.has(s.id));
     }
     return {
-      shapes: kept.map(summariseThermalShape),
+      shapes: kept.map((shape) => {
+        const place = describeThermalPlace(field.task, shape.origin.lat, shape.origin.lon);
+        return { ...summariseThermalShape(shape), ...(place ? { place } : {}) };
+      }),
       totalShapeCount: shapes.length,
     };
   } catch {
