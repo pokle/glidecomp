@@ -100,6 +100,7 @@ export const E2E_SHARDS = {
     "analysis-bar.spec.ts", // new (#869) — measure on its first CI run (chromium + mobile)
     "report-card.spec.ts", // 28.4s
     "task-analysis.spec.ts", // 20.6s
+    "comp-analysis.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "task-analysis-metric-chart.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "task-thermal-map.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "explain-affordance.spec.ts", // 4.5s

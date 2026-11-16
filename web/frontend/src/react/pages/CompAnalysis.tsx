@@ -14,11 +14,12 @@
  */
 import { compAnalysisRows, hasAnyCorrelation } from "../analysis/types";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "../components/NotFound";
 import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
-import { SimpleSelect } from "@/react/rac/select";
+import { ClassPicker } from "../analysis/ClassPicker";
+import { TaskAnalysisList, type TaskAnalysisLink } from "../analysis/TaskAnalysisList";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter } from "@/react/rac/meter";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
@@ -202,6 +203,29 @@ export function CompAnalysis() {
     return ALL_METRICS.filter((m) => ids.has(m.id));
   }, [active]);
 
+  // The task analyses of the class being read. A comp that sets one task per
+  // class per day has an Open and a Floater "T1"; only the class's own list
+  // can say which is whose. Without it (an older API), every task.
+  const taskLinks = useMemo<TaskAnalysisLink[]>(() => {
+    if (!data) return [];
+    const byId = new Map(data.tasks.map((t) => [t.task_id, t]));
+    const own = active?.tasks;
+    const rows = own
+      ? own.flatMap((ct) => {
+          const t = byId.get(ct.task_id);
+          return t ? [{ ...t, pilot_count: ct.pilot_count as number | undefined }] : [];
+        })
+      : data.tasks.map((t) => ({ ...t, pilot_count: undefined }));
+    return rows.map((t) => ({
+      taskId: t.task_id,
+      label: t.label,
+      name: t.task_name,
+      date: t.task_date,
+      pilotCount: t.pilot_count,
+      href: taskAnalysisPath(compId, canonicalName, t.task_id, t.task_name),
+    }));
+  }, [data, active, compId, canonicalName]);
+
   const crumbs = underComp(compId, comp?.name ?? data?.comp_name);
   const isAdmin = useAdminView(!!comp?.is_admin);
 
@@ -221,8 +245,9 @@ export function CompAnalysis() {
   };
 
   // The bar is there before the report: the competition's other pages are in
-  // the title's menu (this one ticked), and the class select sticks under it —
-  // it filters the WHOLE report rather than any single table.
+  // the title's menu (this one ticked), and the class picker sticks under it —
+  // it filters the WHOLE report (the task list, every table and chart) rather
+  // than any one section, so it belongs to the page, not to a section.
   const bar = (
     <PageBar
       title={COMP_ANALYSIS_LABEL}
@@ -235,14 +260,10 @@ export function CompAnalysis() {
       )}
       below={
         ready && classes.length > 1 ? (
-          <SimpleSelect
-            ariaLabel="Pilot class"
+          <ClassPicker
+            classes={classes.map((c) => c.pilot_class)}
             value={selectedClass}
             onChange={selectClass}
-            options={classes.map((c) => ({
-              value: c.pilot_class,
-              label: c.pilot_class,
-            }))}
           />
         ) : undefined
       }
@@ -277,21 +298,24 @@ export function CompAnalysis() {
         the field, task by task.
       </p>
 
-      {/* The report's masthead: when it was computed and which chapters it
-          has. Which class it is showing is the select stuck under the bar. */}
+      {/* The report's masthead: when it was computed, then its chapters —
+          the task analyses of the class being read. Which class that is, is
+          the picker stuck under the bar. */}
       {data ? (
-        <Card className="mt-4 gap-3">
-          <ScoreFreshness
-            computedAt={data.computed_at}
-            stale={data.stale}
-            timezone={comp?.timezone ?? null}
-            etag={etag}
-            pollUrl={analysisUrl}
-            variant="analysis"
-          />
+        <>
+          <div className="mt-2">
+            <ScoreFreshness
+              computedAt={data.computed_at}
+              stale={data.stale}
+              timezone={comp?.timezone ?? null}
+              etag={etag}
+              pollUrl={analysisUrl}
+              variant="analysis"
+            />
+          </div>
 
           {data.pending_task_count > 0 ? (
-            <Alert role="status">
+            <Alert role="status" className="mt-4">
               <AlertTitle>
                 {data.pending_task_count} of {data.total_task_count} task
                 {data.total_task_count === 1 ? "" : "s"} not analysed yet
@@ -303,36 +327,19 @@ export function CompAnalysis() {
             </Alert>
           ) : null}
 
-          {/* The per-task reports are chapters of this page, so they get a
-              real nav landmark rather than a prose footnote. Each lives under
-              its own task's URL (lib/slug.ts) — this page collects them, which
-              makes it the only place they can be read against each other. */}
-          {data.tasks.length > 0 ? (
-            <nav
-              aria-label="Task analyses"
-              className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm"
-            >
-              <span className="text-muted-foreground">Per task:</span>
-              {data.tasks.map((t) => (
-                <Link
-                  key={t.task_id}
-                  to={taskAnalysisPath(compId, canonicalName, t.task_id, t.task_name)}
-                  className="underline underline-offset-4 hover:text-foreground"
-                >
-                  {t.label} {t.task_name}
-                </Link>
-              ))}
-            </nav>
-          ) : null}
-
-          {/* The class select is in the bar, which does not print: paper
+          {/* The class picker is in the bar, which does not print: paper
               gets a plain statement of which class this printout covers. */}
           {classes.length > 1 ? (
-            <p className="hidden text-sm print:block">
+            <p className="mt-2 hidden text-sm print:block">
               Pilot class: <strong>{selectedClass}</strong>
             </p>
           ) : null}
-        </Card>
+
+          {/* Each task analysis lives under its own task's URL (lib/slug.ts);
+              this page collects them, which makes it the only place they can
+              be read against each other. */}
+          <TaskAnalysisList tasks={taskLinks} className="mt-6" />
+        </>
       ) : null}
 
       {active && rankedMetrics.length > 0 ? (

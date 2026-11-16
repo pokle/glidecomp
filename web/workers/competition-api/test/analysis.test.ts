@@ -695,8 +695,10 @@ describe("comp-level aggregate", () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as {
       task_labels: string[];
+      tasks: Array<{ task_id: string }>;
       classes: Array<{
         pilot_class: string;
+        tasks: Array<{ task_id: string; pilot_count: number }>;
         aggregate: {
           taskLabels: string[];
           pilots: Array<{ key: string; rank: number }>;
@@ -715,6 +717,12 @@ describe("comp-level aggregate", () => {
     const agg = data.classes[0].aggregate;
     expect(agg.taskLabels).toEqual(["T1"]);
     expect(agg.pilots.length).toBeGreaterThan(0);
+    // The class names its own tasks, parallel to its labels, so the page can
+    // link a reader to their class's task analysis and no other.
+    expect(data.classes[0].tasks).toEqual([
+      { task_id: data.tasks[0].task_id, pilot_count: expect.any(Number) },
+    ]);
+    expect(data.classes[0].tasks[0].pilot_count).toBeGreaterThan(0);
     expect(agg.pilots[0].key).toMatch(/^cp:\d+$/);
     expect(agg.metrics.length).toBeGreaterThan(0);
     for (const m of agg.metrics) {

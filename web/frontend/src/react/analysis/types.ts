@@ -106,7 +106,16 @@ export interface CompAnalysisData {
   comp_name: string;
   tasks: { task_id: string; task_name: string; task_date: string; label: string }[];
   task_labels: string[];
-  classes: { pilot_class: string; aggregate: CompAnalysisReport }[];
+  classes: {
+    pilot_class: string;
+    /**
+     * The tasks this class's aggregate covers, parallel to its taskLabels.
+     * Optional only for a body from an API that predates it — the page then
+     * lists every task, as it always did.
+     */
+    tasks?: { task_id: string; pilot_count: number }[];
+    aggregate: CompAnalysisReport;
+  }[];
   computed_at: string | null;
   stale: boolean;
   pending_task_count: number;

@@ -19,7 +19,7 @@ import { useSearchParams } from "react-router-dom";
 import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { Loading, Spinner } from "@/react/rac/progress";
-import { SimpleSelect } from "@/react/rac/select";
+import { ClassPicker } from "./ClassPicker";
 import { cn } from "@/react/lib/utils";
 import { NotFound } from "../components/NotFound";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
@@ -271,17 +271,15 @@ export function TaskAnalysisFrame({
   const showClasses = classes.length > 1;
   const below =
     ready && !fill && (showClasses || (pilotPicker && active && report)) ? (
-      <div className="flex items-center gap-2">
+      // Wraps on a phone: the class picker takes the full width, and the
+      // pilot picker drops to a line of its own beneath it.
+      <div className="flex flex-wrap items-center gap-2">
         {showClasses ? (
-          <SimpleSelect
-            ariaLabel="Pilot class"
+          <ClassPicker
+            classes={classes.map((c) => c.pilot_class)}
             value={selectedClass}
             onChange={selectClass}
-            options={classes.map((c) => ({
-              value: c.pilot_class,
-              label: c.pilot_class,
-            }))}
-            className="shrink-0"
+            className="sm:shrink-0"
           />
         ) : null}
         {/* Pin one pilot's highlight page-wide — the reader finding

@@ -530,7 +530,10 @@ These are the standing imperatives. Each links to the reference that explains it
     repeated. In a menu where any row has one, the rest keep an empty slot
     so the labels line up.
   - **A second layer may stick with the bar** (`below`): a search field,
-    tabs, a class select. Nothing else sticks.
+    tabs, a class picker. Nothing else sticks. A class picker filters the
+    whole page, so it stays there rather than inside one section; on the
+    analysis pages it is a segmented control up to five classes
+    (`analysis/ClassPicker.tsx`, `rac/segmented-control.tsx`).
   - **Every control in the bar and its menus is 44 px**, at every pointer;
     the kit's own controls are 44 px on a coarse pointer
     ([docs/accessibility-standard.md](docs/accessibility-standard.md) §4.5).
