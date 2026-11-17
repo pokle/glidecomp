@@ -23,6 +23,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { ChevronRightIcon } from "lucide-react";
 import { Link as AriaLink, useFilter } from "react-aria-components";
 import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
@@ -178,31 +179,39 @@ export function Competitions() {
                   href={compPath(compUrlId(comp, comp.comp_id), comp.name)}
                   className={cn(
                     cardSurface,
-                    "flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
+                    "flex items-center gap-3 px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
                   )}
                 >
-                  <span>
-                    <span className="block font-semibold">
-                      {comp.name}
-                      {comp.test ? (
-                        <span className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 align-middle text-xs font-medium text-muted-foreground">
-                          Hidden
-                        </span>
-                      ) : null}
+                  {/* The facts wrap among themselves; the chevron stays at the
+                      card's right edge, as on every row that opens a page. */}
+                  <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                    <span>
+                      <span className="block font-semibold">
+                        {comp.name}
+                        {comp.test ? (
+                          <span className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 align-middle text-xs font-medium text-muted-foreground">
+                            Hidden
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="block text-sm text-muted-foreground">
+                        {[
+                          categoryLabel(comp.category),
+                          scoringFormatLabel(comp.scoring_format),
+                          comp.pilot_classes.join(", "),
+                        ].join(" · ")}
+                      </span>
                     </span>
-                    <span className="block text-sm text-muted-foreground">
-                      {[
-                        categoryLabel(comp.category),
-                        scoringFormatLabel(comp.scoring_format),
-                        comp.pilot_classes.join(", "),
-                      ].join(" · ")}
+                    <span className="ml-auto text-sm whitespace-nowrap text-muted-foreground">
+                      {comp.first_task_date && comp.last_task_date
+                        ? formatTaskDateRange(comp.first_task_date, comp.last_task_date)
+                        : `created ${formatDate(comp.creation_date)}`}
                     </span>
                   </span>
-                  <span className="ml-auto text-sm whitespace-nowrap text-muted-foreground">
-                    {comp.first_task_date && comp.last_task_date
-                      ? formatTaskDateRange(comp.first_task_date, comp.last_task_date)
-                      : `created ${formatDate(comp.creation_date)}`}
-                  </span>
+                  <ChevronRightIcon
+                    aria-hidden
+                    className="size-4 shrink-0 text-muted-foreground"
+                  />
                 </AriaLink>
               </li>
             ))}
