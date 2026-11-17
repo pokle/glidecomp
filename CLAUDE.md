@@ -62,6 +62,9 @@ first or go through `bun run`. `bunx playwright test` skips a second guard:
 Playwright wants, which no environment is guaranteed to pre-bake — see
 [docs/local-dev.md](docs/local-dev.md).
 
+**There is no code formatter.** Don't run Prettier or any other formatter: it
+rewrites lines you didn't change. Match the surrounding style by hand.
+
 For dev servers, the e2e suite and its failure modes, the isolated container
 preview, and the dev tunnel: **[docs/local-dev.md](docs/local-dev.md)**. Read its
 "Before you trust an e2e failure" section before debugging one.
