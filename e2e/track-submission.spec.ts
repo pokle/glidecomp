@@ -205,8 +205,6 @@ test.describe("submitting a track without an account", () => {
     await siteBar.locator('summary[aria-label="Main menu"]').click();
     await expect(inMainMenu).toBeVisible();
     await expect(inMainMenu).toHaveText("Submit track");
-    // Deliberately NOT a third hero call to action — the bar carries it.
-    await expect(page.locator('.hero-cta a[href="/submit"]')).toHaveCount(0);
 
     // A content page below Home: the title's menu.
     await page.goto(`${BASE_URL}/about`);
@@ -235,6 +233,31 @@ test.describe("submitting a track without an account", () => {
       "href",
       "/submit"
     );
+  });
+
+  test("the home page's Submit your track is on screen on an iPhone", async ({ page }) => {
+    // A competitor told to "submit at glidecomp.com" arrives on a phone, so
+    // the hero's first button is Submit, and it must be fully visible
+    // without scrolling in Safari's visible area on an iPhone 12–15 (390x664
+    // with its toolbars showing).
+    await page.setViewportSize({ width: 390, height: 664 });
+    // The hero reveals with a 24px slide; measure where it comes to rest,
+    // not a frame of the animation.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(BASE_URL);
+    const submit = page.locator(".hero-cta").getByRole("link", { name: "Submit your track" });
+    // Explicit timeout: in dev the Astro server compiles `/` on demand.
+    await expect(submit).toBeVisible({ timeout: 20_000 });
+    await expect(submit).toHaveAttribute("href", "/submit");
+    const box = await submit.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(664);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    // Browse competitions sits under it, on screen too.
+    const browse = page.locator(".hero-cta").getByRole("link", { name: "Browse competitions" });
+    const browseBox = await browse.boundingBox();
+    expect(browseBox!.y + browseBox!.height).toBeLessThanOrEqual(664);
   });
 
   test("a linked task names itself, and can still be changed", async ({ page }) => {
