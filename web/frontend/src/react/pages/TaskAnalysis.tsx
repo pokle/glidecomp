@@ -42,12 +42,13 @@
  */
 import { STRATEGY_VERDICTS, winningLabel } from "../analysis/types";
 import { Link, useSearchParams } from "react-router-dom";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronRightIcon, type LucideIcon } from "lucide-react";
 import { Card } from "@/react/rac/card";
 import { Badge } from "@/react/rac/badge";
 import { compUrlId, taskAnalysisPath, taskAnalysisSectionPath, taskSimilarityPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { AnalysisBasis } from "../analysis/AnalysisBasis";
+import { TASK_ANALYSIS_ICONS } from "../analysis/section-icons";
 import {
   SIMILAR_PILOTS_LABEL,
   TaskAnalysisFrame,
@@ -160,11 +161,13 @@ export function TaskAnalysis() {
           key: string;
           href: string;
           label: string;
+          icon: LucideIcon;
           facts?: React.ReactNode;
         }[] = TASK_ANALYSIS_SECTIONS.filter((s) => !empty(s.slug)).map((section) => ({
           key: section.slug,
           href: hrefFor(section.slug),
           label: section.label,
+          icon: TASK_ANALYSIS_ICONS[section.slug],
           facts: facts[section.slug],
         }));
         const method = boxes.findIndex((b) => b.key === "method");
@@ -172,6 +175,7 @@ export function TaskAnalysis() {
           key: "similar",
           href: taskSimilarityPath(compId, comp?.name, taskId, task?.name) + query,
           label: SIMILAR_PILOTS_LABEL,
+          icon: TASK_ANALYSIS_ICONS.similar,
         });
 
         return (
@@ -196,6 +200,7 @@ export function TaskAnalysis() {
                   key={box.key}
                   href={box.href}
                   label={box.label}
+                  icon={box.icon}
                   facts={box.facts}
                 />
               ))}
@@ -218,10 +223,12 @@ export function TaskAnalysis() {
 function SectionBox({
   href,
   label,
+  icon: Icon,
   facts,
 }: {
   href: string;
   label: string;
+  icon: LucideIcon;
   facts?: React.ReactNode;
 }) {
   return (
@@ -236,7 +243,13 @@ function SectionBox({
           read as static cards. */}
       <Card className="flex-row items-center gap-3 transition-colors hover:bg-accent/40">
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <h2 className="text-lg font-semibold">{label}</h2>
+          {/* Inline with the name rather than a column of its own: on a
+              phone a column would take the width the strategy chips wrap
+              in. Muted, as on a ⋯ row, so the name stays what is read. */}
+          <h2 className="flex items-center gap-2.5 text-lg font-semibold">
+            <Icon aria-hidden className="size-5 shrink-0 text-muted-foreground" />
+            {label}
+          </h2>
           {facts}
         </div>
         <ChevronRightIcon
