@@ -471,4 +471,8 @@
 //       values. The through-the-air factor is summed leg by leg along it.
 //     The comp aggregate's new within-task ranking needs no bump: it is
 //     computed per request from the stored task reports.
-export const TASK_ANALYSIS_VERSION = 31;
+// v32: each reconstructed thermal names where it was against the task's
+//     turnpoints (FieldThermalShape.place, thermal-place.ts): in a cylinder,
+//     near one, between two, or a distance and bearing from the nearest.
+//     No metric moves.
+export const TASK_ANALYSIS_VERSION = 32;

@@ -14,6 +14,7 @@ import { MIN_CORRELATION_N } from './evaluate';
 import { clusterPilotStyles, MIN_CLUSTER_PILOTS, type StyleClusterReport } from './clustering';
 import { timeWithZone, timeRangeWithZone } from './format-time';
 import { roundPercentagesToHundred } from './stats';
+import { formatThermalPlace } from './thermal-place';
 import type {
   FieldAirtimeSplit,
   TaskAnalysisBasis,
@@ -318,6 +319,7 @@ function renderThermals(thermals: FieldThermalsSummary, timeZone?: string): stri
       : '—';
     return [
       { t: new Date(s.startMs).toISOString() },
+      s.place ? formatThermalPlace(s.place) : '—',
       String(s.pilotCount),
       `${Math.round(altLo)}–${Math.round(altHi)} m`,
       weighted.n > 0 ? `+${(weighted.v / weighted.n).toFixed(1)}` : '—',
@@ -332,6 +334,7 @@ function renderThermals(thermals: FieldThermalsSummary, timeZone?: string): stri
         title: 'Thermals',
         columns: [
           { header: 'Start', align: 'left' },
+          { header: 'Where', align: 'left' },
           { header: 'Pilots', align: 'right' },
           { header: 'Altitude', align: 'right' },
           { header: 'Climb', align: 'right' },

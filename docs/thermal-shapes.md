@@ -50,6 +50,19 @@ clustering (`shared-thermals.ts`) and the circle detector.
   census (a UI must say "top N of M", never present the cap as the census).
   Added in `TASK_ANALYSIS_VERSION` 20; stale-first storage, ETag, SSR seed
   and invalidation all ride the existing `task_analysis` machinery.
+- Each summary names **where** the thermal was (`place`, version 32,
+  `analysis/thermal-place.ts`), at its mean position, against the task's
+  turnpoints. The first rule that fits wins:
+  1. Inside a cylinder: the turnpoint's name. Where cylinders overlap
+     (launch and an exit start), the smallest wins.
+  2. Within 1 km outside a cylinder's edge: "Near B12". Nearest is measured
+     to the edge, not the centre.
+  3. Beside a leg of the optimised route, with its foot on the leg and no
+     more than 5 km (or half the leg's length) off it: "Between B03 and B04".
+  4. Otherwise, the distance and bearing from the waypoint whose cylinder
+     edge is nearest: "4.2 km NE of B12", in the reader's distance unit.
+  A large start cylinder names most pre-start thermals after itself, which
+  is true. Reports stored before version 32 show "—" until they revalidate.
 - **Task analysis page** (`/comp/:id/task/:id/analysis/thermals`): "The day's
   thermals" section — census table, top-down lift rose (with an ⓘ legend
   popover), readouts, climb profile, per-pilot climb table and band table. The model-wind cross-check comes from the task's weather column

@@ -516,6 +516,43 @@ export function localEastNorth(
 }
 
 /**
+ * Where a point falls against the segment a→b: how far along it the
+ * perpendicular foot lands, and how far off the line the point is.
+ *
+ * Planar, in a {@link localEastNorth} frame centred on the point itself, so
+ * the offset — the number a caller compares against a limit — is measured
+ * where the frame is most accurate. Over a long leg (tens of km) the frame's
+ * distortion grows towards the far end; that is fine for describing where
+ * something is, NOT for scoring — use {@link ellipsoidDistance} there.
+ *
+ * @returns `fraction` 0 at a, 1 at b (outside [0, 1] when the foot lies
+ *   beyond an end; 0 for a zero-length segment); `offsetMeters` from the
+ *   point to its foot on the infinite line; `lengthMeters` of the segment.
+ */
+export function projectOntoSegment(
+  lat: number,
+  lon: number,
+  aLat: number,
+  aLon: number,
+  bLat: number,
+  bLon: number
+): { fraction: number; offsetMeters: number; lengthMeters: number } {
+  const a = localEastNorth(lat, lon, aLat, aLon);
+  const b = localEastNorth(lat, lon, bLat, bLon);
+  const dx = b.east - a.east;
+  const dy = b.north - a.north;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) {
+    return { fraction: 0, offsetMeters: Math.hypot(a.east, a.north), lengthMeters: 0 };
+  }
+  // The point is the frame's origin, so p − a = −a.
+  const fraction = -(a.east * dx + a.north * dy) / len2;
+  const footE = a.east + fraction * dx;
+  const footN = a.north + fraction * dy;
+  return { fraction, offsetMeters: Math.hypot(footE, footN), lengthMeters: Math.sqrt(len2) };
+}
+
+/**
  * Check if a point is inside a cylinder.
  *
  * @param lat - Latitude of point to check

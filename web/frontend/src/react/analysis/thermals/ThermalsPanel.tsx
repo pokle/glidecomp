@@ -38,10 +38,11 @@ import {
 import { useSearchParams } from "react-router-dom";
 import type { Selection } from "react-aria-components";
 import { InfoIcon } from "lucide-react";
-import { windAtHeight } from "@glidecomp/engine";
+import { formatThermalPlace, windAtHeight } from "@glidecomp/engine";
 import type {
   TaskWeather,
   ThermalShapeSummary,
+  FieldThermalShape,
   FieldThermalsSummary,
   WeatherHour,
 } from "@glidecomp/engine";
@@ -858,6 +859,9 @@ export function ThermalsPanel({
 
   const altLabel = (m: number) => formatAltitude(m, { prefs: units }).formatted;
   const altWithUnit = (m: number) => formatAltitude(m, { prefs: units }).withUnit;
+  // Absent on reports stored before the place was (TASK_ANALYSIS_VERSION 32).
+  const placeText = (s: FieldThermalShape) =>
+    s.place ? formatThermalPlace(s.place, { prefs: units }) : "—";
   const climbText = (ms: number) => `${formatMetricValue(climb.unit, ms * climb.factor)} ${climb.unit}`;
   // Wind readouts follow the horizontal-speed preference; measurements are m/s.
   const windText = (ms: number) =>
@@ -917,7 +921,7 @@ export function ThermalsPanel({
   // row, because this report prints whole (the family Disclosures force
   // their panels open in print for the same reason) and paper has no
   // "Show all" to press.
-  const censusTable = (rows: ThermalShapeSummary[], interactive: boolean) => (
+  const censusTable = (rows: FieldThermalShape[], interactive: boolean) => (
     <Table
       aria-label="Reconstructed thermals"
       scrollLabel="Reconstructed thermals"
@@ -955,6 +959,7 @@ export function ThermalsPanel({
     >
       <TableHeader>
         <Column isRowHeader>Start</Column>
+        <Column>Where</Column>
         <Column>Pilots</Column>
         <Column>Height band</Column>
         <Column>Mean climb</Column>
@@ -968,6 +973,9 @@ export function ThermalsPanel({
                 {formatTimeOfDay(new Date(s.startMs).toISOString(), tz)}
               </time>
             </Cell>
+            {/* Wraps: "Between HALFWY and CUDGWE" on one line pushes every
+                measurement off a phone's screen. */}
+            <Cell className="min-w-[6rem] whitespace-normal sm:min-w-[9rem]">{placeText(s)}</Cell>
             <Cell>{s.pilotCount}</Cell>
             <Cell>
               {altLabel(s.bands[0].altMin)}–{altWithUnit(s.bands[s.bands.length - 1].altMax)}
@@ -1054,6 +1062,11 @@ export function ThermalsPanel({
           {formatTimeOfDay(new Date(selected.startMs).toISOString(), tz)} —{" "}
           {selected.pilotCount} pilots, {selected.useCount} climbs
         </h3>
+        {selected.place ? (
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {formatThermalPlace(selected.place, { prefs: units })}
+          </p>
+        ) : null}
         {/* One column always: the pane is never wider than its 35rem cap
             (stacked) or the grid's right column (side by side), so the old
             rose-beside-readouts split has no width to spend. */}

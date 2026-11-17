@@ -30,6 +30,7 @@ export type {
   FieldAirtimeSplitByGoal,
   TaskAnalysisReport,
   FieldThermalsSummary,
+  FieldThermalShape,
   CompTaskResult,
   CompAnalysisOptions,
   CompMetricAggregate,
@@ -58,6 +59,13 @@ export {
   type ThermalLean,
   type ThermalWindEstimate,
 } from './thermal-shape';
+export {
+  describeThermalPlace,
+  formatThermalPlace,
+  NEAR_MARGIN_METERS,
+  BETWEEN_MAX_OFFSET_METERS,
+  type ThermalPlace,
+} from './thermal-place';
 export { estimateWorkingBand, type WorkingBand, type WorkingBandHour } from './working-band';
 export { percentile, median, mean, rankWithTies, spearman, circularMeanWind, combineWindEstimates, type WindSample, type MeanWind } from './stats';
 export { evaluateField, MIN_CORRELATION_N, MAX_THERMAL_SHAPES } from './evaluate';

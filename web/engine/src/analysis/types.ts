@@ -568,13 +568,24 @@ export interface TaskAnalysisBasis {
  * every shared thermal enough pilots climbed in to measure. See
  * thermal-shape.ts for what a summary carries and how it is measured.
  */
+/** A reconstructed thermal as the task report stores it. */
+export type FieldThermalShape = import('./thermal-shape').ThermalShapeSummary & {
+  /**
+   * Where it was, against the task's turnpoints (thermal-place.ts), at the
+   * thermal's mean position. Optional: added in TASK_ANALYSIS_VERSION 32, and
+   * stored reports from before it are served stale while they revalidate —
+   * consumers must render without it.
+   */
+  place?: import('./thermal-place').ThermalPlace;
+};
+
 export interface FieldThermalsSummary {
   /**
    * Chronological. Only shapes with ≥ 2 pilots and ≥ 3 altitude bands —
    * below that there is no cross-pilot structure worth drawing — and capped
    * by pilot count so one task cannot balloon the stored report.
    */
-  shapes: import('./thermal-shape').ThermalShapeSummary[];
+  shapes: FieldThermalShape[];
   /** How many qualifying shapes existed before the cap; equal to
    * shapes.length when nothing was dropped. The UI must say when it is
    * showing fewer than existed — no silent caps. */
