@@ -11,6 +11,7 @@
  * something to server-render or index.
  */
 import { Link as AriaLink } from "react-aria-components";
+import { ChevronRightIcon } from "lucide-react";
 import { Loading } from "@/react/rac/progress";
 import { cardSurface } from "@/react/rac/card";
 import { cn } from "@/react/lib/utils";
@@ -88,17 +89,24 @@ function CompResult({ comp }: { comp: SearchComp }) {
     <div className={cn(cardSurface, "overflow-hidden")}>
       <AriaLink
         href={compPath(comp.comp_id, comp.name)}
-        className="block rounded-t-lg px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
+        className="flex items-center gap-3 rounded-t-lg px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
       >
-        <span className="block font-semibold">
-          {comp.name}
-          {comp.test ? (
-            <span className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 align-middle text-xs font-medium text-muted-foreground">
-              Hidden
-            </span>
-          ) : null}
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold">
+            {comp.name}
+            {comp.test ? (
+              <span className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 align-middle text-xs font-medium text-muted-foreground">
+                Hidden
+              </span>
+            ) : null}
+          </span>
+          <span className="block text-sm text-muted-foreground">{meta}</span>
         </span>
-        <span className="block text-sm text-muted-foreground">{meta}</span>
+        {/* The same row as the competitions list, so the same chevron. */}
+        <ChevronRightIcon
+          aria-hidden
+          className="size-4 shrink-0 text-muted-foreground"
+        />
       </AriaLink>
 
       {comp.tasks.length > 0 || comp.pilots.length > 0 ? (

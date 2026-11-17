@@ -42,6 +42,7 @@
  */
 import { STRATEGY_VERDICTS, winningLabel } from "../analysis/types";
 import { Link, useSearchParams } from "react-router-dom";
+import { ChevronRightIcon } from "lucide-react";
 import { Card } from "@/react/rac/card";
 import { Badge } from "@/react/rac/badge";
 import { compUrlId, taskAnalysisPath, taskAnalysisSectionPath, taskSimilarityPath } from "../lib/slug";
@@ -230,9 +231,18 @@ function SectionBox({
       // nothing to an inline box, so the stack's spacing collapsed to ~2 px.
       className="block rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
     >
-      <Card className="gap-2 transition-colors hover:bg-accent/40">
-        <h2 className="text-lg font-semibold">{label}</h2>
-        {facts}
+      {/* The chevron says what every other row that opens a page says
+          (NavRow, the task list): this goes somewhere. Without it the boxes
+          read as static cards. */}
+      <Card className="flex-row items-center gap-3 transition-colors hover:bg-accent/40">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <h2 className="text-lg font-semibold">{label}</h2>
+          {facts}
+        </div>
+        <ChevronRightIcon
+          aria-hidden
+          className="size-5 shrink-0 text-muted-foreground"
+        />
       </Card>
     </Link>
   );
