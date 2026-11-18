@@ -29,10 +29,12 @@
  *
  * Accessibility (docs/accessibility-standard.md): the figure's caption states
  * the reading in words and doubles as the accessible name, so nothing is
- * conveyed by the picture alone; every dot is focusable with a 24px target
- * and an accessible name; arrow keys walk the field in curve order; a readout
- * line mirrors hover/focus for sighted users (and works on touch). The
- * section's own item list remains the exact, complete data.
+ * conveyed by the picture alone; every dot is focusable with an accessible
+ * name; arrow keys walk the field in curve order; a tap, a click or a finger
+ * dragged across chooses the dot nearest the pointer
+ * (`use-nearest-pointer.ts`), and a readout line above the plot names it for
+ * sighted users. The section's own item list remains the exact, complete
+ * data.
  */
 import { useMemo, useRef, useState } from "react";
 import type { ScoreCurveChart, ScoreChartPilot } from "@glidecomp/engine";
@@ -44,6 +46,9 @@ import {
   placeCurveLabels,
 } from "./score-curve-layout";
 import { AxisUnit, XAxisTitle } from "./AxisTitle";
+import { ChartReadout } from "./ChartReadout";
+import { nearestPoint } from "./nearest";
+import { focusMark, nearestPointerProps } from "./use-nearest-pointer";
 import { CHART_LABEL_PX, useChartLabelSize } from "./use-chart-label-size";
 
 const W = 520;
@@ -94,7 +99,10 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
   const [focusIndex, setFocusIndex] = useState(() =>
     Math.max(0, points.findIndex((p) => p.you))
   );
-  const [readout, setReadout] = useState<ScoreChartPilot | null>(null);
+  // The dot under the mouse, and the dot with focus. The line above the plot
+  // names the first that is set.
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const dotRefs = useRef<(SVGGElement | null)[]>([]);
   // Footnote rather than body: this chart is small and sits INSIDE the section
   // it explains, under prose that has already stated the arithmetic, and the
@@ -138,6 +146,15 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
   const labels = placeCurveLabels({ points, x, y, fontSize, width: W, plot });
 
   const label = (p: ScoreChartPilot) => curvePilotLabel(xUnit, p);
+  const chosen = points.find((p) => p.key === (hoveredKey ?? focusedKey)) ?? null;
+
+  const dots = points.map((p) => ({ x: x(p.x), y: y(p.y) }));
+  const pointer = nearestPointerProps({
+    viewBoxWidth: W,
+    nearest: (px, py) => nearestPoint(dots, px, py),
+    onHover: (i) => setHoveredKey(i === null ? null : points[i].key),
+    onPick: (i) => focusMark(dotRefs.current[i]),
+  });
 
   function onKeyDown(e: React.KeyboardEvent, i: number) {
     let next: number | null = null;
@@ -154,14 +171,17 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
   }
 
   return (
-    <figure className="mt-3 space-y-1">
+    <figure className="mt-3 space-y-1" data-chart="score-curve">
+      <ChartReadout prompt="Select a dot to name the pilot behind it.">
+        {chosen ? label(chosen) : null}
+      </ChartReadout>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
-        className="h-auto w-full"
+        className="h-auto w-full select-none"
         role="group"
         aria-label={`${xLabel} against points. ${caption}`}
-        onMouseLeave={() => setReadout(null)}
+        {...pointer}
       >
         {/* Gridlines under everything. */}
         {yTicks.map((t) => (
@@ -246,23 +266,25 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
               role="img"
               aria-label={label(p)}
               tabIndex={i === focusIndex ? 0 : -1}
+              data-dot={p.key}
               className="cursor-default outline-none"
               onKeyDown={(e) => onKeyDown(e, i)}
               onFocus={() => {
                 setFocusIndex(i);
-                setReadout(p);
+                setFocusedKey(p.key);
               }}
-              onMouseEnter={() => setReadout(p)}
+              onBlur={() => setFocusedKey(null)}
             >
-              {/* 24px pointer/focus target over a 7px dot (WCAG 2.5.8). */}
-              <circle cx={x(p.x)} cy={y(p.y)} r={12} className="fill-transparent" />
+              {/* The pointer is answered by the <svg>, which finds the
+                  nearest dot, so a dot needs no invisible halo for a
+                  target. */}
               <circle
-                cx={x(p.x)}
-                cy={y(p.y)}
+                cx={dots[i].x}
+                cy={dots[i].y}
                 r={3.5}
                 className={cn(
                   "fill-muted-foreground/50",
-                  readout?.key === p.key && "stroke-ring stroke-2"
+                  chosen?.key === p.key && "stroke-ring stroke-2"
                 )}
               />
             </g>
@@ -279,15 +301,15 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
             role="img"
             aria-label={`${label(you)} — this pilot`}
             tabIndex={focusIndex === points.indexOf(you) ? 0 : -1}
+            data-dot={you.key}
             className="cursor-default outline-none"
             onKeyDown={(e) => onKeyDown(e, points.indexOf(you))}
             onFocus={() => {
               setFocusIndex(points.indexOf(you));
-              setReadout(you);
+              setFocusedKey(you.key);
             }}
-            onMouseEnter={() => setReadout(you)}
+            onBlur={() => setFocusedKey(null)}
           >
-            <circle cx={x(you.x)} cy={y(you.y)} r={12} className="fill-transparent" />
             <circle
               cx={x(you.x)}
               cy={y(you.y)}
@@ -345,15 +367,6 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
           ))}
         </g>
       </svg>
-
-      {/* Mirrors hover/focus for sighted users. No aria-live: every dot
-          already announces itself, so a live region would double-speak.
-          Hidden in print, where an invitation to hover means nothing. */}
-      <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
-        {readout
-          ? label(readout)
-          : "Hover or focus a dot to name the pilot behind it."}
-      </p>
 
       <figcaption className="text-xs text-muted-foreground">{caption}</figcaption>
     </figure>

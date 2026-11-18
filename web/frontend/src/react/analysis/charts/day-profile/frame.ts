@@ -17,8 +17,8 @@
  * stroke is a 2px line at every width. Margins hold type, so they are
  * multiples of the type size, and so is every height a chart derives.
  */
-import { useEffect, useMemo, useState } from "react";
-import { CHART_LABEL_PX } from "@/react/charts/use-chart-label-size";
+import { useMemo } from "react";
+import { chartBoxForWidth, useMeasuredWidth } from "@/react/charts/use-chart-box";
 
 export interface ChartFrame {
   /** ViewBox width. */
@@ -30,14 +30,6 @@ export interface ChartFrame {
   fontSize: number;
 }
 
-/** The width assumed before the stack is measured — on the server, and in
- * the browser's first render, which must agree with it. */
-const UNMEASURED_WIDTH = 560;
-
-/** Narrower than this a stack is not being laid out, it is being measured on
- * its way in (a collapsed parent); draw for a small phone and wait. */
-const MIN_WIDTH = 240;
-
 /**
  * The frame for a stack drawn `cssWidth` pixels wide.
  *
@@ -45,10 +37,12 @@ const MIN_WIDTH = 240;
  *   ("10000" in feet), and its gap from the plot.
  * - `right` holds the half of the last time label that overhangs the plot
  *   edge it is centred on.
+ *
+ * The width and the type size are `charts/use-chart-box.ts`'s, which a chart
+ * on its own uses too; the plot bounds are this stack's.
  */
 export function frameForWidth(cssWidth: number, rootPx = 16): ChartFrame {
-  const width = Math.max(MIN_WIDTH, Math.round(cssWidth));
-  const fontSize = CHART_LABEL_PX.footnote * (rootPx / 16);
+  const { width, fontSize } = chartBoxForWidth(cssWidth, rootPx);
   return {
     width,
     plotLeft: Math.round(fontSize * 3.5),
@@ -67,24 +61,7 @@ export function useChartFrame(): {
   ref: (el: HTMLElement | null) => void;
   frame: ChartFrame;
 } {
-  const [el, setEl] = useState<HTMLElement | null>(null);
-  const [size, setSize] = useState({ width: UNMEASURED_WIDTH, rootPx: 16 });
-
-  useEffect(() => {
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const update = () => {
-      const width = Math.round(el.getBoundingClientRect().width);
-      if (width <= 0) return;
-      const rootPx =
-        parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-      setSize((s) => (s.width === width && s.rootPx === rootPx ? s : { width, rootPx }));
-    };
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    update();
-    return () => observer.disconnect();
-  }, [el]);
-
-  const frame = useMemo(() => frameForWidth(size.width, size.rootPx), [size]);
-  return { ref: setEl, frame };
+  const { ref, width, rootPx } = useMeasuredWidth();
+  const frame = useMemo(() => frameForWidth(width, rootPx), [width, rootPx]);
+  return { ref, frame };
 }

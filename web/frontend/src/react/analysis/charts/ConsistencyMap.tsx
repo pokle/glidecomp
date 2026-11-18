@@ -14,12 +14,30 @@
  * column, because it equals |mean ρ| except where the per-task signs disagree
  * — the vertical drop from the diagonal here, and the "depended on the day"
  * chip there. Hand-rolled SVG per charts/chart-utils.ts.
+ *
+ * **Drawn in CSS pixels** (`charts/use-chart-box.ts`, issue #860). It was a
+ * 560-unit drawing scaled to the page, so a phone painted its labels at
+ * 5.7px. The dots' names had a 150-unit margin to the right of the plot;
+ * at a readable size the names go INSIDE the plot, on either side of the
+ * diagonal, each beside its own dot or not drawn (`charts/dot-labels.ts`).
+ *
+ * **Selecting a dot.** Arrow keys walk the dots. A tap, a click or a finger
+ * dragged across chooses the dot nearest the pointer
+ * (`charts/use-nearest-pointer.ts`), and a mouse moving near a dot does
+ * the same as a hover. The chosen behaviour is ringed, named beside its dot
+ * where there is room, and read in full in the line above the plot
+ * (`charts/ChartReadout.tsx`).
  */
 import { useRef, useState } from "react";
-import { cn } from "@/react/lib/utils";
 import { ALL_METRICS, type CompMetricAggregate } from "../types";
-import { linearScale, spreadLabels } from "./chart-utils";
+import { linearScale } from "./chart-utils";
 import { XAxisTitle, YAxisTitle } from "@/react/charts/AxisTitle";
+import { useChartBox } from "@/react/charts/use-chart-box";
+import { approxTextWidth } from "@/react/charts/text-width";
+import { nearestPoint } from "@/react/charts/nearest";
+import { focusMark, nearestPointerProps } from "@/react/charts/use-nearest-pointer";
+import { placeDotLabels, type LabelBox } from "@/react/charts/dot-labels";
+import { ChartReadout } from "@/react/charts/ChartReadout";
 import { consistencyWords } from "../ConsistencyChip";
 
 /**
@@ -27,14 +45,17 @@ import { consistencyWords } from "../ConsistencyChip";
  * ("glide.speed", "decision.search_fraction") — internal identifiers, on a
  * public page, for metrics that were deliberately renamed into English. The
  * registry's shortLabel is the same compact vocabulary the metric glossary
- * defines ('"GlideSpd" in tables'), and the full label is one hover away in
- * the readout line below the chart.
+ * defines ('"GlideSpd" in tables'), and the full label is in the readout
+ * line above the chart for any dot that is selected.
  */
 const SHORT_LABELS = new Map(ALL_METRICS.map((m) => [m.id, m.shortLabel ?? m.label]));
 
-const W = 560;
-const H = 340;
-const M = { top: 14, right: 150, bottom: 40, left: 56 };
+const X_TITLE = "per-day power — mean |ρ|";
+const Y_TITLE = "consistent separation — |mean ρ|";
+const ON_DIAGONAL = "same direction every task";
+const BELOW_DIAGONAL = "strong but day-dependent";
+const TICKS = [0, 0.25, 0.5, 0.75, 1];
+const DOT_RADIUS = 4.5;
 
 interface MapPoint {
   metric: CompMetricAggregate;
@@ -58,26 +79,79 @@ export function ConsistencyMap({ metrics }: { metrics: CompMetricAggregate[] }) 
     .map((m) => ({ metric: m, x: m.meanAbsRho!, y: Math.abs(m.meanSignedRho!) }));
 
   const [focusIndex, setFocusIndex] = useState(0);
-  const [readout, setReadout] = useState<MapPoint | null>(null);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const dotRefs = useRef<(SVGGElement | null)[]>([]);
+  const { ref: svgRef, box } = useChartBox();
 
   if (points.length === 0) return null;
 
-  const x = linearScale([0, 1], [M.left, W - M.right]);
-  const y = linearScale([0, 1], [H - M.bottom, M.top]);
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const W = box.width;
+  const em = box.fontSize;
+
+  // Margins hold type, so each is measured in it.
+  // - left: the rotated axis title's line, then the widest tick ("0.75").
+  // - right: the half of the last tick ("1") that overhangs the plot.
+  const tickWidth = Math.max(...TICKS.map((t) => approxTextWidth(String(t), em)));
+  const plotLeft = Math.round(em * 2.05 + tickWidth);
+  const plotRight = W - Math.round(em * 0.8);
+  const plotTop = Math.round(em * 0.8);
+  // Near square on a phone; wider than tall once there is width to spare.
+  // Never shorter than the rotated title.
+  const plotHeight = Math.round(
+    Math.max(
+      Math.min(em * 26, Math.max(em * 15, (plotRight - plotLeft) * 0.9)),
+      approxTextWidth(Y_TITLE, em) + em
+    )
+  );
+  const plotBottom = plotTop + plotHeight;
+  const xTitleY = plotBottom + em * 2.55;
+  const H = Math.round(xTitleY + em * 0.5);
+
+  const x = linearScale([0, 1], [plotLeft, plotRight]);
+  const y = linearScale([0, 1], [plotBottom, plotTop]);
+  const dots = points.map((p) => ({ key: p.metric.id, x: x(p.x), y: y(p.y) }));
+
+  // The two notes in the plot. The first sits just left of the diagonal's
+  // top end, which it describes; the second in the corner far below it.
+  const noteTopBaseline = plotTop + em * 1.15;
+  const noteTopRight =
+    x(1 - (noteTopBaseline + em * 0.25 - plotTop) / plotHeight) - em * 0.5;
+  const noteBottomBaseline = plotBottom - em * 0.55;
+  const noteBottomRight = plotRight - em * 0.4;
+  const noteBox = (right: number, baseline: number, text: string): LabelBox => ({
+    x0: right - approxTextWidth(text, em),
+    x1: right,
+    y0: baseline - em * 0.8,
+    y1: baseline + em * 0.25,
+  });
+
+  // The chosen dot: under the mouse, else the one with focus.
+  const chosenId = hoveredId ?? focusedId;
+  const chosen = points.find((p) => p.metric.id === chosenId) ?? null;
 
   // Direct labels for the dots worth naming: real per-day power, or a real
-  // consistency gap. The readout line names any dot on hover/focus.
-  const labelled = points
-    .map((p, i) => ({ p, i }))
-    .filter(({ p }) => p.x >= 0.3 || p.x - p.y >= 0.15);
-  const labelYs = spreadLabels(
-    labelled.map(({ p }) => y(p.y) + 3),
-    11,
-    M.top + 8,
-    H - M.bottom - 2,
-  );
+  // consistency gap — the strongest first, so that where names compete for
+  // room it is the weaker behaviour that goes unnamed. The chosen dot is
+  // asked for last: it is named if there is room, and the names already
+  // standing do not move for it.
+  const standing = points
+    .filter((p) => p.x >= 0.3 || p.x - p.y >= 0.15)
+    .sort((a, b) => b.x - a.x);
+  const labels = placeDotLabels({
+    dots,
+    wanted: [...standing, ...(chosen && !standing.includes(chosen) ? [chosen] : [])].map((p) => ({
+      key: p.metric.id,
+      text: SHORT_LABELS.get(p.metric.id) ?? p.metric.label,
+    })),
+    fontSize: em,
+    dotRadius: DOT_RADIUS,
+    bounds: { x0: plotLeft + 2, x1: W - 2, y0: plotTop, y1: plotBottom },
+    blocked: [
+      noteBox(noteTopRight, noteTopBaseline, ON_DIAGONAL),
+      noteBox(noteBottomRight, noteBottomBaseline, BELOW_DIAGONAL),
+    ],
+  });
 
   const caption =
     "A dot on the diagonal separates the field the same way in every task. A dot " +
@@ -85,28 +159,39 @@ export function ConsistencyMap({ metrics }: { metrics: CompMetricAggregate[] }) 
     "payoff depended on the day. The Across tasks column of the table gives the " +
     "exact value of the up axis.";
 
+  const pointer = nearestPointerProps({
+    viewBoxWidth: W,
+    nearest: (px, py) => nearestPoint(dots, px, py),
+    onHover: (i) => setHoveredId(i === null ? null : points[i].metric.id),
+    onPick: (i) => focusMark(dotRefs.current[i]),
+  });
+
   return (
-    <figure className="max-w-xl space-y-1">
+    <figure className="max-w-xl space-y-1" data-chart="consistency-map">
+      <ChartReadout prompt="Select a dot to name the behaviour." lines={3}>
+        {chosen ? pointLabel(chosen) : null}
+      </ChartReadout>
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
-        className="h-auto w-full"
+        className="h-auto w-full select-none"
         role="group"
         aria-label={`Consistency map, scatter plot. ${caption}`}
-        onMouseLeave={() => setReadout(null)}
+        {...pointer}
       >
-        {ticks.map((t) => (
+        {TICKS.map((t) => (
           <g key={t}>
             <line
               x1={x(t)}
               x2={x(t)}
-              y1={M.top}
-              y2={H - M.bottom}
+              y1={plotTop}
+              y2={plotBottom}
               className="stroke-border"
               strokeWidth={1}
             />
             <line
-              x1={M.left}
-              x2={W - M.right}
+              x1={plotLeft}
+              x2={plotRight}
               y1={y(t)}
               y2={y(t)}
               className="stroke-border"
@@ -126,23 +211,23 @@ export function ConsistencyMap({ metrics }: { metrics: CompMetricAggregate[] }) 
           strokeDasharray="4 3"
         />
 
-        <g aria-hidden className="text-[10px] text-muted-foreground">
-          {ticks.map((t) => (
+        <g aria-hidden fontSize={em} className="text-muted-foreground">
+          {TICKS.map((t) => (
             <text
               key={`tx${t}`}
               x={x(t)}
-              y={H - M.bottom + 14}
+              y={plotBottom + em * 1.15}
               textAnchor="middle"
               className="fill-current"
             >
               {t}
             </text>
           ))}
-          {ticks.map((t) => (
+          {TICKS.map((t) => (
             <text
               key={`ty${t}`}
-              x={M.left - 6}
-              y={y(t) + 3}
+              x={plotLeft - em * 0.5}
+              y={y(t) + em * 0.35}
               textAnchor="end"
               className="fill-current"
             >
@@ -153,25 +238,34 @@ export function ConsistencyMap({ metrics }: { metrics: CompMetricAggregate[] }) 
               that pattern extracted for every other chart, so this chart now
               draws them from the shared helper rather than being a copy the
               others can drift from. */}
-          <XAxisTitle left={M.left} right={W - M.right} y={H - 6}>
-            {"per-day power — mean |ρ|"}
+          <XAxisTitle left={plotLeft} right={plotRight} y={xTitleY} fontSize={em}>
+            {X_TITLE}
           </XAxisTitle>
-          <YAxisTitle x={12} top={M.top} bottom={H - M.bottom}>
-            {"consistent separation — |mean ρ|"}
+          <YAxisTitle x={em * 1.05} top={plotTop} bottom={plotBottom} fontSize={em}>
+            {Y_TITLE}
           </YAxisTitle>
+        </g>
+        <g
+          aria-hidden
+          fontSize={em}
+          className="stroke-background text-muted-foreground [paint-order:stroke] [stroke-width:3px]"
+        >
+          <text x={noteTopRight} y={noteTopBaseline} textAnchor="end" className="fill-current">
+            {ON_DIAGONAL}
+          </text>
           <text
-            x={x(0.97)}
-            y={y(0.97) - 5}
+            x={noteBottomRight}
+            y={noteBottomBaseline}
             textAnchor="end"
             className="fill-current"
           >
-            same direction every task
-          </text>
-          <text x={x(0.97)} y={y(0.05)} textAnchor="end" className="fill-current">
-            strong but day-dependent
+            {BELOW_DIAGONAL}
           </text>
         </g>
 
+        {/* Each dot is one focusable element. The pointer is answered by the
+            <svg>, which finds the nearest dot, so a dot needs no invisible
+            halo for a target. */}
         {points.map((p, i) => (
           <g
             key={p.metric.id}
@@ -181,6 +275,7 @@ export function ConsistencyMap({ metrics }: { metrics: CompMetricAggregate[] }) 
             role="img"
             aria-label={pointLabel(p)}
             tabIndex={i === focusIndex ? 0 : -1}
+            data-dot={p.metric.id}
             className="cursor-default outline-none"
             onKeyDown={(e) => {
               const next =
@@ -196,45 +291,53 @@ export function ConsistencyMap({ metrics }: { metrics: CompMetricAggregate[] }) 
             }}
             onFocus={() => {
               setFocusIndex(i);
-              setReadout(p);
+              setFocusedId(p.metric.id);
             }}
-            onBlur={() => setReadout(null)}
-            onMouseEnter={() => setReadout(p)}
+            onBlur={() => setFocusedId(null)}
           >
-            {/* Invisible halo: pointer/focus target over a small dot. */}
-            <circle cx={x(p.x)} cy={y(p.y)} r={12} className="fill-transparent" />
-            <circle
-              cx={x(p.x)}
-              cy={y(p.y)}
-              r={4.5}
-              className={cn(
-                "fill-chart-1/70",
-                readout?.metric.id === p.metric.id && "stroke-ring stroke-2",
-              )}
-            />
+            <circle cx={dots[i].x} cy={dots[i].y} r={DOT_RADIUS} className="fill-chart-1/70" />
           </g>
         ))}
 
+        {/* The chosen dot, ringed, over the field. Foreground ink: --ring is
+            the blue the dots already are, and a blue ring on a blue dot is
+            no mark at all. */}
+        {chosen ? (
+          <circle
+            aria-hidden
+            data-chosen={chosen.metric.id}
+            cx={x(chosen.x)}
+            cy={y(chosen.y)}
+            r={DOT_RADIUS + 2.5}
+            fill="none"
+            strokeWidth={2}
+            className="pointer-events-none stroke-foreground"
+          />
+        ) : null}
+
         <g
           aria-hidden
-          className="stroke-background text-[10px] text-muted-foreground [paint-order:stroke] [stroke-width:3px]"
+          fontSize={em}
+          className="stroke-background [paint-order:stroke] [stroke-width:3px]"
         >
-          {labelled.map(({ p }, k) => (
+          {labels.map((l) => (
             <text
-              key={p.metric.id}
-              x={x(p.x) + 8}
-              y={labelYs[k]}
-              className="fill-current"
+              key={l.key}
+              data-dot-label={l.key}
+              x={l.x}
+              y={l.y}
+              textAnchor={l.anchor}
+              className={
+                l.key === chosenId
+                  ? "fill-current font-medium text-foreground"
+                  : "fill-current text-muted-foreground"
+              }
             >
-              {SHORT_LABELS.get(p.metric.id) ?? p.metric.label}
+              {l.text}
             </text>
           ))}
         </g>
       </svg>
-
-      <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
-        {readout ? pointLabel(readout) : "Hover or focus a dot to name the behaviour."}
-      </p>
 
       <figcaption className="text-xs text-muted-foreground">{caption}</figcaption>
     </figure>

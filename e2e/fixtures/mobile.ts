@@ -50,6 +50,10 @@ export const MOBILE_SPEC_FILES = [
   // The task page's weather charts (#860): a phone is where their labels were
   // painted at 5px and where a hover readout could not be reached at all.
   "task-weather-charts.spec.ts",
+  // The charts of the task analysis, the comp analysis and the report card
+  // (#860): a phone painted their labels at 5px, and named a dot or a line
+  // only for a mouse. A tap is this project's alone to try.
+  "analysis-charts.spec.ts",
   // The routed task editors (#637) — settings, weather notes and the route
   // editor. Same reason as the comp settings pages: built mobile-first, and
   // the route editor is the surface that most needed it.
