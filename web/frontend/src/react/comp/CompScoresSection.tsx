@@ -6,42 +6,46 @@
  * scores, top-3, teams, scores-by-task: useScoresViews). View transforms (class rollups,
  * top-3, teams) come from the shared scores-views module; the "Scores by
  * task" tab reuses the task page's ScoresSection one task at a time. Built on
- * the RAC kit: the view tabs are ARIA tabs, and each view is a sortable
- * ARIA-grid table (RAC sorting with per-column first-click directions —
- * scores read best-first).
+ * the RAC kit: the view tabs are ARIA tabs, and each view is a LIST whose
+ * whole rows are the links (comp/score-rows.tsx) — never a table of small
+ * links that scrolls sideways on a phone.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  Link as AriaLink,
-  DialogTrigger,
-  type Key,
-  type SortDescriptor,
-} from "react-aria-components";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
+import type { Key } from "react-aria-components";
 import { Select, SelectItem } from "@/react/rac/select";
-import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { TabList, Tab, TabPanel } from "@/react/rac/tabs";
-import { Modal, Dialog, DialogHeader, DialogTitle } from "@/react/rac/dialog";
-import { Button } from "@/react/rac/button";
 import { Explain } from "@/react/rac/explain";
+import { cn } from "@/react/lib/utils";
 import {
   aggregateTeams,
   buildClassGroups,
   computeTop3Rows,
   type CompClassScore,
-  type CompPilotScore,
+  type CompTeamScore,
+  type TaskInfo,
 } from "../../scores-views";
 import { ScoresSection } from "./ScoresSection";
+import { ClassPicker } from "../analysis/ClassPicker";
 import { toast } from "../lib/toast";
 import { useAction, type ActionState } from "@/react/rac/form";
-import { formatRankedScore, formatTaskDate, ordinal } from "../lib/format";
-import { pilotPath } from "../lib/slug";
-import { CompNameProvider, useCompName } from "./comp-name-context";
+import { formatTaskDate, ordinal } from "../lib/format";
+import { compPilotScoresPath, pilotPath } from "../lib/slug";
+import { CompNameProvider } from "./comp-name-context";
+import {
+  Points,
+  ScoreLinkRow,
+  ScoreList,
+  ScoreStaticRow,
+  TaskColumn,
+  TaskColumnsHeader,
+  columnsShownClass,
+  detailHiddenClass,
+  taskColumnsAt,
+} from "./score-rows";
 import type { TaskSummary } from "./types";
 // Single source of truth for the /scores response shape, shared with the loader.
 import type { CompScores } from "../loaders";
-
-const cellLinkClass =
-  "underline underline-offset-4 outline-none data-focus-visible:ring-2 data-focus-visible:ring-ring/50";
 
 export type CompScoresState =
   | { kind: "loading" }
@@ -164,17 +168,61 @@ export function ScoresEmptyState({
   );
 }
 
+
 /**
  * The tab strip in the bar's second layer is 51 px tall with body-size labels
  * at every pointer, like every control in the bar (issue #863); on the page it
  * was that only for a finger.
  */
 const barTabsClass = "h-[3.1875rem]";
-const barTabClass = "px-5 text-base";
+const barTabClass = "px-4 text-base";
+
+/** The views, by the key each has in `?view=` and in the tab strip. */
+export type ScoresView = "overall" | "bytask" | "top3" | "teams";
+const VIEWS: readonly ScoresView[] = ["overall", "bytask", "top3", "teams"];
+
+/** Short dates on the lists: "Mon 5 Jan". The year is the competition's. */
+const shortDate = (date: string) =>
+  formatTaskDate(date, { weekday: "short", day: "numeric", month: "short" });
 
 /**
- * The scores page's views: one tab per class, then "Top 3 per task & class",
- * "Teams" and "Scores by task".
+ * Which view and class the page shows, read from and written to the URL.
+ *
+ * In the URL, not in state, because the lists now lead somewhere: a reader
+ * opens a pilot, then a report card, and comes Back twice. With the choice in
+ * memory they came back to the first class and the first view; with it in the
+ * query, Back returns the page as it was left — the rule every list page
+ * keeps (CLAUDE.md, the overlays rule). Written with `replace`, so the views
+ * do not pile up in the history, and read in the first render, which the
+ * server renders with the query too (entry-server.tsx), so a shared link to
+ * the Floater top 3 is that view in the server HTML.
+ *
+ * `?task=` is the older deep link (the task pages link "Scores" here with it):
+ * on its own it opens the scores by task on that task.
+ */
+function useScoresQuery() {
+  const [params, setParams] = useSearchParams();
+  const rawView = params.get("view");
+  const task = params.get("task");
+  const view: ScoresView = VIEWS.includes(rawView as ScoresView)
+    ? (rawView as ScoresView)
+    : task
+      ? "bytask"
+      : "overall";
+  const set = (changes: Record<string, string | null>) => {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === null) next.delete(key);
+      else next.set(key, value);
+    }
+    setParams(next, { replace: true, preventScrollReset: true });
+  };
+  return { view, cls: params.get("class"), task, set };
+}
+
+/**
+ * The scores page's views: Overall (one class's standings), By task, Top 3
+ * and Teams, with the class picked under them where the view has classes.
  *
  * A hook, not a component, because the two halves are drawn in different
  * places (issue #863): `tabList` is the bar's second layer, which sticks with
@@ -182,6 +230,11 @@ const barTabClass = "px-5 text-base";
  * `<Tabs {...tabsProps}>`, around its `<Page>`. Until the scores are ready
  * both halves are null and the Tabs is empty, so the page's tree does not
  * change shape when they arrive.
+ *
+ * The classes used to be tabs in the same strip as the views, which ran off
+ * a phone ("open · floater · Top 3 per task & class · Teams · Scores by
+ * task"). They are a segmented control of their own now, under the views —
+ * the analysis pages' `ClassPicker` — and only where the view has classes.
  */
 export function useScoresViews({
   scores,
@@ -190,128 +243,111 @@ export function useScoresViews({
   timezone,
   tasks,
   defaultTaskId,
-  deepLinkTaskId,
 }: {
   /** Null until the scores are ready, and when no class has any. */
   scores: CompScores | null;
+  /** As it goes in URLs: a hidden comp's share key rides along. */
   compId: string;
-  /** Comp name, so the deep score tables can build canonical pilot links. */
+  /** Comp name, so the lists can build canonical pilot links. */
   compName: string | null;
   timezone: string | null;
   tasks: TaskSummary[];
   defaultTaskId: string | null;
-  /**
-   * ?task= deep link (task pages link "Scores" here): opens the
-   * "Scores by task" tab on that task. Applied in an effect, so the first
-   * render is the default tab on both sides and only then switches.
-   *
-   * That used to be forced: the server rendered the pathname alone, so a
-   * query-driven tab in the first render was guaranteed to mismatch. The
-   * server now renders the query too (entry-server.tsx), so selecting the tab
-   * in the first render would be safe — and would put the deep-linked task's
-   * scores in the server HTML, which is the reason to do it. Deliberately not
-   * done here: it is a behaviour change to the tab logic, not part of the SSR
-   * fix.
-   */
-  deepLinkTaskId?: string | null;
 }): {
   tabsProps: { selectedKey: string; onSelectionChange: (key: Key) => void };
   tabList: ReactNode;
   panels: ReactNode;
 } {
+  const query = useScoresQuery();
   const classScores = scores && scores.class_scores.length > 0 ? scores.class_scores : null;
-  const teams = useMemo(() => (classScores ? aggregateTeams(classScores) : []), [classScores]);
-  const groups = useMemo(() => (classScores ? buildClassGroups(classScores) : []), [classScores]);
-  // The reader's own choices; until they make one, the first class and the
-  // first scorable task, whenever those arrive.
-  const [pickedTab, setPickedTab] = useState<string | null>(null);
-  const [pickedTask, setPickedTask] = useState<string | null>(null);
+  const teams = classScores ? aggregateTeams(classScores) : [];
+  const groups = classScores ? buildClassGroups(classScores) : [];
   const scorableTasks = tasks.filter((t) => t.has_xctsk);
   const hasScorableTasks = scorableTasks.length > 0;
-  const pickedTaskId = pickedTask ?? defaultTaskId ?? scorableTasks[0]?.task_id ?? null;
+  const pickedTaskId =
+    (query.task && scorableTasks.some((t) => t.task_id === query.task) ? query.task : null) ??
+    defaultTaskId ??
+    scorableTasks[0]?.task_id ??
+    null;
+
+  // A view the comp does not have (Teams without teams, By task before any
+  // task has a route) falls back to Overall rather than showing nothing.
+  const available = (v: ScoresView) =>
+    v === "teams" ? teams.length > 0 : v === "bytask" ? hasScorableTasks : true;
+  const view: ScoresView = available(query.view) ? query.view : "overall";
+
   // Always a string, so the Tabs is controlled from its first render: with
   // no tabs yet, a key that matches none selects nothing.
-  const tab = classScores ? (pickedTab ?? `scores:${classScores[0].pilot_class}`) : "";
-
-  // Waits for the task list: the competition may load after the page does.
-  const deepLinkReady =
-    !!deepLinkTaskId && scorableTasks.some((t) => t.task_id === deepLinkTaskId);
-  useEffect(() => {
-    if (!deepLinkReady || !deepLinkTaskId) return;
-    setPickedTab("bytask");
-    setPickedTask(deepLinkTaskId);
-    // Re-run only if the link target itself changes (or first becomes
-    // usable), not on task-list refreshes.
-  }, [deepLinkTaskId, deepLinkReady]);
-
   const tabsProps = {
-    selectedKey: tab,
-    onSelectionChange: (key: Key) => setPickedTab(String(key)),
+    selectedKey: classScores ? view : "",
+    onSelectionChange: (key: Key) => {
+      const next = String(key) as ScoresView;
+      if (next === view) return;
+      query.set({ view: next === "overall" ? null : next });
+    },
   };
 
   if (!scores || !classScores) return { tabsProps, tabList: null, panels: null };
 
+  // The class picker's choices are the view's: the classes for the standings,
+  // the classes and their roll-ups ("Overall" across every class) for the
+  // top 3. A class named in the URL that the view lacks falls back to the
+  // first, so one `?class=` serves both views.
+  const classNames = classScores.map((c) => c.pilot_class);
+  const groupNames = groups.map((g) => g.label);
+  const pickerOptions = view === "overall" ? classNames : view === "top3" ? groupNames : [];
+  const pickedName =
+    query.cls && pickerOptions.includes(query.cls) ? query.cls : (pickerOptions[0] ?? "");
+
   const tabList = (
-    <TabList aria-label="Score views" className={barTabsClass}>
-      {classScores.map((cls) => (
-        <Tab key={cls.pilot_class} id={`scores:${cls.pilot_class}`} className={barTabClass}>
-          {cls.pilot_class}
+    <div className="flex flex-col gap-2">
+      <TabList aria-label="Score views" className={barTabsClass}>
+        <Tab id="overall" className={barTabClass}>
+          Overall
         </Tab>
-      ))}
-      <Tab id="top3" className={barTabClass}>
-        Top 3 per task &amp; class
-      </Tab>
-      {teams.length > 0 ? (
-        <Tab id="teams" className={barTabClass}>
-          Teams
+        {hasScorableTasks ? (
+          <Tab id="bytask" className={barTabClass}>
+            By task
+          </Tab>
+        ) : null}
+        <Tab id="top3" className={barTabClass}>
+          Top 3
         </Tab>
+        {teams.length > 0 ? (
+          <Tab id="teams" className={barTabClass}>
+            Teams
+          </Tab>
+        ) : null}
+      </TabList>
+      {pickerOptions.length > 1 ? (
+        <ClassPicker
+          classes={pickerOptions}
+          value={pickedName}
+          onChange={(name) => query.set({ class: name === pickerOptions[0] ? null : name })}
+        />
       ) : null}
-      {hasScorableTasks ? (
-        <Tab id="bytask" className={barTabClass}>
-          Scores by task
-        </Tab>
-      ) : null}
-    </TabList>
+    </div>
   );
+
+  const cls = classScores.find((c) => c.pilot_class === pickedName) ?? classScores[0];
+  const group = groups.find((g) => g.label === pickedName) ?? groups[0];
 
   const panels = (
     <CompNameProvider value={compName}>
-      {classScores.map((cls) => (
-        <TabPanel key={cls.pilot_class} id={`scores:${cls.pilot_class}`}>
-          <ScoresTable scores={scores} cls={cls} />
-        </TabPanel>
-      ))}
-
-      <TabPanel id="top3">
-        {groups.map((group) => (
-          <section key={group.label}>
-            <h3 className="mt-6 font-bold">{group.label}</h3>
-            {group.classes.length > 1 ? (
-              <p className="text-sm text-muted-foreground">
-                Combined: {group.classes.join(", ")}
-              </p>
-            ) : null}
-            <Top3Table scores={scores} group={group} />
-          </section>
-        ))}
+      <TabPanel id="overall" className="flex flex-col gap-4">
+        <StandingsList scores={scores} cls={cls} compId={compId} compName={compName} />
       </TabPanel>
 
-      {teams.length > 0 ? (
-        <TabPanel id="teams">
-          <TeamsTable scores={scores} teams={teams} />
-        </TabPanel>
-      ) : null}
-
       {hasScorableTasks && pickedTaskId ? (
-        <TabPanel id="bytask">
-          {/* One task at a time — every task's full tables at once is too
+        <TabPanel id="bytask" className="flex flex-col gap-4">
+          {/* One task at a time — every task's full list at once is too
               heavy for long comps. */}
           <Select
             label="Task"
-            className="mt-2 w-fit"
+            className="w-fit max-w-full"
             selectedKey={pickedTaskId}
             onSelectionChange={(key) => {
-              if (key != null) setPickedTask(String(key));
+              if (key != null) query.set({ view: "bytask", task: String(key) });
             }}
           >
             {scorableTasks.map((t) => (
@@ -332,221 +368,58 @@ export function useScoresViews({
           />
         </TabPanel>
       ) : null}
+
+      <TabPanel id="top3" className="flex flex-col gap-4">
+        {group ? (
+          <Top3Lists scores={scores} group={group} compId={compId} compName={compName} />
+        ) : null}
+      </TabPanel>
+
+      {teams.length > 0 ? (
+        <TabPanel id="teams" className="flex flex-col gap-4">
+          <TeamsList tasks={scores.tasks} teams={teams} />
+        </TabPanel>
+      ) : null}
     </CompNameProvider>
   );
 
   return { tabsProps, tabList, panels };
 }
 
-// ── Sortable table ────────────────────────────────────────────────────────────
+// ── Overall ──────────────────────────────────────────────────────────────────
 
-interface ColumnSpec {
-  label: string;
-  title?: string;
-  /** First-click sort direction; scores read best-first when descending. */
-  defaultDir?: "asc" | "desc";
-  /**
-   * Right-align the header and every cell in this column (with tabular figures),
-   * so quantities line up digit-for-digit and can be compared down the column.
-   * Columns are left-aligned by default — set this only for pure numbers.
-   */
-  align?: "right";
-  /** The one column whose cells name each row for AT (exactly one per table). */
-  isRowHeader?: boolean;
-}
-
-interface CellSpec {
-  /** Value used for ordering; "" always sorts to the bottom of score columns. */
-  sort: string;
-  node: React.ReactNode;
-}
-
-function SortableTable({
-  label,
-  columns,
-  rows,
+/**
+ * One class's standings: a row per pilot with their rank, their name, their
+ * place in each task on the second line, and their total. The row opens the
+ * pilot's own scores (`/scores/:pilot`), where each task is a row that opens
+ * its report card. A wide screen has room to lay each task's score out in a
+ * column inside the row instead, and does.
+ */
+function StandingsList({
+  scores,
+  cls,
+  compId,
+  compName,
 }: {
-  /** Accessible name for the grid. */
-  label: string;
-  columns: ColumnSpec[];
-  rows: CellSpec[][];
+  scores: CompScores;
+  cls: CompClassScore;
+  compId: string;
+  compName: string | null;
 }) {
-  const [sort, setSort] = useState<SortDescriptor | null>(null);
-
-  const numericColumn = (col: number) => {
-    const values = rows.map((row) => row[col]?.sort ?? "");
-    return values.every((v) => v === "" || !Number.isNaN(Number(v)));
-  };
-
-  const sortedRows = useMemo(() => {
-    if (!sort) return rows;
-    const col = Number(sort.column);
-    const values = rows.map((row) => row[col]?.sort ?? "");
-    const numeric = values.every((v) => v === "" || !Number.isNaN(Number(v)));
-    return rows
-      .map((row, i) => ({ row, value: values[i] }))
-      .sort((a, b) => {
-        let cmp: number;
-        if (numeric) {
-          const av = a.value === "" ? -Infinity : Number(a.value);
-          const bv = b.value === "" ? -Infinity : Number(b.value);
-          cmp = av - bv;
-        } else {
-          cmp = a.value.localeCompare(b.value);
-        }
-        return sort.direction === "ascending" ? cmp : -cmp;
-      })
-      .map(({ row }) => row);
-  }, [rows, sort]);
-
-  return (
-    <div className="overflow-x-auto rounded-lg border">
-      <Table
-        aria-label={label}
-        sortDescriptor={sort ?? undefined}
-        onSortChange={(desc) =>
-          setSort((prev) => {
-            // Same column: RAC already toggled the direction relative to prev.
-            if (prev && prev.column === desc.column) return desc;
-            // New column: start from its default direction, not RAC's
-            // always-ascending — scores read best-first (descending).
-            const col = Number(desc.column);
-            const dir =
-              columns[col]?.defaultDir ?? (numericColumn(col) ? "desc" : "asc");
-            return {
-              column: desc.column,
-              direction: dir === "asc" ? "ascending" : "descending",
-            };
-          })
-        }
-      >
-        <TableHeader>
-          {columns.map((col, i) => (
-            <Column
-              key={i}
-              id={String(i)}
-              allowsSorting
-              isRowHeader={col.isRowHeader ?? false}
-              className={
-                col.align === "right"
-                  ? "cursor-pointer text-right data-hovered:bg-muted/50"
-                  : "cursor-pointer data-hovered:bg-muted/50"
-              }
-            >
-              {({ sortDirection }) => (
-                // The date tooltip rides on an inner span — RAC Columns filter
-                // out non-ARIA DOM attributes like title.
-                <span title={col.title}>
-                  {col.label}
-                  {sortDirection ? (sortDirection === "ascending" ? " ▲" : " ▼") : ""}
-                </span>
-              )}
-            </Column>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {sortedRows.map((row, i) => (
-            <Row key={i}>
-              {row.map((cell, j) => (
-                <Cell
-                  key={j}
-                  className={
-                    columns[j]?.align === "right" ? "text-right tabular-nums" : undefined
-                  }
-                >
-                  {cell.node}
-                </Cell>
-              ))}
-            </Row>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-// ── Views ─────────────────────────────────────────────────────────────────────
-
-function ScoresTable({ scores, cls }: { scores: CompScores; cls: CompClassScore }) {
-  const compName = useCompName();
-  // Only show columns for tasks flown by this pilot class — classes fly
-  // different tasks, so mixing them would leave every off-class cell blank.
+  // Only the tasks this class flew — classes fly different tasks, so mixing
+  // them would leave every off-class place blank.
   const classTasks = scores.tasks.filter((t) => t.classes.includes(cls.pilot_class));
   const isFtv = scores.series_scoring === "ftv";
-  const nameById = new Map(classTasks.map((t) => [t.task_id, t.task_name]));
-
-  const columns: ColumnSpec[] = [
-    { label: "#", defaultDir: "asc", align: "right" },
-    { label: "Pilot", defaultDir: "asc", isRowHeader: true },
-    ...classTasks.map((t) => ({
-      label: t.task_name,
-      title: t.task_date,
-      defaultDir: "desc" as const,
-      align: "right" as const,
-    })),
-    { label: "Total", defaultDir: "desc", align: "right" },
-  ];
-
-  const rows: CellSpec[][] = cls.pilots.map((p) => [
-    { sort: String(p.rank), node: p.rank },
-    { sort: p.pilot_name, node: p.pilot_name },
-    ...classTasks.map((task): CellSpec => {
-      const entry = p.tasks.find((t) => t.task_id === task.task_id);
-      if (!entry) return { sort: "", node: "—" };
-      const discarded = entry.ftv_status === "discarded";
-      const partial = entry.ftv_status === "partial";
-      const ftvTitle = discarded
-        ? `Discarded under FTV — the validity cap was already reached`
-        : partial
-          ? `Counted ${formatRankedScore(entry.ftv_counted_score ?? 0)} of ${formatRankedScore(entry.score)} under FTV`
-          : undefined;
-      return {
-        // Discarded tasks sort as if they contributed nothing to the total.
-        sort: String(discarded ? 0 : entry.score),
-        node: (
-          <AriaLink
-            href={pilotPath(scores.comp_id, compName, task.task_id, task.task_name, p.comp_pilot_id, p.pilot_name)}
-            aria-label={`How ${p.pilot_name}'s score for ${task.task_name} was calculated`}
-            className={cellLinkClass}
-          >
-            <span
-              title={ftvTitle}
-              className={discarded ? "text-muted-foreground line-through" : undefined}
-            >
-              {formatRankedScore(entry.score)}
-            </span>{" "}
-            {partial ? (
-              <span className="text-caution">
-                (part)
-              </span>
-            ) : (
-              <span className="text-muted-foreground">({ordinal(entry.rank)})</span>
-            )}
-          </AriaLink>
-        ),
-      };
-    }),
-    {
-      sort: String(p.total_score),
-      node: isFtv ? (
-        <span className="inline-flex items-center gap-1.5">
-          <strong>{formatRankedScore(p.total_score)}</strong>
-          <FtvBreakdown pilot={p} nameById={nameById} ftvFactor={scores.ftv_factor ?? null} />
-        </span>
-      ) : (
-        <strong>{formatRankedScore(p.total_score)}</strong>
-      ),
-    },
-  ]);
+  const at = taskColumnsAt(classTasks.length);
 
   return (
     <>
       {isFtv ? (
         // The headline fact stays on the page; how to read the struck-through
-        // and "(part)" rows is method, so it sits behind the ⓘ. Every pilot's
-        // own arithmetic is already a click away in FtvBreakdown, which is
-        // where a reader who wants the detail is going anyway.
-        <p className="mt-3 text-sm text-muted-foreground">
+        // places is method, so it sits behind the ⓘ. Every pilot's own
+        // arithmetic is on their page, which is where a reader who wants the
+        // detail is going anyway.
+        <p className="text-sm text-muted-foreground">
           <strong className="font-medium text-foreground">FTV</strong> — only each
           pilot&rsquo;s best tasks count
           {scores.ftv_factor != null
@@ -555,203 +428,167 @@ function ScoresTable({ scores, cls }: { scores: CompScores; cls: CompClassScore 
           .{" "}
           <Explain label="Fixed Total Validity" className="align-middle">
             <p>
-              Struck-through scores are dropped; &ldquo;(part)&rdquo; scores
-              count in part. Open a total&rsquo;s breakdown for the arithmetic.
+              Struck-through places are tasks that are dropped. Open a pilot
+              for the arithmetic.
             </p>
           </Explain>
         </p>
       ) : null}
-      <SortableTable label={`Scores — ${cls.pilot_class}`} columns={columns} rows={rows} />
+      <div>
+        <TaskColumnsHeader
+          at={at}
+          first="Pilot"
+          narrowFirst="Pilot · place in each task"
+          tasks={classTasks}
+          last="Total"
+        />
+        <ScoreList label={`Scores — ${cls.pilot_class}`}>
+          {cls.pilots.map((p) => {
+            const entries = classTasks.map((t) => p.tasks.find((e) => e.task_id === t.task_id) ?? null);
+            return (
+              <ScoreLinkRow
+                key={p.comp_pilot_id}
+                href={compPilotScoresPath(compId, compName, p.comp_pilot_id, p.pilot_name)}
+                rank={p.rank}
+                title={p.pilot_name}
+                detailClassName={detailHiddenClass(at)}
+                detail={
+                  <>
+                    <span aria-hidden="true">
+                      {entries.map((e, i) => (
+                        <Fragment key={classTasks[i].task_id}>
+                          {i > 0 ? " · " : ""}
+                          <span className={e?.ftv_status === "discarded" ? "line-through" : undefined}>
+                            {e ? ordinal(e.rank) : "—"}
+                          </span>
+                        </Fragment>
+                      ))}
+                    </span>
+                    <span className="sr-only">
+                      {classTasks
+                        .map((t, i) => {
+                          const e = entries[i];
+                          if (!e) return `${t.task_name}, no score`;
+                          return `${t.task_name}, ${ordinal(e.rank)}${e.ftv_status === "discarded" ? ", dropped" : ""}`;
+                        })
+                        .join("; ")}
+                    </span>
+                  </>
+                }
+                figure={
+                  <span className="flex items-center gap-3">
+                    <span className={cn(columnsShownClass(at), "items-center gap-3")}>
+                      {entries.map((e, i) => (
+                        <TaskColumn
+                          key={classTasks[i].task_id}
+                          score={e ? e.score : null}
+                          rank={e?.rank}
+                          struck={e?.ftv_status === "discarded"}
+                        />
+                      ))}
+                    </span>
+                    <Points value={p.total_score} />
+                  </span>
+                }
+              />
+            );
+          })}
+        </ScoreList>
+      </div>
     </>
   );
 }
 
+// ── Top 3 ────────────────────────────────────────────────────────────────────
+
 /**
- * Per-pilot FTV explainer (transparency): which tasks counted (in full or in
- * part), which were discarded under the validity cap, and the total arithmetic.
- * Rendered straight from the scores' FTV fields — the same numbers the
- * scoreboard shows.
+ * The first three on each task the class (or roll-up) flew, then the first
+ * three overall. A short list per task; each row opens that task's report
+ * card, and the overall rows open the pilot's own scores.
  */
-function FtvBreakdown({
-  pilot,
-  nameById,
-  ftvFactor,
-}: {
-  pilot: CompPilotScore;
-  nameById: Map<string, string>;
-  ftvFactor: number | null;
-}) {
-  const kept = pilot.tasks
-    .filter((t) => t.ftv_status !== "discarded")
-    .sort((a, b) => (b.ftv_counted_score ?? 0) - (a.ftv_counted_score ?? 0));
-  const dropped = pilot.tasks
-    .filter((t) => t.ftv_status === "discarded")
-    .sort((a, b) => b.score - a.score);
-  const name = (id: string) => nameById.get(id) ?? id;
-
-  return (
-    <DialogTrigger>
-      <Button
-        variant="ghost"
-        className="h-auto px-1.5 py-0.5 text-xs font-normal text-muted-foreground underline underline-offset-2"
-        aria-label={`FTV breakdown for ${pilot.pilot_name}`}
-      >
-        breakdown
-      </Button>
-      <Modal className="sm:max-w-md">
-        <Dialog>
-          <DialogHeader>
-            <DialogTitle>{pilot.pilot_name} — FTV breakdown</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm">
-            <p className="text-muted-foreground">
-              Best tasks are kept until the fixed validity cap is reached
-              {ftvFactor != null ? ` (${Math.round(ftvFactor * 100)}% of total validity discarded)` : ""}.
-            </p>
-
-            <h4 className="mt-3 mb-1 font-medium">Tasks counted</h4>
-            <ul className="space-y-1">
-              {kept.map((t) => (
-                <li key={t.task_id} className="flex justify-between gap-3">
-                  <span>
-                    {name(t.task_id)}
-                    {t.ftv_status === "partial" ? (
-                      <span className="text-caution"> — counted in part</span>
-                    ) : null}
-                  </span>
-                  <span className="tabular-nums">
-                    {formatRankedScore(t.ftv_counted_score ?? t.score)}
-                    {t.ftv_status === "partial" ? (
-                      <span className="text-muted-foreground"> of {formatRankedScore(t.score)}</span>
-                    ) : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-
-            {dropped.length > 0 ? (
-              <>
-                <h4 className="mt-3 mb-1 font-medium">Tasks discarded</h4>
-                <ul className="space-y-1">
-                  {dropped.map((t) => (
-                    <li key={t.task_id} className="flex justify-between gap-3 text-muted-foreground">
-                      <span className="line-through">{name(t.task_id)}</span>
-                      <span className="tabular-nums line-through">{formatRankedScore(t.score)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
-
-            <div className="mt-3 flex justify-between gap-3 border-t border-border pt-2 font-medium">
-              <span>FTV total</span>
-              <span className="tabular-nums">{formatRankedScore(pilot.total_score)}</span>
-            </div>
-          </div>
-        </Dialog>
-      </Modal>
-    </DialogTrigger>
-  );
-}
-
-function Top3Table({
+function Top3Lists({
   scores,
   group,
+  compId,
+  compName,
 }: {
   scores: CompScores;
   group: ReturnType<typeof buildClassGroups>[number];
+  compId: string;
+  compName: string | null;
 }) {
-  const compName = useCompName();
   const rows = computeTop3Rows(group, scores.tasks);
-
-  // Left-aligned throughout: the rank columns read "PilotName · score", so the
-  // number sits behind a name of varying length and right-aligning it would not
-  // line the scores up anyway.
-  const columns: ColumnSpec[] = [
-    { label: "Task", defaultDir: "asc", isRowHeader: true },
-    { label: "1st", defaultDir: "desc" },
-    { label: "2nd", defaultDir: "desc" },
-    { label: "3rd", defaultDir: "desc" },
-  ];
-
-  const tableRows: CellSpec[][] = rows.map((row) => {
-    const isTotal = row.task_id === null;
-    return [
-      {
-        sort: row.label,
-        node: isTotal ? <strong title={row.task_date ?? undefined}>{row.label}</strong> : row.label,
-      },
-      ...[0, 1, 2].map((rankIndex): CellSpec => {
-        const entry = row.entries[rankIndex];
-        if (!entry) return { sort: "", node: "—" };
-        const content = (
-          <>
-            {entry.pilot_name} · {isTotal ? <strong>{formatRankedScore(entry.score)}</strong> : formatRankedScore(entry.score)}
-          </>
-        );
-        return {
-          sort: String(entry.score),
-          node: row.task_id ? (
-            <AriaLink
-              href={pilotPath(scores.comp_id, compName, row.task_id, row.label, entry.comp_pilot_id, entry.pilot_name)}
-              aria-label={`How ${entry.pilot_name}'s score for ${row.label} was calculated`}
-              className={cellLinkClass}
-            >
-              {content}
-            </AriaLink>
-          ) : (
-            content
-          ),
-        };
-      }),
-    ];
-  });
-
   return (
-    <SortableTable label={`Top 3 — ${group.label}`} columns={columns} rows={tableRows} />
+    <>
+      {group.classes.length > 1 ? (
+        <p className="text-sm text-muted-foreground">Combined: {group.classes.join(", ")}</p>
+      ) : null}
+      <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((row) => {
+          const heading = row.task_id
+            ? `${row.label} · ${row.task_date ? shortDate(row.task_date) : ""}`.replace(/ · $/, "")
+            : row.label;
+          return (
+            <section key={row.task_id ?? "total"} className="min-w-0">
+              <h3 className="mb-1.5 px-1 text-sm font-medium text-muted-foreground">{heading}</h3>
+              {row.entries.length === 0 ? (
+                <p className="px-1 text-muted-foreground">—</p>
+              ) : (
+                <ScoreList label={`Top 3 — ${group.label}, ${row.label}`}>
+                  {row.entries.map((entry, i) => (
+                    <ScoreLinkRow
+                      key={entry.comp_pilot_id}
+                      href={
+                        row.task_id
+                          ? pilotPath(compId, compName, row.task_id, row.label, entry.comp_pilot_id, entry.pilot_name)
+                          : compPilotScoresPath(compId, compName, entry.comp_pilot_id, entry.pilot_name)
+                      }
+                      rank={ordinal(i + 1)}
+                      title={entry.pilot_name}
+                      figure={<Points value={entry.score} />}
+                    />
+                  ))}
+                </ScoreList>
+              )}
+            </section>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
-function TeamsTable({
-  scores,
-  teams,
-}: {
-  scores: CompScores;
-  teams: ReturnType<typeof aggregateTeams>;
-}) {
-  const columns: ColumnSpec[] = [
-    { label: "#", defaultDir: "asc", align: "right" },
-    { label: "Team", defaultDir: "asc", isRowHeader: true },
-    ...scores.tasks.map((t) => ({
-      label: t.task_name,
-      title: t.task_date,
-      defaultDir: "desc" as const,
-      align: "right" as const,
-    })),
-    { label: "Total", defaultDir: "desc", align: "right" },
-  ];
+// ── Teams ────────────────────────────────────────────────────────────────────
 
-  const rows: CellSpec[][] = teams.map((team) => [
-    { sort: String(team.rank), node: team.rank },
-    {
-      sort: team.team_name,
-      node: (
-        <>
-          <div>
-            <strong>{team.team_name}</strong>
-          </div>
-          <div className="text-sm text-muted-foreground">{team.pilots.join(", ")}</div>
-        </>
-      ),
-    },
-    ...scores.tasks.map((task): CellSpec => {
-      const score = team.task_scores[task.task_id];
-      return score !== undefined
-        ? { sort: String(score), node: formatRankedScore(score) }
-        : { sort: "", node: "—" };
-    }),
-    { sort: String(team.total_score), node: <strong>{formatRankedScore(team.total_score)}</strong> },
-  ]);
-
-  return <SortableTable label="Team scores" columns={columns} rows={rows} />;
+/**
+ * The teams, best first: a row per team with its pilots on the second line.
+ * A team has no page, so its row opens nothing and shows no chevron.
+ */
+function TeamsList({ tasks, teams }: { tasks: TaskInfo[]; teams: CompTeamScore[] }) {
+  const at = taskColumnsAt(tasks.length);
+  return (
+    <div>
+      <TaskColumnsHeader at={at} first="Team" narrowFirst="Team · pilots" tasks={tasks} last="Total" />
+      <ScoreList label="Team scores">
+        {teams.map((team) => (
+          <ScoreStaticRow
+            key={team.team_name}
+            rank={team.rank}
+            title={team.team_name}
+            detail={team.pilots.join(", ")}
+            figure={
+              <span className="flex items-center gap-3">
+                <span className={cn(columnsShownClass(at), "items-center gap-3")}>
+                  {tasks.map((t) => (
+                    <TaskColumn key={t.task_id} score={team.task_scores[t.task_id] ?? null} />
+                  ))}
+                </span>
+                <Points value={team.total_score} />
+              </span>
+            }
+          />
+        ))}
+      </ScoreList>
+    </div>
+  );
 }

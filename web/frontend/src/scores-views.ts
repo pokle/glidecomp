@@ -1,6 +1,6 @@
 /**
  * Pure data transforms for the scores page views: class-hierarchy rollups
- * ("Top 3 per task & class") and team aggregation. No DOM dependencies so the
+ * (the "Top 3" view) and team aggregation. No DOM dependencies so the
  * logic is unit-testable.
  */
 
@@ -22,6 +22,14 @@ export interface PilotTaskEntry {
   /** The pilot's task score (the full task result, before any FTV discard). */
   score: number;
   rank: number;
+  /**
+   * What the pilot did that day (goal, the distance flown, the speed-section
+   * time), for the pilot's own scores page. Optional: a body cached before
+   * these were added has none, and a page must then say less, not fail.
+   */
+  made_goal?: boolean;
+  flown_distance?: number;
+  speed_section_time?: number | null;
   /** FTV comps only: how this task counted toward the pilot's series total. */
   ftv_status?: FtvTaskStatus;
   /** FTV comps only: the score that actually counted (score × fraction). */
@@ -140,7 +148,7 @@ export function buildClassGroups(classScores: CompClassScore[]): ClassGroup[] {
   return groups;
 }
 
-// ── Top 3 per task & class ────────────────────────────────────────────────────
+// ── Top 3 per task and class ────────────────────────────────────────────────────
 
 export interface Top3Entry {
   pilot_name: string;

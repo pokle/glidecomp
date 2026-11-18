@@ -25,6 +25,7 @@ import {
   loadCompetitions,
   loadCompDetail,
   loadCompScores,
+  loadCompPilotScores,
   loadCompWaypoints,
   loadTaskDetail,
   loadPilotScoreDetail,
@@ -57,6 +58,7 @@ import {
   redactedError,
   compPath,
   compScoresPath,
+  compPilotScoresPath,
   compWaypointsPath,
   compAnalysisPath,
   taskPath,
@@ -265,6 +267,43 @@ const ROUTE_RUNS: { [K in CompSsrRouteName]: { run: RouteRun } } = {
                 ["Competitions", "/comp"],
                 [c.name, compPath(compId, c.name)],
                 ["Scores", canonical],
+              ])
+            ),
+        },
+      };
+    },
+  },
+  pilotScores: {
+    async run(f, m, origin) {
+      const urlCompId = idFromSegment(m[1]);
+      const pilotId = idFromSegment(m[2]);
+      const data = await loadCompPilotScores(f, urlCompId, pilotId);
+      // The id this viewer's URLs carry: plus the share key on a hidden comp.
+      const compId = compUrlId(data.comp, urlCompId);
+      const c = data.comp;
+      // Null when the standings were unavailable: then the page fetches them
+      // itself, and the URL is left as it came rather than 301'd to a slug
+      // with no name in it.
+      const pilotName = data.scores ? pilotNameFrom(data.scores, pilotId) : null;
+      const canonical = pilotName
+        ? compPilotScoresPath(compId, c.name, pilotId, pilotName)
+        : undefined;
+      const scoresPath = compScoresPath(compId, c.name);
+      return {
+        data,
+        canonicalPath: canonical,
+        cache: data.scores
+          ? { computedAt: data.scores.computed_at, stale: data.scores.stale }
+          : undefined,
+        head: {
+          title: `${pilotName ?? "Pilot"} — Scores — ${c.name} — GlideComp`,
+          description: `${pilotName ?? "A pilot"}'s scores at ${c.name}: their place, their total and every task, with a step-by-step explanation of each task's score on GlideComp.`,
+          extra: jsonLd(
+              breadcrumb(origin, [
+                ["Competitions", "/comp"],
+                [c.name, compPath(compId, c.name)],
+                ["Scores", scoresPath],
+                ...(canonical && pilotName ? [[pilotName, canonical] as [string, string]] : []),
               ])
             ),
         },

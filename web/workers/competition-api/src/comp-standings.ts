@@ -36,6 +36,14 @@ type TaskEntry = {
   task_date: string;
   score: number;
   rank: number;
+  /**
+   * What the pilot did that day, so a page of one pilot's competition can say
+   * "goal in 1:37:55" or "62.3 km" beside each task without fetching every
+   * task's scores. Copied from the task's own result; not used in any total.
+   */
+  made_goal: boolean;
+  flown_distance: number;
+  speed_section_time: number | null;
   winner_score: number;
   ftv_status?: FtvTaskStatus;
   ftv_counted_score?: number;
@@ -99,6 +107,9 @@ export function buildCompStandings(
           task_date: task.task_date,
           score: pilot.total_score,
           rank: pilot.rank,
+          made_goal: pilot.made_goal,
+          flown_distance: pilot.flown_distance,
+          speed_section_time: pilot.speed_section_time,
           winner_score: winnerScore,
         });
       }
@@ -166,6 +177,9 @@ export function buildCompStandings(
           task_date: t.task_date,
           score: t.score,
           rank: t.rank,
+          made_goal: t.made_goal,
+          flown_distance: t.flown_distance,
+          speed_section_time: t.speed_section_time,
           ...(t.ftv_status !== undefined
             ? {
                 ftv_status: t.ftv_status,

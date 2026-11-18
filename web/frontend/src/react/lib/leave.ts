@@ -39,6 +39,29 @@ export function openedHere(state: Record<string, unknown> = {}): {
   return { state: { ...state, [OPENED_HERE]: true } };
 }
 
+/** The key in a history entry's state that names the page that opened it. */
+const OPENED_FROM = "openedFrom";
+
+/**
+ * {@link openedHere}, naming the page that opens it, so the bar's back control
+ * can say where Back will go. A page reached by more than one path — a report
+ * card opened from the scores or from a pilot's page — otherwise said "Back to
+ * Task 1" while Back went somewhere else.
+ */
+export function openedHereFrom(
+  label: string,
+  state: Record<string, unknown> = {}
+): { state: Record<string, unknown> } {
+  return openedHere({ ...state, [OPENED_FROM]: label });
+}
+
+/** The name of the page that opened this entry, when the opener gave one. */
+export function openedFromLabel(state: unknown): string | null {
+  if (!wasOpenedHere(state)) return null;
+  const label = (state as Record<string, unknown>)[OPENED_FROM];
+  return typeof label === "string" && label ? label : null;
+}
+
 /** Whether the history entry with this state was opened from a page of ours. */
 export function wasOpenedHere(state: unknown): boolean {
   return (

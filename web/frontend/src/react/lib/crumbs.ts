@@ -77,6 +77,14 @@ export function underCompPilots(compId: string | undefined, compName: string | n
   ];
 }
 
+/** Ancestors of one pilot's scores: the competition, then its scores. */
+export function underCompScores(compId: string | undefined, compName: string | null | undefined): Crumb[] {
+  return [
+    ...underComp(compId, compName),
+    { label: "Scores", to: compId ? compScoresPath(compId, compName) : "/comp" },
+  ];
+}
+
 /**
  * Ancestors of the waypoints editor's pages (one waypoint, Add, the map, the
  * altitude review): the competition, then its waypoints.

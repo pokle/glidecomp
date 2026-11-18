@@ -7,10 +7,10 @@
  * Controlled usage mirrors the old value/onValueChange with RAC's
  * selectedKey/onSelectionChange; Tab and TabPanel pair up by `id`.
  *
- * The tab strip scrolls sideways when it is wider than its container (a comp
- * with several pilot classes plus "Top 3 per task & class", "Teams" and
- * "Scores by task" overflows a phone — issue #640), with a fade at whichever
- * end still has tabs behind it.
+ * The tab strip scrolls sideways when it is wider than its container (the
+ * scores page's views overflowed a phone while every class was a tab of its
+ * own — issue #640 — and four views still do at 320 px), with a fade at
+ * whichever end still has tabs behind it.
  */
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {

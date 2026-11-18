@@ -177,6 +177,21 @@ export function compScoresPath(id: string, name?: string | null): string {
 }
 
 /**
+ * One pilot's scores in a competition: their place, their total and a row per
+ * task, each opening that task's report card. Under the scores page, because
+ * that is where a reader reaches it from and where Back takes them. Distinct
+ * from `/pilots/:id`, the organiser's editor for the same pilot.
+ */
+export function compPilotScoresPath(
+  id: string,
+  name: string | null | undefined,
+  pilotId: string,
+  pilotName?: string | null
+): string {
+  return `${compScoresPath(id, name)}/${slugSegment(pilotId, pilotName)}`;
+}
+
+/**
  * The scores page's CSV twin (served by the SSR Pages Function, not the SPA).
  * A real, shareable URL rather than a blob: a spreadsheet can pull from it —
  * see the "Open in Google Sheets" flow — and it works with JS off.

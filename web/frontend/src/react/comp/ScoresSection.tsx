@@ -1,25 +1,22 @@
 /**
- * Task scores section — React port of setupScoreSection()/renderScoreClass().
- * Columns are conditional exactly as in the vanilla renderer; open distance
- * omits goal, distance-points and validity (the score is metres flown).
- * Tables are RAC ARIA grids: whole-row activation (click/Enter) opens the
- * pilot's score breakdown, with a real link on the pilot name.
+ * One task's scores, a list per class: a row per pilot with their rank, what
+ * they did (goal and time, or the distance flown) and their points. The whole
+ * row is a link to the pilot's report card, which explains every point; open
+ * distance has no goal, so its rows give the distance alone.
  */
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Link as AriaLink } from "react-aria-components";
-import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { Link } from "react-router-dom";
 import { Badge } from "@/react/rac/badge";
 import { api } from "../../comp/api";
-import { formatDuration, formatRankedScore, ordinal } from "../lib/format";
+import { formatDuration } from "../lib/format";
 import { formatTimeInZone } from "../lib/time";
 import { formatDistance, useUnits } from "../lib/units";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { pilotPath } from "../lib/slug";
 import { useCompName } from "./comp-name-context";
+import { Points, ScoreLinkRow, ScoreList } from "./score-rows";
 import type {
   ClassScore,
-  OfficialResultsData,
   ScoringFormat,
   TaskScoreData,
 } from "./types";
@@ -138,7 +135,7 @@ export function ScoresSection({
       ) : null}
       {state.kind === "loaded"
         ? state.data.class_scores.map((cls) => (
-            <ScoreClassTable
+            <ScoreClassList
               key={cls.pilot_class}
               compId={compId}
               taskId={taskId}
@@ -147,7 +144,6 @@ export function ScoresSection({
               timezone={timezone}
               showClassName={state.data.class_scores.length > 1}
               format={state.data.scoring_format === "open_distance" ? "open_distance" : "gap"}
-              official={state.data.official_results ?? null}
             />
           ))
         : null}
@@ -161,7 +157,7 @@ export function ScoresSection({
   );
 }
 
-function ScoreClassTable({
+function ScoreClassList({
   compId,
   taskId,
   taskName,
@@ -169,7 +165,6 @@ function ScoreClassTable({
   timezone,
   showClassName,
   format,
-  official = null,
 }: {
   compId: string;
   taskId: string;
@@ -181,39 +176,21 @@ function ScoreClassTable({
   timezone: string | null;
   showClassName: boolean;
   format: ScoringFormat;
-  /** The officially published record (issue #603) — an extra muted column
-   * beside the rescored totals when the import recorded one, else nothing. */
-  official?: OfficialResultsData | null;
 }) {
-  const navigate = useNavigate();
   const compName = useCompName();
   const units = useUnits();
   const isOpenDistance = format === "open_distance";
-  const hasSpeed = cls.pilots.some((p) => p.speed_section_time !== null);
-  const hasTimePoints = cls.pilots.some((p) => p.time_points !== 0);
-  const hasLeadPoints = cls.pilots.some((p) => p.leading_points !== 0);
-  // Arrival points had no column at all: on an HG comp with arrival on they
-  // were folded silently into Total, so a pilot could not see the component
-  // and the columns visibly failed to add up.
-  const hasArrivalPoints = cls.pilots.some((p) => p.arrival_points !== 0);
-  // The ESS arrival order — the sole input to those points, and the whole
-  // field's copy of it. This table IS the full-field view, so the order
+  // The ESS arrival order — the sole input to arrival points, and the whole
+  // field's copy of it. This list IS the full-field view, so the order
   // belongs here rather than duplicated into every pilot's report card.
   const hasArrivalOrder = cls.pilots.some((p) => p.arrival_position != null);
-  // The divisor the arrival formula used — prefer the published count over
-  // counting rows, so the tooltip's "N of M" matches the scorer's own M.
-  const essFieldSize =
-    cls.validity_inputs?.num_reached_ess ??
-    cls.pilots.filter((p) => p.reached_ess).length;
-  const hasPenalties = cls.pilots.some((p) => p.penalty_points !== 0);
-  // The officially published record (issue #603): shown only when at least
-  // one pilot in THIS class carries an official entry — most comps are
-  // GlideComp-native and identical, and render no column at all.
-  const hasOfficial =
-    official != null && cls.pilots.some((p) => official.ranks[p.comp_pilot_id]);
 
   const v = cls.task_validity;
   const ap = cls.available_points;
+  // The arrival field size, as the scorer counted it.
+  const essFieldSize =
+    cls.validity_inputs?.num_reached_ess ??
+    cls.pilots.filter((p) => p.reached_ess).length;
   // FAI S7F §11 (HG): nobody reached ESS, so the task carried no time and no
   // arrival points. Gated on the published zero as well as the field count, so
   // a pre-rule cached body keeps its old caption rather than being described
@@ -224,61 +201,35 @@ function ScoreClassTable({
     ap.time === 0 &&
     essFieldSize === 0;
 
-  const detailHref = (compPilotId: string, pilotName?: string | null) =>
-    pilotPath(compId, compName, taskId, taskName, compPilotId, pilotName);
-
   return (
     <div className="mt-2">
-      {showClassName ? <h3 className="mt-4 font-semibold">{cls.pilot_class}</h3> : null}
-      <Table
-        aria-label={`Scores — ${cls.pilot_class}`}
-        // Whole-row activation (click or Enter) opens the score breakdown; the
-        // pilot-name link stays a real anchor for middle-click / crawlers.
-        onRowAction={(key) => {
-          const pilot = cls.pilots.find((p) => p.comp_pilot_id === String(key));
-          void navigate(detailHref(String(key), pilot?.pilot_name));
-        }}
-      >
-        <TableHeader>
-          {/* Open distance has no goal, speed section, or GAP point split —
-              the score is simply the distance flown — so those columns are
-              omitted. */}
-          {/* Quantities are right-aligned + tabular so digits line up column-wise
-              and scores can be compared down the page. Penalty stays left: its
-              cell may carry a reason after the number, so right-aligning would
-              push the numbers out of line rather than into it. */}
-          <Column className="text-right">#</Column>
-          <Column isRowHeader>Pilot</Column>
-          {!isOpenDistance ? <Column>Goal</Column> : null}
-          <Column className="text-right">Distance</Column>
-          {hasSpeed ? <Column className="text-right">Speed</Column> : null}
-          {hasArrivalOrder ? <Column className="text-right">ESS</Column> : null}
-          {!isOpenDistance ? <Column className="text-right">Dist Pts</Column> : null}
-          {hasTimePoints ? <Column className="text-right">Time Pts</Column> : null}
-          {hasLeadPoints ? <Column className="text-right">Lead Pts</Column> : null}
-          {hasArrivalPoints ? <Column className="text-right">Arr Pts</Column> : null}
-          {hasPenalties ? <Column>Penalty</Column> : null}
-          <Column className="text-right">Total</Column>
-          {hasOfficial ? <Column className="text-right">Official</Column> : null}
-        </TableHeader>
-        <TableBody>
-          {cls.pilots.map((p) => {
-            const diffPts = p.distance_difficulty_points ?? 0;
-            return (
-              <Row key={p.comp_pilot_id} id={p.comp_pilot_id} className="cursor-pointer">
-                <Cell className="text-right tabular-nums">{p.rank}</Cell>
-                <Cell>
-                  <AriaLink
-                    href={detailHref(p.comp_pilot_id, p.pilot_name)}
-                    aria-label={`How ${p.pilot_name}'s score was calculated`}
-                    className="underline decoration-muted-foreground/40 underline-offset-4 outline-none data-hovered:decoration-current data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
-                  >
-                    {p.pilot_name}
-                  </AriaLink>
+      {showClassName ? <h3 className="mt-4 mb-2 font-semibold">{cls.pilot_class}</h3> : null}
+      {/* The table this replaced had up to thirteen columns, and on a phone
+          the total was the ninth of them, off the right-hand edge. A row now
+          says what the pilot did and what it scored; the points split
+          (distance, time, leading, arrival) is the report card's job, and
+          the row opens it. The CSV and the results record keep the grid. */}
+      <ScoreList label={`Scores — ${cls.pilot_class}`}>
+        {cls.pilots.map((p) => {
+          const distance = formatDistance(p.flown_distance, { decimals: 1, prefs: units }).withUnit;
+          const result = isOpenDistance
+            ? distance
+            : p.made_goal
+              ? p.speed_section_time !== null
+                ? `Goal in ${formatDuration(p.speed_section_time)}`
+                : "Goal"
+              : distance;
+          return (
+            <ScoreLinkRow
+              key={p.comp_pilot_id}
+              href={pilotPath(compId, compName, taskId, taskName, p.comp_pilot_id, p.pilot_name)}
+              rank={p.rank}
+              title={
+                <>
+                  {p.pilot_name}
                   {/* Without this, a 0 km / 0 pts row reads as a scoring bug
-                      rather than a withheld tracklog. The row already links
-                      to the explanation, so this is a signpost, not a
-                      dead end. */}
+                      rather than a withheld tracklog. The row already opens
+                      the explanation, so this is a signpost, not a dead end. */}
                   {p.track_excluded ? (
                     <Badge
                       variant="destructive"
@@ -288,113 +239,36 @@ function ScoreClassTable({
                       Excluded
                     </Badge>
                   ) : null}
-                </Cell>
-                {!isOpenDistance ? <Cell>{p.made_goal ? "✓" : "—"}</Cell> : null}
-                <Cell className="text-right tabular-nums">
-                  {formatDistance(p.flown_distance, { decimals: 1, prefs: units }).withUnit}
-                </Cell>
-                {hasSpeed ? (
-                  <Cell className="text-right tabular-nums">
-                    {p.speed_section_time !== null
-                      ? formatDuration(p.speed_section_time)
-                      : "—"}
-                  </Cell>
-                ) : null}
-                {hasArrivalOrder ? (
-                  // The arrival order, in the one place that shows the whole
-                  // field at once. Position and clock time together, because
-                  // the order is BY the clock — an earlier start gate can put
-                  // a slower pilot ahead of a faster one, and the two columns
-                  // side by side are what make that visible.
-                  <Cell className="text-right tabular-nums">
-                    {p.arrival_position != null ? (
-                      // Time first — it is the fact — with the position it
-                      // produced in parentheses. A bare margin between the two
-                      // looked fine but ran together in text extraction and
-                      // copy-paste ("317:07:55"), so the separator is real
-                      // characters, not spacing.
-                      <span
-                        title={`Reached the end of the speed section ${p.arrival_position} of ${essFieldSize}`}
-                      >
-                        {p.ess_time_ms != null
-                          ? formatTimeInZone(
-                              new Date(p.ess_time_ms),
-                              timezone ?? undefined
-                            )
-                          : ""}
-                        <span className="ml-1 text-muted-foreground">
-                          (#{p.arrival_position})
-                        </span>
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </Cell>
-                ) : null}
-                {!isOpenDistance ? (
-                  <Cell className="text-right tabular-nums">
-                    {/* Show the linear/difficulty split as a tooltip when HG
-                        difficulty applies. */}
-                    {diffPts > 0 ? (
-                      <span
-                        title={`${Math.round(p.distance_linear_points)} linear + ${Math.round(diffPts)} difficulty`}
-                      >
-                        {Math.round(p.distance_points)}
-                      </span>
-                    ) : (
-                      Math.round(p.distance_points)
-                    )}
-                  </Cell>
-                ) : null}
-                {hasTimePoints ? (
-                  <Cell className="text-right tabular-nums">
-                    {Math.round(p.time_points)}
-                  </Cell>
-                ) : null}
-                {hasLeadPoints ? (
-                  <Cell className="text-right tabular-nums">
-                    {Math.round(p.leading_points)}
-                  </Cell>
-                ) : null}
-                {hasArrivalPoints ? (
-                  <Cell className="text-right tabular-nums">
-                    {Math.round(p.arrival_points)}
-                  </Cell>
-                ) : null}
-                {hasPenalties ? (
-                  <Cell>
-                    {p.penalty_points !== 0 ? (
-                      <span className="text-danger">
-                        {p.penalty_points < 0
-                          ? `+${Math.abs(p.penalty_points)}`
-                          : `-${p.penalty_points}`}
-                        {p.penalty_reason ? <span> {p.penalty_reason}</span> : null}
-                      </span>
-                    ) : null}
-                  </Cell>
-                ) : null}
-                <Cell className="text-right tabular-nums">
-                  {formatRankedScore(p.total_score)}
-                </Cell>
-                {hasOfficial ? (
-                  <Cell className="text-right tabular-nums">
-                    {(() => {
-                      const o = official?.ranks[p.comp_pilot_id];
-                      return o ? (
-                        <span className="text-muted-foreground">
-                          {ordinal(o.rank)} · {Math.round(o.total)}
-                        </span>
-                      ) : (
-                        "—"
-                      );
-                    })()}
-                  </Cell>
-                ) : null}
-              </Row>
-            );
-          })}
-        </TableBody>
-      </Table>
+                </>
+              }
+              detail={
+                <>
+                  {result}
+                  {/* The order is BY the clock, so the clock time and the
+                      position it produced go together. */}
+                  {p.arrival_position != null && hasArrivalOrder ? (
+                    <>
+                      {" · ESS "}
+                      {p.ess_time_ms != null
+                        ? `${formatTimeInZone(new Date(p.ess_time_ms), timezone ?? undefined)} `
+                        : ""}
+                      (#{p.arrival_position})
+                    </>
+                  ) : null}
+                  {p.penalty_points !== 0 ? (
+                    <span className="text-caution">
+                      {" · Penalty "}
+                      {p.penalty_points < 0 ? "+" : "−"}
+                      {Math.abs(p.penalty_points)}
+                    </span>
+                  ) : null}
+                </>
+              }
+              figure={<Points value={p.total_score} />}
+            />
+          );
+        })}
+      </ScoreList>
       {isOpenDistance ? (
         <p className="mt-2 text-sm text-muted-foreground">
           Open distance — score is metres flown from the take-off exit to the furthest point
@@ -424,25 +298,6 @@ function ScoreClassTable({
           ) : null}
         </p>
       )}
-      {hasOfficial ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          Official: each pilot&rsquo;s rank and points as published on{" "}
-          {official?.task_url ? (
-            <a
-              href={official.task_url}
-              target="_blank"
-              rel="noopener"
-              className="underline underline-offset-4 hover:text-foreground"
-            >
-              {official.source}
-            </a>
-          ) : (
-            official?.source
-          )}
-          . GlideComp rescores every task under the current rules, so the two can
-          differ.
-        </p>
-      ) : null}
     </div>
   );
 }

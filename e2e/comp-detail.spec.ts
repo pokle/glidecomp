@@ -140,49 +140,6 @@ test.beforeEach(async ({ page }) => {
   ).toBeVisible();
 });
 
-/**
- * "This column is sorted, this way — and a screen reader is told so."
- *
- * The sort STATE is `data-sort-direction`, which RAC writes on every platform.
- * The ANNOUNCEMENT is not one attribute: react-aria uses `aria-sort` normally,
- * but on Android it omits that attribute entirely — TalkBack does not support
- * it — and appends the direction to the header's `aria-describedby` text
- * instead (`useTableColumnHeader`, guarded by its `isAndroid()` check).
- *
- * Both are correct, and asserting only `aria-sort` is what let this test pass
- * for a year on a desktop user agent and fail the moment the `mobile` project
- * ran it under a Pixel 7. Which announcement to expect follows from the user
- * agent, not from the viewport, so that is what this reads.
- */
-async function expectSortedBy(
-  page: Page,
-  header: Locator,
-  direction: "ascending" | "descending"
-): Promise<void> {
-  await expect(header).toHaveAttribute("data-sort-direction", direction);
-
-  const onAndroid = await page.evaluate(() =>
-    /Android/.test(navigator.userAgent)
-  );
-  if (!onAndroid) {
-    await expect(header).toHaveAttribute("aria-sort", direction);
-    return;
-  }
-
-  await expect(header).not.toHaveAttribute("aria-sort", /./);
-  const description = await header.evaluate((el) =>
-    (el.getAttribute("aria-describedby") || "")
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((id) => document.getElementById(id)?.textContent ?? "")
-      .join(" ")
-  );
-  expect(
-    description.toLowerCase(),
-    `the ${direction} sort must reach TalkBack through aria-describedby`
-  ).toContain(direction);
-}
-
 /** Watches for any mutating call to the competition API for the page's life. */
 function trackMutations(page: Page): () => boolean {
   let mutated = false;
@@ -200,80 +157,66 @@ function trackMutations(page: Page): () => boolean {
   return () => mutated;
 }
 
-test("scores page: class tabs, top 3, scores-by-task select, sorting", async ({
+/**
+ * Every score link is a whole row: at least 44 px tall and as wide as its list
+ * (Apple's HIG; WCAG 2.5.8). The scores views were tables whose cells were the
+ * links — 18 px strips of text, six to a row, in a table that scrolled
+ * sideways with the total off the edge of a phone.
+ */
+async function expectFullRows(list: Locator, count = 3): Promise<void> {
+  const box = (await list.boundingBox())!;
+  const links = list.getByRole("link");
+  const n = Math.min(count, await links.count());
+  expect(n, "the list has rows").toBeGreaterThan(0);
+  for (let i = 0; i < n; i++) {
+    const row = (await links.nth(i).boundingBox())!;
+    expect(row.height, "a row is at least 44 px tall").toBeGreaterThanOrEqual(44);
+    // The whole row is the target (2 px of border).
+    expect(row.width, "a row is as wide as its list").toBeGreaterThanOrEqual(box.width - 2);
+  }
+}
+
+test("scores page: the views and the class are lists, and the URL keeps them", async ({
   page,
 }) => {
-  // The full score views live on the dedicated scores page now; the comp page
-  // keeps a compact scores summary linking there.
   await page.goto(`/comp/${compId}/scores`);
   await expect(page.getByRole("heading", { level: 1, name: "Scores" })).toBeVisible();
-  const scores = page.locator("main");
-  const tablist = scores.getByRole("tablist", { name: "Score views" });
+  const tablist = page.getByRole("tablist", { name: "Score views" });
   await expect(tablist).toBeVisible({ timeout: 15_000 });
+  const classPicker = page.getByRole("radiogroup", { name: "Pilot class" });
 
-  // ── Class tab switching. Only the selected TabPanel renders its content,
-  // so the other class's scores grid must leave the tree entirely.
+  // ── Overall: one class's standings, picked under the views.
   const [classA, classB] = comp.pilot_classes;
   expect(classB).toBeTruthy();
-  await tablist.getByRole("tab", { name: classB, exact: true }).click();
-  await expect(
-    scores.getByRole("grid", { name: `Scores — ${classB}` })
-  ).toBeVisible();
-  await expect(
-    scores.getByRole("grid", { name: `Scores — ${classA}` })
-  ).toHaveCount(0);
-  await tablist.getByRole("tab", { name: classA, exact: true }).click();
-  const classScores = scores.getByRole("grid", { name: `Scores — ${classA}` });
-  await expect(scores).toBeVisible();
-  await expect(
-    scores.getByRole("grid", { name: `Scores — ${classB}` })
-  ).toHaveCount(0);
+  const standingsA = page.getByRole("list", { name: `Scores — ${classA}` });
+  await expect(standingsA).toBeVisible();
+  await expectFullRows(standingsA);
+  await classPicker.getByRole("radio", { name: classB, exact: true }).click();
+  const standingsB = page.getByRole("list", { name: `Scores — ${classB}` });
+  await expect(standingsB).toBeVisible();
+  await expect(standingsA).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`[?&]class=${encodeURIComponent(classB)}`));
 
-  // ── SortableTable per-column first-click directions (RAC gotcha #15: RAC
-  // itself always starts ascending; the app overrides per column).
-  // "Pilot" first click sorts ASCENDING…
-  const pilotHeader = scores.getByRole("columnheader", { name: /^Pilot/ });
-  await pilotHeader.click();
-  await expectSortedBy(page, pilotHeader, "ascending");
-  const names = await scores.getByRole("rowheader").allTextContents();
-  expect(names.length).toBeGreaterThan(1);
-  expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+  // ── Top 3: the class picker offers the roll-up too ("Overall" across both
+  // classes), and each task's three are a list, the Total last.
+  await tablist.getByRole("tab", { name: "Top 3" }).click();
+  await expect(page).toHaveURL(/[?&]view=top3/);
+  await classPicker.getByRole("radio", { name: "Overall", exact: true }).click();
+  const overallTotal = page.getByRole("list", { name: "Top 3 — Overall, Total" });
+  await expect(overallTotal).toBeVisible();
+  await expectFullRows(overallTotal);
 
-  // …while "Total" first click sorts DESCENDING (scores read best-first).
-  const totalHeader = scores.getByRole("columnheader", { name: /^Total/ });
-  await totalHeader.click();
-  await expectSortedBy(page, totalHeader, "descending");
-  await expect(pilotHeader).not.toHaveAttribute(
-    "data-sort-direction",
-    "ascending"
-  );
-  // The Pilot column renders as rowheader <th>, so the last <td> is Total.
-  const totals = (
-    await scores.locator("tbody tr td:last-child").allTextContents()
-  ).map((t) => Number(t.replace(/,/g, "")));
-  expect(totals.length).toBeGreaterThan(1);
-  for (let i = 1; i < totals.length; i++) {
-    expect(totals[i]).toBeLessThanOrEqual(totals[i - 1]);
-  }
-
-  // ── Top 3 panel: per-class groups plus the synthetic "Overall" rollup
-  // (the comp has two classes), each ending in a "Total" row.
-  await tablist.getByRole("tab", { name: "Top 3 per task & class" }).click();
-  const overall = scores.getByRole("grid", { name: "Top 3 — Overall" });
-  await expect(overall).toBeVisible();
-  await expect(overall.getByRole("rowheader", { name: "Total", exact: true })).toBeVisible();
-  await expect(scores.getByRole("grid", { name: `Top 3 — ${classA}` })).toBeVisible();
-
-  // ── Scores by task: the Select defaults to the first scorable task;
-  // picking a task flown by the other class swaps the embedded grid
-  // (aria-label + rows).
-  await tablist.getByRole("tab", { name: "Scores by task" }).click();
-  const panel = scores.getByRole("tabpanel");
+  // ── By task: the Select defaults to the first scorable task; picking a
+  // task flown by the other class swaps the list.
+  await tablist.getByRole("tab", { name: "By task" }).click();
+  const panel = page.getByRole("tabpanel");
   const scorable = comp.tasks.filter((t) => t.has_xctsk);
   const defaultClass = scorable[0].pilot_classes[0];
-  await expect(
-    panel.getByRole("grid", { name: `Scores — ${defaultClass}` })
-  ).toBeVisible({ timeout: 15_000 });
+  const byTask = panel.getByRole("list", { name: `Scores — ${defaultClass}` });
+  await expect(byTask).toBeVisible({ timeout: 15_000 });
+  await expectFullRows(byTask);
+  // No class picker here: the task decides the class.
+  await expect(classPicker).toHaveCount(0);
 
   // Options follow the scorable-tasks order, so the index into that array
   // addresses the option unambiguously (task *names* repeat across classes).
@@ -284,75 +227,83 @@ test("scores page: class tabs, top 3, scores-by-task select, sorting", async ({
   const options = page.getByRole("option");
   await expect(options).toHaveCount(scorable.length);
   await options.nth(targetIndex).click();
-
-  const swapped = panel.getByRole("grid", { name: `Scores — ${targetClass}` });
+  const swapped = panel.getByRole("list", { name: `Scores — ${targetClass}` });
   await expect(swapped).toBeVisible({ timeout: 15_000 });
   await expect(
-    panel.getByRole("grid", { name: `Scores — ${defaultClass}` })
+    panel.getByRole("list", { name: `Scores — ${defaultClass}` })
   ).toHaveCount(0);
-  await expect(swapped.locator("tbody tr").first()).toBeVisible();
+
+  // ── A reload is the same page: the view and the task are in the URL.
+  await page.reload();
+  await expect(tablist.getByRole("tab", { name: "By task" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+    { timeout: 15_000 }
+  );
+  await expect(panel.getByRole("list", { name: `Scores — ${targetClass}` })).toBeVisible({
+    timeout: 15_000,
+  });
 });
 
-test("scores page: the view tabs stay reachable on a narrow phone", { tag: PHONE_ONLY }, async ({ page }) => {
+test("scores page: a pilot's row opens their tasks, a task opens its report card, and the bar's Back returns", async ({
+  page,
+}) => {
+  const [, classB] = comp.pilot_classes;
+  await page.goto(`/comp/${compId}/scores?class=${encodeURIComponent(classB)}`);
+  const standings = page.getByRole("list", { name: `Scores — ${classB}` });
+  await expect(standings).toBeVisible({ timeout: 15_000 });
+
+  // The pilot's own page: their tasks, each a row.
+  const first = standings.getByRole("link").first();
+  const pilotName = (await first.locator("p").first().textContent())!.trim();
+  await first.click();
+  await expect(page).toHaveURL(/\/scores\/[a-z0-9-]+$/);
+  await expect(page.getByRole("heading", { level: 1, name: pilotName })).toBeVisible();
+  const tasks = page.getByRole("list", { name: `${pilotName}'s tasks` });
+  await expect(tasks).toBeVisible({ timeout: 15_000 });
+  await expectFullRows(tasks, 1);
+
+  // A task row opens that task's report card.
+  await tasks.getByRole("link").first().click();
+  await expect(page).toHaveURL(/\/task\/[a-z0-9-]+\/pilot\/[a-z0-9-]+$/);
+
+  // The bar's back control is a real Back to where the reader came from,
+  // and says so: the report card belongs under its task, but it was opened
+  // from the pilot's page, and "Back to Task 1" there went to the task.
+  await page.getByRole("link", { name: `Back to ${pilotName}` }).click();
+  await expect(tasks).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("link", { name: "Back to Scores" }).click();
+  await expect(standings).toBeVisible({ timeout: 15_000 });
+  await expect(
+    page.getByRole("radiogroup", { name: "Pilot class" }).getByRole("radio", { name: classB, exact: true })
+  ).toBeChecked();
+});
+
+test("scores page: no view scrolls sideways on a narrow phone", { tag: PHONE_ONLY }, async ({ page }) => {
   // 320px is the narrowest viewport the accessibility standard supports
-  // (docs/accessibility-standard.md §3.2). The sample comp's four views —
-  // two classes, "Top 3 per task & class", "Scores by task" — are wider than
-  // that, which is the case issue #640 reported: the far tabs were simply
-  // unreachable, because the strip neither wrapped nor scrolled.
-  //
-  // So this one keeps setting its own width, INSIDE the `mobile` project: the
-  // project emulates a Pixel 7 (412px), and the subject here is the floor, not
-  // a typical phone. Everything else the descriptor brings — touch, the mobile
-  // user agent, `isMobile` — still applies, which is what makes the keyboard
-  // and fade assertions below worth making at all.
+  // (docs/accessibility-standard.md §3.2). The tables these views were
+  // scrolled sideways inside the page; the lists fit it.
   await page.setViewportSize({ width: 320, height: 812 });
   await page.goto(`/comp/${compId}/scores`);
   const tablist = page.getByRole("tablist", { name: "Score views" });
   await expect(tablist).toBeVisible({ timeout: 15_000 });
 
-  const metrics = async () =>
-    tablist.evaluate((el) => ({
-      scrollLeft: el.scrollLeft,
-      hidden: el.scrollWidth - el.clientWidth,
-      pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
-    }));
+  const [classA] = comp.pilot_classes;
+  await expect(page.getByRole("list", { name: `Scores — ${classA}` })).toBeVisible();
+  await expectNoSidewaysScroll(page, "Overall");
 
-  // The strip scrolls INSIDE its own box; the page body never does (WCAG
-  // 1.4.10 reflow).
-  const initial = await metrics();
-  expect(initial.hidden).toBeGreaterThan(0);
-  expect(initial.pageOverflow).toBeLessThanOrEqual(0);
-
-  // Scrolled to the origin, only the far end is faded — the fades are the
-  // affordance that says there are tabs behind them.
-  await expect(page.locator("main [data-tab-fade='end']")).toHaveCount(1);
-  await expect(page.locator("main [data-tab-fade='start']")).toHaveCount(0);
-
-  // Keyboard: arrow keys walk to the last tab and the strip follows, which is
-  // why the scroll container takes no tab stop of its own. Automatic
-  // activation means arriving selects it, so the panel swaps too.
-  const tabs = tablist.getByRole("tab");
-  const count = await tabs.count();
-  await tabs.first().click();
-  for (let i = 1; i < count; i++) await page.keyboard.press("ArrowRight");
-  const last = tabs.nth(count - 1);
-  await expect(last).toBeFocused();
-  await expect(last).toHaveAttribute("aria-selected", "true");
-
-  // "Reachable" means fully on screen, not merely scrolled towards.
-  const stripBox = (await tablist.boundingBox())!;
-  const lastBox = (await last.boundingBox())!;
-  expect(lastBox.x).toBeGreaterThanOrEqual(stripBox.x - 0.5);
-  expect(lastBox.x + lastBox.width).toBeLessThanOrEqual(
-    stripBox.x + stripBox.width + 0.5
-  );
-
-  const scrolled = await metrics();
-  expect(scrolled.scrollLeft).toBeGreaterThan(0);
-  expect(scrolled.pageOverflow).toBeLessThanOrEqual(0);
-  // …and now it is the START of the strip that has tabs behind it.
-  await expect(page.locator("main [data-tab-fade='start']")).toHaveCount(1);
-  await expect(page.locator("main [data-tab-fade='end']")).toHaveCount(0);
+  for (const name of ["By task", "Top 3"]) {
+    // A tab the strip has scrolled out of reach is still reached: clicking
+    // brings it on screen, and the panel swaps.
+    const tab = tablist.getByRole("tab", { name });
+    await tab.scrollIntoViewIfNeeded();
+    await tab.click();
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tabpanel").getByRole("list").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectNoSidewaysScroll(page, name);
+  }
 });
 
 /**

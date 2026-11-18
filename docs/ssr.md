@@ -30,8 +30,9 @@ URLs from the shell table. This page used to copy the lists out by hand, and the
 copy drifted — read the module for the current set.
 
 **Server-rendered**: the competitions list; a competition's hub, its scores
-(`?task=` deep-links the scores-by-task view), its waypoints and its COMP
-analysis; a task's page, each pilot's report card, the TASK analysis, each of
+(`?view=`, `?class=` and `?task=` pick the view, the class and the task, and
+the server renders the one they name), one pilot's scores
+(`/scores/:pilot`), its waypoints and its COMP analysis; a task's page, each pilot's report card, the TASK analysis, each of
 its sections (`/analysis/:section`) and one metric's chart at full size
 (`/analysis/metrics/:metric`, #815). The metric chart is always `noindex`: it
 is a bigger copy of something an indexable page already shows. An unknown

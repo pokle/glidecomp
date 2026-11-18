@@ -156,10 +156,10 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain(pilotName);
-    // The scores pilot links are canonical `${slug}-${id}` at every level.
-    expect(html).toMatch(
-      new RegExp(`/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}/pilot/[a-z0-9-]+-${pilotId}`)
-    );
+    // A standings row is a link to the pilot's own scores, canonical
+    // `${slug}-${id}` at every level; their page then links each task's
+    // report card (the test below).
+    expect(html).toMatch(new RegExp(`/comp/[a-z0-9-]+-${compId}/scores/[a-z0-9-]+-${pilotId}"`));
     expect(html).toContain(`<title>Scores — ${compName} — GlideComp</title>`);
     // The bar's closed menus still leave real links in the markup: the way
     // back to the competition, and the downloads under ⋯ (issue #863). The
@@ -171,6 +171,43 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html).toContain('aria-label="Score views"');
     // One <h1>, and it is the bar's.
     expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
+  });
+
+  test("/comp/:id/scores/:pilot shows one pilot's tasks and links each report card", async ({
+    request,
+  }) => {
+    const { compId, compName, taskId, pilotId, pilotName } = await discover(request);
+    const res = await request.get(`/comp/${compId}/scores/${pilotId}`);
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    expect(html).toContain(`<title>${pilotName} — Scores — ${compName} — GlideComp</title>`);
+    // A row per task, and each is a link to that task's report card.
+    expect(html).toMatch(
+      new RegExp(`/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}/pilot/[a-z0-9-]+-${pilotId}"`)
+    );
+    // The way back is the scores page, in the markup with JS off.
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).toContain(`href="${compScoresPath(compId, compName)}"`);
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
+  });
+
+  test("/comp/:id/scores/:pilot is a 404 for a pilot the standings do not name", async ({
+    request,
+  }) => {
+    const { compId } = await discover(request);
+    const res = await request.get(`/comp/${compId}/scores/nobody-zzzzzz`);
+    expect(res.status()).toBe(404);
+  });
+
+  test("a ?view=top3&class= link server-renders that view and class", async ({ request }) => {
+    const { compId, pilotClasses } = await discover(request);
+    // Not the first class: the first is the default, which proves nothing.
+    const cls = pilotClasses[pilotClasses.length - 1];
+    test.skip(pilotClasses.length < 2, "the sample comp has one class");
+    const res = await request.get(`/comp/${compId}/scores?view=top3&class=${encodeURIComponent(cls)}`);
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    expect(html).toContain(`aria-label="Top 3 — ${cls}, Total"`);
   });
 
   test("/comp/:id/scores.csv serves the scores as long-form CSV", async ({ request }) => {
@@ -897,6 +934,8 @@ test.describe("SSR — hydration is clean (real browser)", () => {
     // query at all, so the whole "a query-bearing URL hydrates cleanly" case
     // was unexercised — and the next query-driven view will need it.
     ":scoresByTask",
+    ":scoresTop3ByClass",
+    ":pilotScores",
     ":compAnalysisByClass",
     // The submit page: not SSR'd, but it is in the Shell, so the nav and the
     // account slot hydrate around it like anywhere else.
@@ -927,6 +966,10 @@ test.describe("SSR — hydration is clean (real browser)", () => {
         ":taskStrategies": `/comp/${d.compId}/task/${d.taskId}/analysis/strategies`,
         ":taskMetricChart": metricChart,
         ":scoresByTask": `/comp/${d.compId}/scores?task=${d.taskId}`,
+        ":scoresTop3ByClass": `/comp/${d.compId}/scores?view=top3${
+          cls ? `&class=${encodeURIComponent(cls)}` : ""
+        }`,
+        ":pilotScores": `/comp/${d.compId}/scores/${d.pilotId}`,
         ":compAnalysisByClass": `/comp/${d.compId}/analysis${
           cls ? `?class=${encodeURIComponent(cls)}` : ""
         }`,
