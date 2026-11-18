@@ -6,6 +6,7 @@ import {
   nameSlugFromSegment,
   compPath,
   compScoresPath,
+  compPilotScoresPath,
   compAnalysisPath,
   compSettingsPath,
   taskPath,
@@ -98,6 +99,9 @@ describe("path builders", () => {
     expect(compPath("voqc", "Corryong Cup 2026")).toBe("/comp/corryong-cup-2026-voqc");
     expect(compScoresPath("voqc", "Corryong Cup 2026")).toBe(
       "/comp/corryong-cup-2026-voqc/scores"
+    );
+    expect(compPilotScoresPath("voqc", "Corryong Cup 2026", "eqdr", "Jon Durand")).toBe(
+      "/comp/corryong-cup-2026-voqc/scores/jon-durand-eqdr"
     );
     expect(compAnalysisPath("voqc", "Corryong Cup 2026")).toBe(
       "/comp/corryong-cup-2026-voqc/analysis"

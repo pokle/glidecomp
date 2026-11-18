@@ -45,6 +45,7 @@ import { Competitions } from "./pages/Competitions";
 import { SubmitTrack } from "./pages/SubmitTrack";
 import { CompDetail } from "./pages/CompDetail";
 import { CompScoresPage } from "./pages/CompScoresPage";
+import { CompPilotScoresPage } from "./pages/CompPilotScoresPage";
 import { CompWaypoints } from "./pages/CompWaypoints";
 import { TaskDetail } from "./pages/TaskDetail";
 import { PilotScoreDetail } from "./pages/PilotScoreDetail";
@@ -292,6 +293,8 @@ export function AppRoutes() {
             <Route path="/comp/new" element={<NewCompPage />} />
             <Route path="/comp/:compId" element={<CompDetail />} />
             <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
+            {/* One pilot's scores: what a row of the scores page opens. */}
+            <Route path="/comp/:compId/scores/:pilotId" element={<CompPilotScoresPage />} />
             {/* Admin-only roster editor — noindex shell in the SSR Function. */}
             <Route path="/comp/:compId/pilots" element={<CompPilotsPage />} />
             {/* One pilot's editor, and a blank one — pages rather than sheets

@@ -179,6 +179,11 @@ export const COMP_SSR_ROUTES = [
     why: "The full scores; `?task=` opens the scores by task.",
   },
   {
+    name: "pilotScores",
+    path: "/comp/:compId/scores/:pilotId",
+    why: "One pilot's scores in the competition: their place, their total and a row per task.",
+  },
+  {
     name: "waypoints",
     path: "/comp/:compId/waypoints",
     why: "The waypoint list. The editor's pages under it are shells.",

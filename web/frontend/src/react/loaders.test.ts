@@ -5,6 +5,7 @@ import {
   loadCompWaypoints,
   loadTaskDetail,
   loadPilotScoreDetail,
+  loadCompPilotScores,
   NotFoundError,
   type FetchFn,
 } from "./loaders";
@@ -38,6 +39,48 @@ describe("loadCompetitions", () => {
     const data = await loadCompetitions(fetch);
     expect(calls).toEqual(["/api/comp"]);
     expect(data.comps[0].name).toBe("Alpha");
+  });
+});
+
+describe("loadCompPilotScores", () => {
+  const comp = { comp_id: "abc", name: "Corryong", timezone: "Australia/Melbourne", tasks: [] };
+  const scores = {
+    comp_id: "abc",
+    tasks: [],
+    class_scores: [
+      { pilot_class: "open", pilots: [{ comp_pilot_id: "pq", pilot_name: "Jon", rank: 1, total_score: 1000, tasks: [] }] },
+    ],
+    computed_at: null,
+    stale: false,
+  };
+
+  it("returns the scores page's data for a pilot the standings name", async () => {
+    const { fetch } = fakeFetch({
+      "/api/comp/abc": { body: comp },
+      "/api/comp/abc/scores": { body: scores, etag: 'W/"v1"' },
+    });
+    const data = await loadCompPilotScores(fetch, "abc", "pq");
+    expect(data.scores?.class_scores[0].pilots[0].pilot_name).toBe("Jon");
+    expect(data.scoresEtag).toBe('W/"v1"');
+  });
+
+  it("404s a pilot the standings do not name", async () => {
+    const { fetch } = fakeFetch({
+      "/api/comp/abc": { body: comp },
+      "/api/comp/abc/scores": { body: scores },
+    });
+    await expect(loadCompPilotScores(fetch, "abc", "zz")).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("renders without the standings when they are unavailable, rather than 404", async () => {
+    // A blip in /scores is not "no such pilot" (issue #481): the page fetches
+    // the standings itself and decides then.
+    const { fetch } = fakeFetch({
+      "/api/comp/abc": { body: comp },
+      "/api/comp/abc/scores": { status: 503 },
+    });
+    const data = await loadCompPilotScores(fetch, "abc", "zz");
+    expect(data.scores).toBeNull();
   });
 });
 

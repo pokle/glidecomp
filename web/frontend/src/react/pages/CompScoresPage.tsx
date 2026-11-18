@@ -1,9 +1,11 @@
 /**
  * Dedicated competition scores page (/comp/:id/scores) — the canonical public
  * scores surface. The comp page keeps only a compact scores summary that
- * links here; this page holds the full apparatus: per-class scores tabs,
- * Top 3 per task & class, Teams, and Scores by task (which is the public
- * per-task scores surface — task pages link here with ?task=<id>).
+ * links here; this page holds the full apparatus: the Overall standings per
+ * class, By task (the public per-task scores surface — task pages link here
+ * with ?task=<id>), Top 3 and Teams. Every view is a list whose whole rows
+ * are the links; a standings row opens the pilot's own scores
+ * (pages/CompPilotScoresPage), whose task rows open the report cards.
  *
  * Server-rendered like the other public comp pages (loadCompScores +
  * functions/comp/[[path]].ts); the views themselves live in
@@ -15,12 +17,11 @@
  * the view tabs in the bar's second layer, where they stay in reach down a
  * long table.
  */
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { ActionErrorBanner } from "@/react/rac/form";
 import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
 import { Loading, Spinner } from "@/react/rac/progress";
-import { Card } from "@/react/rac/card";
 import { Tabs, TabsContent } from "@/react/rac/tabs";
 import { api } from "../../comp/api";
 import { useAdminView } from "../lib/user";
@@ -43,7 +44,6 @@ import { RefreshCwIcon } from "lucide-react";
 export function CompScoresPage() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
-  const [searchParams] = useSearchParams();
   // SSR seed: the server ran loadCompScores for this URL. Null on client
   // boot / SPA navigations, where the effects below fetch instead.
   const initial = useInitialData<CompScoresLoaderData>();
@@ -80,12 +80,11 @@ export function CompScoresPage() {
   const hasScores = !!comp && state.kind === "ready" && state.scores.class_scores.length > 0;
   const views = useScoresViews({
     scores: hasScores ? state.scores : null,
-    compId,
+    compId: urlId,
     compName: comp?.name ?? null,
     timezone: comp?.timezone ?? null,
     tasks: comp?.tasks ?? [],
     defaultTaskId: null,
-    deepLinkTaskId: searchParams.get("task"),
   });
 
   if (notFound || !compId) {
@@ -132,55 +131,48 @@ export function CompScoresPage() {
 
         {!comp ? (
           <Loading>Loading scores…</Loading>
+        ) : state.kind === "loading" ? (
+          <Loading>Loading scores…</Loading>
+        ) : state.kind === "unavailable" ? (
+          <ScoresEmptyState
+            isAdmin={isAdmin}
+            tasksHref={`${compPath(urlId, comp.name)}#tasks`}
+          />
         ) : (
-          /* One card holds the whole scores apparatus: when it was computed,
-             the table, and the caption under it. The view switcher that led
-             it is the bar's second layer now. The scroll margin keeps a link
-             or a column header reached by keyboard out from under the bar and
-             the tabs that stick with it (WCAG 2.4.11, Focus Not Obscured). */
-          <Card className="[&_a]:scroll-mt-32 [&_button]:scroll-mt-32 [&_th]:scroll-mt-32">
-            {state.kind === "loading" ? (
-              <Loading>Loading scores…</Loading>
-            ) : state.kind === "unavailable" ? (
+          /* The lists sit on the page, each its own card, as the settings
+             lists do: the one card that used to hold the whole apparatus
+             would put a card inside a card. The scroll margin keeps a row
+             reached by keyboard out from under the bar and the views that
+             stick with it (WCAG 2.4.11, Focus Not Obscured). */
+          <div className="flex flex-col gap-4 [&_a]:scroll-mt-44 [&_button]:scroll-mt-44">
+            <ScoreFreshness
+              computedAt={state.scores.computed_at}
+              stale={state.scores.stale}
+              timezone={comp.timezone}
+              etag={state.etag}
+              pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
+            />
+            {state.scores.class_scores.length === 0 ? (
               <ScoresEmptyState
                 isAdmin={isAdmin}
                 tasksHref={`${compPath(urlId, comp.name)}#tasks`}
               />
             ) : (
               <>
-                <ScoreFreshness
-                  computedAt={state.scores.computed_at}
-                  stale={state.scores.stale}
-                  timezone={comp.timezone}
-                  etag={state.etag}
-                  pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
-                />
-                {state.scores.class_scores.length === 0 ? (
-                  <ScoresEmptyState
-                    isAdmin={isAdmin}
-                    tasksHref={`${compPath(urlId, comp.name)}#tasks`}
-                  />
-                ) : (
-                  <>
-                    {views.panels}
-                    <p className="text-sm text-muted-foreground">
-                      {/* "Click any score for a step-by-step explanation" was
-                          here too — the tables each already say it directly
-                          under themselves. */}
-                      Questions about a score?{" "}
-                      <Link
-                        to={`${compPath(urlId, comp.name)}#admins`}
-                        className="underline underline-offset-4"
-                      >
-                        Ask the organisers
-                      </Link>
-                      .
-                    </p>
-                  </>
-                )}
+                {views.panels}
+                <p className="text-sm text-muted-foreground">
+                  Questions about a score?{" "}
+                  <Link
+                    to={`${compPath(urlId, comp.name)}#admins`}
+                    className="underline underline-offset-4"
+                  >
+                    Ask the organisers
+                  </Link>
+                  .
+                </p>
               </>
             )}
-          </Card>
+          </div>
         )}
         </TabsContent>
       </Page>

@@ -266,7 +266,8 @@ function CompDetailView({
 
   const scoresSection = (
     <CompScoresSummary
-      compId={compId}
+      compId={compUrlId(comp, compId)}
+      compName={comp.name}
       timezone={comp.timezone}
       initialScores={initialScores}
       initialScoresEtag={initialScoresEtag}

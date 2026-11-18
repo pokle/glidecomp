@@ -143,6 +143,33 @@ export async function loadCompScores(
   return { comp, scores, scoresEtag };
 }
 
+// ── /comp/:compId/scores/:pilotId ────────────────────────────────────────────
+
+/**
+ * One pilot's scores in a competition. The same data as the scores page — the
+ * whole comp's standings, which carry every pilot's task entries — so the
+ * page and the scores page can never disagree, and no endpoint was added.
+ *
+ * A pilot the standings do not name is a 404. The standings answered (200),
+ * so that is a real answer, not a blip. When the standings are unavailable
+ * (no scored task yet, or a transient error) the page renders without them
+ * and fetches them itself, as the scores page does.
+ */
+export async function loadCompPilotScores(
+  f: FetchFn,
+  compId: string,
+  pilotId: string
+): Promise<CompScoresLoaderData> {
+  const data = await loadCompScores(f, compId);
+  if (
+    data.scores &&
+    !data.scores.class_scores.some((cls) => cls.pilots.some((p) => p.comp_pilot_id === pilotId))
+  ) {
+    throw new NotFoundError(`/api/comp/${encodeURIComponent(compId)}/scores#${pilotId}`);
+  }
+  return data;
+}
+
 // ── /comp/:compId/scores.pdf ─────────────────────────────────────────────────
 
 /** One task as the results record shows it: its route and its scores. */
