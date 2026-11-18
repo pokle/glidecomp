@@ -536,3 +536,48 @@ test("Thermals: the lift rose and the climb profile are readable", async ({ page
   await expectReadable(profile, 3);
   await expectNoSidewaysScroll(page);
 });
+
+test("The task page: the route diagram's names are readable and its turnpoints can be hit, and the top three are rows", async ({
+  page,
+}) => {
+  await page.goto(`/comp/${compId}/task/${taskId}`, { waitUntil: "domcontentloaded" });
+
+  // The diagram is scaled to its pane, so its names are sized for the width
+  // it is drawn at: they were 10 units, which a phone painted at 8px.
+  const diagram = page.getByRole("region", { name: "Route diagram" }).locator("svg[viewBox]");
+  await expect(diagram).toBeVisible({ timeout: 60_000 });
+  const painted = () =>
+    diagram.evaluate((el) => {
+      const svg = el as SVGSVGElement;
+      const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+      return [...svg.querySelectorAll("text")].map(
+        (t) => Math.round(parseFloat(getComputedStyle(t).fontSize) * scale * 10) / 10
+      );
+    });
+  await expect.poll(async () => Math.min(...(await painted()))).toBeGreaterThanOrEqual(11.5);
+  expect(Math.max(...(await painted()))).toBeLessThanOrEqual(13.5);
+  // Each turnpoint's target is 44px across, at whatever size the diagram is.
+  const targets = await diagram
+    .locator("[data-turnpoint] circle")
+    .evaluateAll((cs) => cs.map((c) => c.getBoundingClientRect().width));
+  expect(targets.length).toBeGreaterThan(2);
+  for (const width of targets) expect(width).toBeGreaterThanOrEqual(43.5);
+
+  // The top three of a class are rows of the scores kit: the whole row is
+  // the link, and it is as tall as a finger needs.
+  const scores = page.locator("#scores");
+  const podium = scores.getByRole("list", { name: /^Top 3 — / }).first();
+  await expect(podium).toBeVisible({ timeout: 60_000 });
+  const rows = podium.getByRole("link");
+  expect(await rows.count()).toBeGreaterThanOrEqual(2);
+  for (const row of await rows.all()) {
+    const box = (await row.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(43.5);
+    expect(box.width).toBeGreaterThan(200);
+  }
+  await expect(rows.first()).toHaveAttribute("href", /\/pilot\//);
+  // The last row opens the rest of the class on the scores page.
+  await expect(rows.last()).toHaveText(/^\+ \d+ more pilots?$/);
+  await expect(rows.last()).toHaveAttribute("href", /\/scores\?task=/);
+  await expectNoSidewaysScroll(page);
+});
