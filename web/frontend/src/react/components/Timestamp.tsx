@@ -61,7 +61,9 @@ export function Timestamp({
         onPress={() => setIndex((i) => (i + 1) % choices.length)}
         aria-label={`${current.text}, ${current.kindLabel}. Activate to change time zone.`}
         className={cn(
-          "cursor-pointer rounded-sm underline decoration-dotted decoration-muted-foreground/50 underline-offset-2 outline-none transition-colors data-hovered:decoration-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring",
+          // Inline in a sentence, so it cannot grow: `touch-target` widens
+          // what a finger may land on and moves nothing.
+          "touch-target cursor-pointer rounded-sm underline decoration-dotted decoration-muted-foreground/50 underline-offset-2 outline-none transition-colors data-hovered:decoration-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring",
           className
         )}
       >

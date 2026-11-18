@@ -45,7 +45,7 @@ export function Disclosure({
       <Heading level={headingLevel} className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <AriaButton
           slot="trigger"
-          className="flex items-center gap-1.5 rounded text-left text-sm font-medium outline-none data-hovered:text-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
+          className="flex items-center gap-1.5 rounded text-left text-sm font-medium outline-none pointer-coarse:min-h-11 data-hovered:text-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
         >
           <ChevronRightIcon
             aria-hidden

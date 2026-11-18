@@ -981,3 +981,28 @@ test("a waypoint added from the route's map is a page, and is saved with the rou
   expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL", "ECHO"]);
   await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 });
+
+test("the date field's parts are targets a finger can hit", { tag: PHONE_ONLY }, async ({
+  page,
+}) => {
+  // Issue #860: a day, month or year was the width of its digits (20 to 24 px)
+  // and 24 px tall, and the calendar's month arrows were 28 px.
+  await devLogin(page, ADMIN_USER);
+  await page.goto(`/comp/${compId}/task/${taskId}/settings`);
+  await expect(page.getByRole("button", { name: "Delete task" })).toBeVisible({ timeout: 20_000 });
+
+  const segments = page.getByRole("spinbutton");
+  expect(await segments.count()).toBeGreaterThanOrEqual(3);
+  for (const segment of await segments.all()) {
+    const box = (await segment.boundingBox())!;
+    const name = await segment.getAttribute("aria-label");
+    expect(box.width, `${name} is 44 px wide or more`).toBeGreaterThanOrEqual(43.5);
+    expect(box.height, `${name} is 44 px tall or more`).toBeGreaterThanOrEqual(43.5);
+  }
+  for (const name of ["Previous", "Next"]) {
+    const box = (await page.getByRole("button", { name, exact: true }).first().boundingBox())!;
+    expect(box.width, `${name} is 44 px wide`).toBeGreaterThanOrEqual(43.5);
+    expect(box.height, `${name} is 44 px tall`).toBeGreaterThanOrEqual(43.5);
+  }
+  await expectNoSidewaysScroll(page, "task settings");
+});

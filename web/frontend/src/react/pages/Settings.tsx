@@ -503,6 +503,21 @@ function ProfilePage() {
     setSavedMessage(true);
   }
 
+  // The keyboard each field asks a phone for. A phone number gets the phone
+  // pad and is offered from the reader's own contact card; the emergency
+  // contact's number gets the pad but is somebody else's, so it is not. The
+  // CIVL ID is digits, as on the organiser's pilot page (comp/PilotForm.tsx).
+  const PROFILE_INPUT: Partial<
+    Record<
+      (typeof PROFILE_FIELDS)[number]["key"],
+      { type?: "tel"; inputMode?: "tel" | "numeric"; autoComplete?: string }
+    >
+  > = {
+    phone: { type: "tel", inputMode: "tel", autoComplete: "tel" },
+    emergency_contact_phone: { type: "tel", inputMode: "tel", autoComplete: "off" },
+    civl_id: { inputMode: "numeric", autoComplete: "off" },
+  };
+
   const renderField = (field: (typeof PROFILE_FIELDS)[number]) => (
     <TextField
       key={field.key}
@@ -521,6 +536,7 @@ function ProfilePage() {
         setSavedMessage(false);
       }}
       isRequired={field.key === "name"}
+      {...PROFILE_INPUT[field.key]}
     />
   );
 

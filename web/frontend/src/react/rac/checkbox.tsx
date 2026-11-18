@@ -31,6 +31,9 @@ export function Checkbox({
     <AriaCheckbox
       className={cn(
         "group flex w-fit items-start gap-2 text-sm leading-snug data-disabled:opacity-50",
+        // The label is the target. On a touch screen one line of it is 44px
+        // tall and the row at least as wide, where it was the 20px of its text.
+        "pointer-coarse:min-w-11 pointer-coarse:py-3",
         className
       )}
       {...props}

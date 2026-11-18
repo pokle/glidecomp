@@ -138,7 +138,10 @@ export function ComboBox<T extends object>({
           autoCapitalize={variant === "field" ? "words" : "none"}
           autoCorrect="off"
           spellCheck={false}
-          className="w-full min-w-0 bg-transparent py-1 text-base outline-none placeholder:text-muted-foreground md:text-sm"
+          // On a touch screen the input is the whole 44px of the field's
+          // height, laid over the group's border, where it was the 32px of
+          // its own line and a tap above or below it did nothing.
+          className="w-full min-w-0 bg-transparent py-1 text-base outline-none placeholder:text-muted-foreground md:text-sm pointer-coarse:-my-px pointer-coarse:h-11"
         />
         {/* Deliberately no trailing toggle/clear button. react-aria's
             ariaHideOutside aria-hides everything except the input and the

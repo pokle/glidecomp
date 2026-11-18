@@ -290,7 +290,7 @@ export function TaskScoresPublic({
             {/* Static Astro page — a plain anchor leaves the SPA. */}
             <a
               href="/scoring"
-              className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+              className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
             >
               How scoring works
             </a>
