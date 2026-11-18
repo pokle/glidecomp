@@ -6,12 +6,18 @@
  * the min / median / max in words, and those three numbers are also printed
  * as visible labels, so the strip degrades to text. Density shows through
  * dot overlap at partial opacity.
+ *
+ * **Drawn in CSS pixels** (`charts/use-chart-box.ts`, issue #860). It was a
+ * 560-unit drawing scaled to the page, so a phone painted its labels at
+ * 5.7px and its dots a little over 2px across.
  */
 import { useMemo } from "react";
 import { cn } from "@/react/lib/utils";
 import { formatMetricValue, type MetricReport } from "../types";
 import { unitWords } from "../units";
 import { extent, formatTickValue, linearScale, quantileSorted } from "./chart-utils";
+import { useChartBox } from "@/react/charts/use-chart-box";
+import { approxTextWidth } from "@/react/charts/text-width";
 
 export function DistributionStrip({
   metric,
@@ -24,6 +30,7 @@ export function DistributionStrip({
   /** Popover-sized rendering. */
   compact?: boolean;
 }) {
+  const { ref: svgRef, box } = useChartBox();
   const { values, sorted, emphasized } = useMemo(() => {
     const usable = metric.perPilot.filter(
       (p): p is { trackFile: string; value: number } =>
@@ -46,12 +53,15 @@ export function DistributionStrip({
     );
   }
 
-  const W = compact ? 280 : 560;
-  // Two label lines under the axis: the statistic's name, then its value.
-  const H = 58;
+  const W = box.width;
+  const em = box.fontSize;
   const PAD = 14;
   const CY = 16;
   const r = compact ? 3 : 4;
+  // Two label lines under the axis: the statistic's name, then its value.
+  const nameY = CY + r + 8 + em * 1.05;
+  const valueY = nameY + em * 1.2;
+  const H = Math.round(valueY + em * 0.45);
 
   const min = sorted[0];
   const median = quantileSorted(sorted, 0.5);
@@ -85,16 +95,34 @@ export function DistributionStrip({
 
   // De-duplicate colliding min/median/max labels (e.g. a tight field where
   // median ≈ min) — a garbled overlap is worse than fewer labels.
-  const marks = [
+  // Min and max first, so that where the median's label has no room between
+  // them it is the median that is left out: the ends are what frame the strip.
+  const widthOf = (m: { word: string; value: number }) =>
+    Math.max(approxTextWidth(m.word, em), approxTextWidth(formatTickValue(metric.unit, m.value), em));
+  const spanOf = (m: { word: string; value: number; anchor: "start" | "middle" | "end" }) => {
+    const w = widthOf(m);
+    const at = x(m.value);
+    const x0 = m.anchor === "start" ? at : m.anchor === "end" ? at - w : at - w / 2;
+    return { x0, x1: x0 + w };
+  };
+  const marks: { word: string; value: number; anchor: "start" | "middle" | "end" }[] = [];
+  for (const m of [
     { word: "min", value: min, anchor: "start" as const },
-    { word: "median", value: median, anchor: "middle" as const },
     { word: "max", value: max, anchor: "end" as const },
-  ].filter(
-    (m, i, all) => i === 0 || Math.abs(x(m.value) - x(all[i - 1].value)) > (compact ? 50 : 64)
-  );
+    { word: "median", value: median, anchor: "middle" as const },
+  ]) {
+    const span = spanOf(m);
+    const clear = marks.every((o) => {
+      const taken = spanOf(o);
+      return span.x1 + em * 0.6 < taken.x0 || span.x0 - em * 0.6 > taken.x1;
+    });
+    if (clear) marks.push(m);
+  }
 
   return (
     <svg
+      ref={svgRef}
+      data-chart="distribution-strip"
       viewBox={`0 0 ${W} ${H}`}
       className={cn("h-auto", compact ? "w-full max-w-70" : "w-full")}
       role="img"
@@ -125,7 +153,7 @@ export function DistributionStrip({
           className="fill-chart-1 stroke-foreground stroke-2"
         />
       ) : null}
-      <g aria-hidden className="text-[10px] text-muted-foreground">
+      <g aria-hidden fontSize={em} className="text-muted-foreground">
         {marks.map((m) => (
           <g key={m.word}>
             <line
@@ -138,7 +166,7 @@ export function DistributionStrip({
             />
             <text
               x={x(m.value)}
-              y={CY + r + 19}
+              y={nameY}
               textAnchor={m.anchor}
               className="fill-current"
             >
@@ -146,7 +174,7 @@ export function DistributionStrip({
             </text>
             <text
               x={x(m.value)}
-              y={CY + r + 30}
+              y={valueY}
               textAnchor={m.anchor}
               className="fill-current"
             >

@@ -18,38 +18,39 @@
  * here are not a fit: they are the exact two numbers zScoreColumns() computes,
  * so the picture and the arithmetic behind the table cannot disagree.
  *
- * Presentation-only and free of DOM access, so it is safe wherever the rest of
- * task-analysis renders. Non-interactive by design, matching the strip it is
- * modelled on: `role="img"` whose accessible name is the caption, with the
- * sheet's own table below carrying the exact figures.
+ * Non-interactive by design, matching the strip it is modelled on:
+ * `role="img"` whose accessible name is the caption, with the sheet's own
+ * table below carrying the exact figures.
+ *
+ * **Drawn in CSS pixels** (`charts/use-chart-box.ts`, issue #860). It was a
+ * 520-unit drawing scaled to the page, so a phone painted its labels at
+ * 6.1px. Every height here is a multiple of the type size, the marker labels
+ * have three rows to find room in where they had two, and the axis title is
+ * given its lines where it is longer than the chart. SSR-safe: the first
+ * render assumes a desktop width, and the chart is measured after it mounts.
  */
 import { formatMetricValue, type MetricReport } from "../types";
 import { cn } from "@/react/lib/utils";
 import { extent, linearScale, niceTicks } from "@/react/charts/scale";
 import { axisTitleFor, formatTickValue } from "./chart-utils";
 import { XAxisTitle } from "@/react/charts/AxisTitle";
+import { useChartBox } from "@/react/charts/use-chart-box";
+import { approxTextWidth, wrapToWidth } from "@/react/charts/text-width";
 
-const W = 520;
-const H = 128;
 const MARGIN = { left: 14, right: 14 };
-/** The lane the dots sit on. */
-const LANE_Y = 72;
 /** Dot radius, matching charts/DistributionStrip and the takeoff lane. */
 const DOT_R = 3;
 /** Half-height of the shaded ±1 SD band. */
 const BAND_HALF = 13;
 /**
- * Baselines for marker labels, nearest the lane first. Two rows because these
- * markers genuinely collide: on a behaviour where the field bunched, "−1 SD",
- * "Field average" and the reader's own name all land within a few pixels of
- * each other — and a tightly bunched field is exactly when a reader most wants
- * to know where they sat.
+ * Rows of marker labels above the lane, nearest the lane first. More than one
+ * because these markers genuinely collide: on a behaviour where the field
+ * bunched, "−1 SD", "Field average" and the reader's own name all land within
+ * a few pixels of each other — and a tightly bunched field is exactly when a
+ * reader most wants to know where they sat. Three, because at a size a phone
+ * can read the four labels are together wider than the phone.
  */
-const LABEL_ROWS = [34, 18];
-/** Rough label width for collision testing, at the 10px label size. */
-const labelWidth = (t: string) => t.length * 5.4;
-const TICK_LABEL_Y = 90;
-const AXIS_TITLE_Y = 108;
+const LABEL_ROW_COUNT = 3;
 /** How many round ticks to aim for across the axis. */
 const TICK_TARGET = 5;
 /** |z| below which a pilot is called level with the average rather than above
@@ -150,6 +151,7 @@ export function MetricDistribution({
   subjectTrackFile,
   ringed,
 }: MetricDistributionProps) {
+  const { ref: svgRef, box } = useChartBox();
   const nameByTrack = new Map(pilots.map((p) => [p.trackFile, p.pilotName]));
   const ringedSet = new Set(ringed.map((r) => r.trackFile));
 
@@ -170,6 +172,21 @@ export function MetricDistribution({
   if (!stats || !subject || points.length < 2) return null;
 
   const { mean, sd } = stats;
+  const W = box.width;
+  const em = box.fontSize;
+  // Top to bottom: the label rows, the lane with its band, the ticks, the
+  // axis title. Each is as tall as the type it holds.
+  const rowHeight = em * 1.25;
+  const LABEL_ROWS = Array.from(
+    { length: LABEL_ROW_COUNT },
+    (_, i) => em * 1.05 + rowHeight * (LABEL_ROW_COUNT - 1 - i)
+  );
+  const LANE_Y = Math.round(LABEL_ROWS[0] + em * 0.6 + BAND_HALF);
+  const TICK_LABEL_Y = LANE_Y + 12 + em * 1.05;
+  const titleLines = wrapToWidth(axisTitleFor(metric), em, W - 4);
+  const AXIS_TITLE_Y = TICK_LABEL_Y + em * 1.4;
+  const H = Math.round(AXIS_TITLE_Y + em * 1.15 * (titleLines.length - 1) + em * 0.5);
+  const labelWidth = (t: string, bold = false) => approxTextWidth(t, em) * (bold ? 1.08 : 1);
   const plot = { left: MARGIN.left, right: W - MARGIN.right };
   // The band is unioned into the domain rather than assumed to fall inside it:
   // on a two-pilot field mean ± sd lands exactly on the ends, and on a skewed
@@ -196,15 +213,29 @@ export function MetricDistribution({
   }
 
   const placed: (typeof markers[number] & { labelX: number; labelY: number })[] = [];
-  const rowEnds: number[] = LABEL_ROWS.map(() => -Infinity);
+  const rowSpans: { x0: number; x1: number }[][] = LABEL_ROWS.map(() => []);
   for (const m of markers) {
-    const half = labelWidth(m.label) / 2;
+    const half = labelWidth(m.label, m.you) / 2;
     const labelX = Math.min(W - half - 2, Math.max(half + 2, x(m.x)));
-    let row = LABEL_ROWS.findIndex((_, i) => labelX - half > rowEnds[i] + 4);
+    // The first row with room either side of what is already in it.
+    let row = LABEL_ROWS.findIndex((_, i) =>
+      rowSpans[i].every((s) => labelX + half + 4 < s.x0 || labelX - half - 4 > s.x1)
+    );
     if (row < 0) row = LABEL_ROWS.length - 1;
-    rowEnds[row] = Math.max(rowEnds[row], labelX + half);
+    rowSpans[row].push({ x0: labelX - half, x1: labelX + half });
     placed.push({ ...m, labelX, labelY: LABEL_ROWS[row] });
   }
+
+  // Tick labels carry their unit ("40 km/h"), so on a phone five of them can
+  // touch. Every second or third is then left bare of its label, never
+  // shrunk; the tick mark stays.
+  const tickTexts = ticks.map((t) => formatTickValue(metric.unit, t));
+  const tickGap =
+    ticks.length > 1 ? Math.abs(x(ticks[1]) - x(ticks[0])) : Number.POSITIVE_INFINITY;
+  const tickStride = Math.max(
+    1,
+    Math.ceil((Math.max(...tickTexts.map((t) => approxTextWidth(t, em))) + em * 0.6) / tickGap)
+  );
 
   const caption = captionText({
     metricLabel: metric.label,
@@ -221,10 +252,12 @@ export function MetricDistribution({
   return (
     <figure className="mt-1 max-w-2xl space-y-1">
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
         className="h-auto w-full"
         role="img"
         aria-label={caption}
+        data-chart="metric-distribution"
       >
         {/* The ±1 SD band, behind everything: it is the frame the field is
             read against, not a mark in its own right. */}
@@ -256,7 +289,7 @@ export function MetricDistribution({
             <line
               x1={x(m.x)}
               x2={x(m.x)}
-              y1={m.labelY + 4}
+              y1={m.labelY + em * 0.3}
               y2={LANE_Y + 12}
               strokeWidth={m.you ? 2 : 1}
               strokeDasharray={m.you ? undefined : "3 3"}
@@ -267,8 +300,9 @@ export function MetricDistribution({
               x={m.labelX}
               y={m.labelY}
               textAnchor="middle"
+              fontSize={em}
               className={cn(
-                "fill-current stroke-background text-[10px] [paint-order:stroke] [stroke-width:3px]",
+                "fill-current stroke-background [paint-order:stroke] [stroke-width:3px]",
                 m.you ? "font-medium text-foreground" : "text-muted-foreground"
               )}
             >
@@ -331,8 +365,8 @@ export function MetricDistribution({
             a dot between the two ends. Formatted by the shared task-analysis
             tick formatter, so a percentage reads "40%" here exactly as it does
             on the scatter, and the axis is titled by the shared helper. */}
-        <g aria-hidden className="text-[10px] text-muted-foreground">
-          {ticks.map((t) => (
+        <g aria-hidden fontSize={em} className="text-muted-foreground">
+          {ticks.map((t, i) => (
             <g key={t}>
               <line
                 x1={x(t)}
@@ -342,13 +376,15 @@ export function MetricDistribution({
                 className="stroke-border"
                 strokeWidth={1}
               />
-              <text x={x(t)} y={TICK_LABEL_Y} textAnchor="middle" className="fill-current">
-                {formatTickValue(metric.unit, t)}
-              </text>
+              {i % tickStride === 0 ? (
+                <text x={x(t)} y={TICK_LABEL_Y} textAnchor="middle" className="fill-current">
+                  {tickTexts[i]}
+                </text>
+              ) : null}
             </g>
           ))}
-          <XAxisTitle left={plot.left} right={plot.right} y={AXIS_TITLE_Y}>
-            {axisTitleFor(metric)}
+          <XAxisTitle left={0} right={W} y={AXIS_TITLE_Y} fontSize={em}>
+            {titleLines.join("\n")}
           </XAxisTitle>
         </g>
       </svg>

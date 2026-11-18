@@ -24,6 +24,11 @@
  * - arrow keys walk the marks, and leaving the chart ends the choice;
  * - nothing tells a reader to hover.
  *
+ * Four more charts are held to the first two of those: the comparison chart
+ * on "Who flew like me?" (6.1px on a phone), the field distribution strip
+ * under the rank scatter (5.7px), and the lift rose and the climb profile of
+ * a thermal (8px). None of them names a mark, so there is nothing to choose.
+ *
  * READ-ONLY against the seeded "Corryong Cup 2026" sample comp. Never waits
  * on "networkidle": these pages keep a freshness poll in flight.
  */
@@ -84,7 +89,11 @@ async function measureLabels(figure: Locator) {
     const small: string[] = [];
     const clipped: string[] = [];
     let texts = 0;
-    for (const svg of fig.querySelectorAll<SVGSVGElement>("svg[viewBox]")) {
+    // A chart with no figure round it is handed over as its <svg>.
+      const svgs = fig.matches("svg")
+        ? [fig as unknown as SVGSVGElement]
+        : [...fig.querySelectorAll<SVGSVGElement>("svg[viewBox]")];
+      for (const svg of svgs) {
       const box = svg.getBoundingClientRect();
       const scale = box.width / svg.viewBox.baseVal.width;
       for (const text of svg.querySelectorAll("text")) {
@@ -126,7 +135,11 @@ async function expectReadable(figure: Locator, minTexts: number, px = 13) {
   const offSize = () =>
     figure.evaluate((fig, want) => {
       const off: string[] = [];
-      for (const svg of fig.querySelectorAll<SVGSVGElement>("svg[viewBox]")) {
+      // A chart with no figure round it is handed over as its <svg>.
+      const svgs = fig.matches("svg")
+        ? [fig as unknown as SVGSVGElement]
+        : [...fig.querySelectorAll<SVGSVGElement>("svg[viewBox]")];
+      for (const svg of svgs) {
         const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
         for (const text of svg.querySelectorAll("text")) {
           const painted = parseFloat(getComputedStyle(text).fontSize) * scale;
@@ -453,4 +466,73 @@ test("The report card: a dot on a score curve is chosen by pointing near it", as
     hasTouch,
     "Select a dot to name the pilot behind it."
   );
+});
+
+test("Who flew like me?: the comparison chart is readable and stays on its chart", async ({
+  page,
+}) => {
+  await page.goto(`/comp/${compId}/task/${taskId}/analysis/similar`, {
+    waitUntil: "domcontentloaded",
+  });
+  const svg = page.locator('svg[data-chart="metric-distribution"]');
+  await expect(svg).toBeVisible({ timeout: 60_000 });
+  // The field average, both ends of the band and the pilot are all named,
+  // each on a row with room for it.
+  await expectReadable(svg, 6);
+  for (const label of ["Field average", "−1 SD", "+1 SD"]) {
+    await expect(svg.locator("text", { hasText: label })).toHaveCount(1);
+  }
+  const labels = await svg.evaluate((el) =>
+    [...el.querySelectorAll("text")].map((t) => {
+      const r = t.getBoundingClientRect();
+      return { text: t.textContent, x0: r.left, x1: r.right, y0: r.top, y1: r.bottom };
+    })
+  );
+  for (const a of labels) {
+    for (const b of labels) {
+      if (a === b) continue;
+      const overlap =
+        Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) > 0 &&
+        Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) > 2;
+      expect(overlap, `"${a.text}" and "${b.text}" overlap`).toBe(false);
+    }
+  }
+  await expectNoSidewaysScroll(page);
+});
+
+test("Winning strategies: the field distribution strip is readable", async ({ page }) => {
+  await page.goto(`/comp/${compId}/task/${taskId}/analysis/strategies`, {
+    waitUntil: "domcontentloaded",
+  });
+  const ranking = page.getByRole("grid", { name: "Behaviour ranking" });
+  await ranking.waitFor({ timeout: 60_000 });
+  const strip = page.locator('svg[data-chart="distribution-strip"]').filter({ visible: true }).first();
+  if (!(await strip.isVisible())) {
+    await ranking.locator("tbody tr").first().locator("th, td").first().click();
+  }
+  await expect(strip).toBeVisible();
+  await expectReadable(strip, 4);
+  // The two ends are always named; the median is where there is room.
+  await expect(strip.locator("text", { hasText: /^min$/ })).toHaveCount(1);
+  await expect(strip.locator("text", { hasText: /^max$/ })).toHaveCount(1);
+});
+
+test("Thermals: the lift rose and the climb profile are readable", async ({ page }) => {
+  await page.goto(`/comp/${compId}/task/${taskId}/analysis/thermals`, {
+    waitUntil: "domcontentloaded",
+  });
+  const census = page.getByRole("grid", { name: "Reconstructed thermals" });
+  await census.waitFor({ timeout: 60_000 });
+  // Side by side (desktop) a thermal is on screen from the start; stacked (a
+  // phone) it is behind a row of the census.
+  const rose = page.locator('svg[data-chart="thermal-rose"]').filter({ visible: true }).first();
+  if (!(await rose.isVisible())) {
+    await census.locator("tbody tr").first().locator("th, td").first().click();
+  }
+  await expect(rose).toBeVisible();
+  await expectReadable(rose, 4);
+  const profile = page.locator('svg[data-chart="climb-profile"]').filter({ visible: true }).first();
+  await expect(profile).toBeVisible();
+  await expectReadable(profile, 3);
+  await expectNoSidewaysScroll(page);
 });

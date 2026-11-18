@@ -55,3 +55,25 @@ export function truncateToWidth(text: string, fontPx: number, maxWidth: number):
   }
   return "…";
 }
+
+/**
+ * `text` broken into lines no wider than `maxWidth` at `fontPx`, at spaces.
+ * SVG text does not wrap, so an axis title longer than its chart is cut off
+ * at both ends unless it is given its lines. A single word wider than the
+ * line keeps a line to itself.
+ */
+export function wrapToWidth(text: string, fontPx: number, maxWidth: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && approxTextWidth(next, fontPx) > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
