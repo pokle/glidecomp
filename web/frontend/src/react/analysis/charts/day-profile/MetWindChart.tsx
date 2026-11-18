@@ -34,11 +34,11 @@ import { linearScale, niceTicks } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
 import type { ChartFrame } from "./frame";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
-import { MetChartHeader, sourceSentence } from "./MetSourceTag";
+import { ChartHeader, sourceSentence } from "./MetSourceTag";
 import { MetLegend, type LegendEntry } from "./MetLegend";
-import { HourColumns, useHourPointer, type HourColumn } from "./HourColumns";
+import { HourColumns, columnAt, hourRange, useHourPointer, type HourColumn } from "./HourColumns";
 import { flyingHeightLabel, windReading } from "./met-readout";
-import { windArrowPath, windArrowTransform } from "./shared";
+import { degToCompass, windArrowPath, windArrowTransform } from "./shared";
 
 const HOUR_MS = 3_600_000;
 
@@ -169,30 +169,58 @@ export function MetWindChart({
   // otherwise — one lane, never two, or the panel's alignment stops reading.
   const arrowDir = (p: Point): number | null => (hasLevels ? p.levelDir : p.surfaceDir);
 
+  // The selected hour's figures, printed in the legend beside each line.
+  const sel = columnAt(points, selectedMs);
+  const speedText = (speed: number | null, dir: number | null): string | null =>
+    speed === null
+      ? null
+      : `${speed.toFixed(0)} ${wind.unit}` + (dir === null ? "" : ` ${degToCompass(dir)}`);
+  const selDir = sel ? arrowDir(sel) : null;
+
   const legend: LegendEntry[] = [];
   if (hasLevels) {
-    legend.push({ key: "level", text: `flying height ${levelLabel}`, ...LEVEL_STROKE });
+    legend.push({
+      key: "level",
+      text: sel ? "flying height" : `flying height ${levelLabel}`,
+      value: sel ? (speedText(sel.levelSpeed, sel.levelDir) ?? "no figure") : null,
+      ...LEVEL_STROKE,
+    });
   }
   if (hasSurface) {
-    legend.push({ key: "surface", text: "surface (10 m)", ...SURFACE_STROKE });
+    const surface = sel ? speedText(sel.surfaceSpeed, sel.surfaceDir) : null;
+    legend.push({
+      key: "surface",
+      text: sel ? "surface" : "surface (10 m)",
+      value: sel
+        ? surface === null
+          ? "no figure"
+          : surface + (sel.gust !== null ? `, gusting ${sel.gust.toFixed(0)}` : "")
+        : null,
+      ...SURFACE_STROKE,
+    });
   }
   if (points.some((p) => arrowDir(p) !== null)) {
     legend.push({
       key: "direction",
       kind: "arrow",
       text: hasLevels ? "direction" : "surface direction",
+      value: selDir === null ? null : `${Math.round(selDir)}°`,
       ...ARROW_STROKE,
     });
   }
 
   return (
     <div className="space-y-0.5" data-met-chart="wind">
-      <MetChartHeader title="Weather: wind" source={source} />
+      <ChartHeader
+        title="Weather: wind"
+        when={sel ? hourRange(sel.tMs, timeZone) : null}
+        source={source}
+      />
       {/* A legend row rather than labels on the lines: at a readable size
           the labels cover the lines they name. Each entry carries a sample of
           its own stroke, since the two lines are the same colour and only
-          the dash tells them apart. */}
-      <MetLegend entries={legend} />
+          the dash tells them apart — and the selected hour's figure. */}
+      <MetLegend entries={legend} lines={3} />
       <svg
         viewBox={`0 0 ${frame.width} ${H}`}
         className="h-auto w-full select-none"

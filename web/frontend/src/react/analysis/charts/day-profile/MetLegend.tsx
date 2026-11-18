@@ -6,7 +6,8 @@
  * lines. At a readable size they do not fit there: "flying height ~1457 m"
  * with its swatch is half the width of a phone's plot, and it was already
  * printing across its own line (issue #860). So they are a row of real text
- * above the plot, which wraps.
+ * above the plot, which wraps — and which prints each line's figure for the
+ * selected hour beside its name.
  *
  * The swatch is what tells the lines apart — the wind chart's two are the
  * same colour and differ only by dash, and the thermal chart's two cross on
@@ -28,21 +29,51 @@ export interface SeriesStroke {
 export interface LegendEntry extends Partial<SeriesStroke> {
   key: string;
   text: string;
+  /**
+   * This series' figure for the selected hour, printed after its name —
+   * the legend is where the exact figures are read (issue #860). A share
+   * price chart does the same: the numbers are beside the chart they belong
+   * to, nothing floats over the plot, and nothing is hover-only.
+   */
+  value?: string | null;
   /** "line" (default) samples the stroke; "arrow" draws the wind glyph;
-   * "note" is text alone — a fact about the dataset, not a series. */
-  kind?: "line" | "arrow" | "note";
+   * "box" is a filled swatch (`fillClass`); "dot" a point mark; "note" is
+   * text alone. */
+  kind?: "line" | "arrow" | "box" | "dot" | "note";
+  /** Tailwind background class for a "box" or "dot" swatch. */
+  fillClass?: string;
 }
 
-export function MetLegend({ entries }: { entries: LegendEntry[] }) {
-  if (entries.length === 0) return null;
+/** Height held for the legend below the `sm` breakpoint, in lines of text.
+ * The row gets longer when an hour is chosen and its figures are printed;
+ * without the reserve the charts would move under the finger choosing it. */
+const MIN_LINES = {
+  1: "min-h-4",
+  2: "min-h-8 sm:min-h-4",
+  3: "min-h-12 sm:min-h-4",
+  4: "min-h-16 sm:min-h-4",
+} as const;
+
+export function MetLegend({
+  entries,
+  lines = 1,
+}: {
+  entries: LegendEntry[];
+  lines?: keyof typeof MIN_LINES;
+}) {
   return (
     <div
       aria-hidden
-      className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground"
+      data-chart-legend
+      className={`flex flex-wrap content-start gap-x-4 gap-y-0 text-xs text-muted-foreground ${MIN_LINES[lines]}`}
     >
       {entries.map((e) => (
         <span key={e.key} className="inline-flex items-center gap-1.5">
-          {e.kind === "note" ? null : (
+          {e.kind === "note" ? null : e.kind === "box" ? (
+            <span className={`inline-block size-3 shrink-0 rounded-xs border border-border ${e.fillClass ?? ""}`} />
+          ) : e.kind === "dot" ? (
+            <span className={`inline-block size-1.5 shrink-0 rounded-full ${e.fillClass ?? ""}`} />
+          ) : (
             <svg viewBox="0 0 18 12" className="h-3 w-[18px] shrink-0">
               {e.kind === "arrow" ? (
                 <path
@@ -70,7 +101,10 @@ export function MetLegend({ entries }: { entries: LegendEntry[] }) {
               )}
             </svg>
           )}
-          {e.text}
+          <span>
+            {e.text}
+            {e.value ? <span className="font-medium text-foreground"> {e.value}</span> : null}
+          </span>
         </span>
       ))}
     </div>

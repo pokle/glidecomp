@@ -8,191 +8,215 @@
  * edge-of-day bucket doesn't read as confidently as a busy one. The
  * whole-task vector mean is a dashed reference line.
  *
- * Hover names the hour in the panel's shared readout; the Wind by hour
- * table below remains the exact, screen-reader-navigable reading.
+ * An hour is selected by touch, mouse or keyboard (HourColumns.tsx) and its
+ * figures print in the legend row; the Wind by hour table below remains the
+ * exact, screen-reader-navigable reading.
+ *
+ * Geometry comes from the stack's `ChartFrame`, and every height here is a
+ * multiple of its type size — see frame.ts.
  */
 import type { WindHourlySeries } from "../../types";
-import { formatTimeRange } from "@/react/lib/time";
 import { useUnits } from "@/react/lib/units";
 import { formatMetricValue } from "../../types";
 import { unitDisplay } from "../../units";
-import { formatTickValue, linearScale, niceTicks } from "../chart-utils";
+import { linearScale, niceTicks } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
+import type { ChartFrame } from "./frame";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
-import { ChartTitle } from "@/react/charts/AxisTitle";
-import {
-  PLOT_LEFT,
-  PLOT_RIGHT,
-  W,
-  degToCompass,
-  windArrowPath,
-  windArrowTransform,
-} from "./shared";
+import { ChartHeader } from "./MetSourceTag";
+import { MetLegend, type LegendEntry } from "./MetLegend";
+import { HourColumns, columnAt, hourRange, useHourPointer, type HourColumn } from "./HourColumns";
+import { degToCompass, windArrowPath, windArrowTransform } from "./shared";
 
 const HOUR_MS = 3_600_000;
-// The lane and the plot sit 14 lower than they used to, and H grew with them,
-// to clear the chart title above — the same headroom MetWindChart has always
-// had for "Weather: wind". Without it the title printed straight through the
-// "direction" lane label.
-const H = 182;
-const LANE_Y = 28; // direction-arrow lane centreline
-const PLOT = { top: 44, bottom: H - 26 };
-const TICK_LABEL_Y = H - 10;
+
+/** One stroke definition per series, shared by the mark and its legend
+ * swatch. */
+const SPEED_STROKE = { stroke: "var(--chart-2)", strokeWidth: 2 };
+const MEAN_STROKE = { stroke: "var(--chart-2)", strokeWidth: 1, dash: "4 3", opacity: 0.7 };
+const ARROW_STROKE = { stroke: "var(--chart-2)", strokeWidth: 1.6 };
 
 export function WindHourlyChart({
   series,
   axis,
+  frame,
   timeZone,
-  setReadout,
+  selectedMs,
+  onSelect,
 }: {
   series: WindHourlySeries;
   axis: TimeAxis;
+  frame: ChartFrame;
   timeZone: string | undefined;
-  setReadout: (text: string | null) => void;
+  selectedMs: number | null;
+  onSelect: (tMs: number | null) => void;
 }) {
   // Wind is a horizontal drift, so it follows the speed preference; the
   // engine's series values are km/h and convert here at the display boundary.
   const wind = unitDisplay("km/h", useUnits());
 
-  if (series.hours.length === 0) return null;
+  const points = series.hours.map((h) => {
+    const tMs = new Date(h.t).getTime();
+    return { ...h, speed: h.speedKmh * wind.factor, tMs, cx: axis.x(tMs + HOUR_MS / 2) };
+  });
+  const circles = (n: number) => `${n} circle estimate${n === 1 ? "" : "s"}`;
+  const columns: HourColumn[] = points.map((p) => ({
+    tMs: p.tMs,
+    label:
+      `${hourRange(p.tMs, timeZone)} — ${formatMetricValue(wind.unit, p.speed)} ${wind.unit} ` +
+      `from ${Math.round(p.directionDeg)}° (${degToCompass(p.directionDeg)}), ${circles(p.n)}`,
+  }));
+  const pointer = useHourPointer(frame, axis, columns, onSelect);
 
-  const maxN = Math.max(...series.hours.map((h) => h.n));
+  if (points.length === 0) return null;
+
+  const maxN = Math.max(...points.map((p) => p.n));
   const wholeTaskSpeed =
     series.wholeTask === null ? null : series.wholeTask.speedKmh * wind.factor;
-  const yMax =
-    Math.max(
-      5 * wind.factor,
-      ...series.hours.map((h) => h.speedKmh * wind.factor),
-      wholeTaskSpeed ?? 0
-    ) * 1.08;
-  const y = linearScale([0, yMax], [PLOT.bottom, PLOT.top]);
-  const yTicks = niceTicks([0, yMax], 3);
 
-  const points = series.hours.map((h) => {
-    const t = new Date(h.t).getTime();
-    const speed = h.speedKmh * wind.factor;
-    return { ...h, speed, tMs: t, cx: axis.x(t + HOUR_MS / 2), cy: y(speed) };
-  });
+  // Heights in ems of the label size: a lane for the arrows, the plot, and a
+  // row for the time labels — the same rows as the modelled wind chart.
+  const em = frame.fontSize;
+  const laneY = em * 0.95;
+  const plot = { top: em * 2.5, bottom: em * 10 };
+  const H = plot.bottom + em * 2;
+  const columnWidth = Math.abs(axis.x(points[0].tMs + HOUR_MS) - axis.x(points[0].tMs));
+  const arrowLen = Math.max(7, Math.min(em * 1.3, columnWidth * 0.75));
+
+  const yMax =
+    Math.max(5 * wind.factor, ...points.map((p) => p.speed), wholeTaskSpeed ?? 0) * 1.08;
+  const y = linearScale([0, yMax], [plot.bottom, plot.top]);
+  const yTicks = niceTicks([0, yMax], 3);
   const linePath = points
-    .map((p, i) => `${i === 0 ? "M" : "L"}${p.cx.toFixed(1)},${p.cy.toFixed(1)}`)
+    .map((p, i) => `${i === 0 ? "M" : "L"}${p.cx.toFixed(1)},${y(p.speed).toFixed(1)}`)
     .join("");
 
-  const hourReadout = (p: (typeof points)[number]): string =>
-    `${formatTimeRange(p.t, new Date(p.tMs + HOUR_MS).toISOString(), timeZone)} — ` +
-    `${formatMetricValue(wind.unit, p.speed)} ${wind.unit} from ${Math.round(p.directionDeg)}° (${degToCompass(p.directionDeg)}), ` +
-    `${p.n} circle estimate${p.n === 1 ? "" : "s"}`;
+  const sel = columnAt(points, selectedMs);
+  const legend: LegendEntry[] = [
+    {
+      key: "speed",
+      text: "wind speed",
+      value: sel
+        ? `${formatMetricValue(wind.unit, sel.speed)} ${wind.unit} ${degToCompass(sel.directionDeg)}`
+        : null,
+      ...SPEED_STROKE,
+    },
+  ];
+  if (wholeTaskSpeed !== null) {
+    legend.push({
+      key: "mean",
+      text: `task mean ${wholeTaskSpeed.toFixed(0)} ${wind.unit}`,
+      ...MEAN_STROKE,
+    });
+  }
+  legend.push({
+    key: "direction",
+    kind: "arrow",
+    text: "direction",
+    value: sel ? `${Math.round(sel.directionDeg)}°` : null,
+    ...ARROW_STROKE,
+  });
+  if (sel) legend.push({ key: "n", kind: "note", text: circles(sel.n) });
 
   const speeds = points.map((p) => p.speed);
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="h-auto w-full"
-      role="img"
-      aria-label={
-        `Wind by hour: speed line with direction arrows across ${points.length} ` +
-        `hour${points.length === 1 ? "" : "s"}, ranging ${formatMetricValue(wind.unit, Math.min(...speeds))} to ` +
-        `${formatMetricValue(wind.unit, Math.max(...speeds))} ${wind.unit}. The Wind by hour table below carries the exact numbers.`
-      }
-      onMouseLeave={() => setReadout(null)}
-    >
-      {/* Named in-plot, the way every modelled chart in the same stack is
-          (MetWindChart's "Weather: wind"). Without it a reader scrolling the
-          stack had no way to tell this chart's quantity from the one above
-          it — only its y-tick units. */}
-      <ChartTitle x={PLOT_LEFT - 38} y={12}>
-        From tracks: wind
-      </ChartTitle>
-
-      <TimeGridColumns axis={axis} top={PLOT.top} bottom={PLOT.bottom} />
-      {yTicks.map((t) => (
-        <line
-          key={`gy${t}`}
-          x1={PLOT_LEFT}
-          x2={PLOT_RIGHT}
-          y1={y(t)}
-          y2={y(t)}
-          className="stroke-border"
-          strokeWidth={1}
-        />
-      ))}
-      <g aria-hidden className="text-[10px] text-muted-foreground">
+    <div className="space-y-0.5" data-day-chart="wind">
+      <ChartHeader title="From tracks: wind" when={sel ? hourRange(sel.tMs, timeZone) : null} />
+      <MetLegend entries={legend} lines={3} />
+      <svg
+        viewBox={`0 0 ${frame.width} ${H}`}
+        className="h-auto w-full select-none"
+        role="group"
+        aria-label={
+          `Wind by hour: speed line with direction arrows across ${points.length} ` +
+          `hour${points.length === 1 ? "" : "s"}, ranging ${formatMetricValue(wind.unit, Math.min(...speeds))} to ` +
+          `${formatMetricValue(wind.unit, Math.max(...speeds))} ${wind.unit}. The Wind by hour table below carries the exact numbers.`
+        }
+        {...pointer}
+      >
+        <TimeGridColumns axis={axis} top={plot.top} bottom={plot.bottom} />
         {yTicks.map((t) => (
-          <text key={`ty${t}`} x={PLOT_LEFT - 6} y={y(t) + 3} textAnchor="end" className="fill-current">
-            {formatTickValue(wind.unit, t)}
-          </text>
-        ))}
-        <text x={PLOT_LEFT - 6} y={LANE_Y + 3} textAnchor="end" className="fill-current text-[9px]">
-          direction
-        </text>
-      </g>
-
-      {/* Whole-task vector mean — the baseline the hours vary around. */}
-      {wholeTaskSpeed !== null ? (
-        <g aria-hidden>
           <line
-            x1={PLOT_LEFT}
-            x2={PLOT_RIGHT}
-            y1={y(wholeTaskSpeed)}
-            y2={y(wholeTaskSpeed)}
-            style={{ stroke: "var(--chart-2)" }}
+            key={`gy${t}`}
+            x1={frame.plotLeft}
+            x2={frame.plotRight}
+            y1={y(t)}
+            y2={y(t)}
+            className="stroke-border"
             strokeWidth={1}
-            strokeDasharray="4 3"
-            opacity={0.7}
           />
-          <text
-            x={PLOT_RIGHT - 2}
-            y={y(wholeTaskSpeed) - 4}
-            textAnchor="end"
-            className="fill-current text-[9px] text-muted-foreground"
-          >
-            task mean {wholeTaskSpeed.toFixed(0)} {wind.unit}
+        ))}
+        <g aria-hidden fontSize={em} className="text-muted-foreground">
+          {yTicks.map((t) => (
+            <text
+              key={`ty${t}`}
+              x={frame.plotLeft - em * 0.6}
+              y={y(t) + em * 0.35}
+              textAnchor="end"
+              className="fill-current"
+            >
+              {formatMetricValue(wind.unit, t).replace(/\.0+$/, "")}
+            </text>
+          ))}
+          <text x={0} y={plot.top - em * 0.3} className="fill-current">
+            {wind.unit}
           </text>
         </g>
-      ) : null}
 
-      {/* Speed line + points. */}
-      <path
-        d={linePath}
-        fill="none"
-        style={{ stroke: "var(--chart-2)" }}
-        strokeWidth={2}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      {points.map((p) => (
-        <circle key={p.t} cx={p.cx} cy={p.cy} r={2.5} style={{ fill: "var(--chart-2)" }} />
-      ))}
+        {/* Whole-task vector mean — the baseline the hours vary around. */}
+        {wholeTaskSpeed !== null ? (
+          <line
+            aria-hidden
+            x1={frame.plotLeft}
+            x2={frame.plotRight}
+            y1={y(wholeTaskSpeed)}
+            y2={y(wholeTaskSpeed)}
+            style={{ stroke: MEAN_STROKE.stroke }}
+            strokeWidth={MEAN_STROKE.strokeWidth}
+            strokeDasharray={MEAN_STROKE.dash}
+            opacity={MEAN_STROKE.opacity}
+          />
+        ) : null}
 
-      {/* Direction lane: one arrow per hour, flying with the wind; opacity
-          tracks sample count so thin buckets read as tentative. */}
-      {points.map((p) => (
+        {/* Speed line + points. */}
         <path
-          key={`a${p.t}`}
-          d={windArrowPath(13)}
-          transform={windArrowTransform(p.cx, LANE_Y, p.directionDeg)}
+          d={linePath}
           fill="none"
-          style={{ stroke: "var(--chart-2)" }}
-          strokeWidth={1.6}
-          strokeLinecap="round"
+          style={{ stroke: SPEED_STROKE.stroke }}
+          strokeWidth={SPEED_STROKE.strokeWidth}
           strokeLinejoin="round"
-          opacity={0.4 + 0.6 * (p.n / maxN)}
+          strokeLinecap="round"
         />
-      ))}
+        {points.map((p) => (
+          <circle key={p.t} cx={p.cx} cy={y(p.speed)} r={2.5} style={{ fill: SPEED_STROKE.stroke }} />
+        ))}
 
-      {/* Hover targets: one column per hour bucket. */}
-      {points.map((p) => (
-        <rect
-          key={`h${p.t}`}
-          x={axis.x(p.tMs)}
-          width={Math.max(0, axis.x(p.tMs + HOUR_MS) - axis.x(p.tMs))}
-          y={0}
-          height={PLOT.bottom}
-          fill="transparent"
-          onMouseEnter={() => setReadout(hourReadout(p))}
+        {/* Direction lane: one arrow per hour, flying with the wind; opacity
+            tracks sample count so thin buckets read as tentative. */}
+        {points.map((p) => (
+          <path
+            key={`a${p.t}`}
+            d={windArrowPath(arrowLen)}
+            transform={windArrowTransform(p.cx, laneY, p.directionDeg)}
+            fill="none"
+            style={{ stroke: ARROW_STROKE.stroke }}
+            strokeWidth={ARROW_STROKE.strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={0.4 + 0.6 * (p.n / maxN)}
+          />
+        ))}
+
+        <TimeTickLabels axis={axis} y={plot.bottom + em * 1.4} frame={frame} />
+        <HourColumns
+          columns={columns}
+          axis={axis}
+          top={0}
+          bottom={plot.bottom}
+          selectedMs={selectedMs}
+          onSelect={onSelect}
         />
-      ))}
-
-      <TimeTickLabels axis={axis} y={TICK_LABEL_Y} />
-    </svg>
+      </svg>
+    </div>
   );
 }

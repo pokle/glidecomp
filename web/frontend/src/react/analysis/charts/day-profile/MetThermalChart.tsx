@@ -33,9 +33,9 @@ import { linearScale, niceTicks } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
 import type { ChartFrame } from "./frame";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
-import { MetChartHeader, sourceSentence } from "./MetSourceTag";
+import { ChartHeader, sourceSentence } from "./MetSourceTag";
 import { MetLegend, type LegendEntry } from "./MetLegend";
-import { HourColumns, useHourPointer, type HourColumn } from "./HourColumns";
+import { HourColumns, columnAt, hourRange, useHourPointer, type HourColumn } from "./HourColumns";
 import { heightReading } from "./met-readout";
 import { usableCeilingM } from "./met-shared";
 
@@ -53,6 +53,7 @@ interface Point {
   blTop: number | null;
   /** Condensation level, display units AGL. */
   base: number | null;
+  capeJkg: number | null;
 }
 
 export function MetThermalChart({
@@ -90,6 +91,7 @@ export function MetThermalChart({
       cx: axis.x(tMs + HOUR_MS / 2),
       blTop: h.boundaryLayerDepthM != null ? h.boundaryLayerDepthM * alt.factor : null,
       base: h.cloudBaseAglM != null ? h.cloudBaseAglM * alt.factor : null,
+      capeJkg: h.capeJkg,
     };
   });
 
@@ -158,15 +160,32 @@ export function MetThermalChart({
   // Solid for the thermal top, dashed for cloud base. The two lines cross on
   // exactly the interesting day (cloud base passing the thermal top is blue
   // turning to cumulus), so the swatch, not the position, names them.
+  // With an hour chosen, each line's entry carries that hour's height.
+  const sel = columnAt(points, selectedMs);
+  const heightText = (v: number | null) => (v === null ? "no figure" : `${v.toFixed(0)} ${alt.unit}`);
   const legend: LegendEntry[] = [];
-  if (hasBl) legend.push({ key: "bl", text: "thermal top", ...BL_STROKE });
-  if (hasBase) legend.push({ key: "base", text: "cloud base", ...BASE_STROKE });
+  if (hasBl) {
+    legend.push({ key: "bl", text: "thermal top", value: sel ? heightText(sel.blTop) : null, ...BL_STROKE });
+  }
+  if (hasBase) {
+    legend.push({ key: "base", text: "cloud base", value: sel ? heightText(sel.base) : null, ...BASE_STROKE });
+  }
+  if (sel && sel.blTop !== null && sel.base !== null) {
+    legend.push({ key: "sky", kind: "note", text: sel.base > sel.blTop ? "blue" : "cumulus" });
+  }
+  if (sel && sel.capeJkg !== null) {
+    legend.push({ key: "cape", kind: "note", text: "CAPE", value: `${Math.round(sel.capeJkg)} J/kg` });
+  }
   if (missingNote) legend.push({ key: "missing", kind: "note", text: missingNote });
 
   return (
     <div className="space-y-0.5" data-met-chart="height">
-      <MetChartHeader title="Weather: height" source={source} />
-      <MetLegend entries={legend} />
+      <ChartHeader
+        title="Weather: height"
+        when={sel ? hourRange(sel.tMs, timeZone) : null}
+        source={source}
+      />
+      <MetLegend entries={legend} lines={2} />
       <svg
         viewBox={`0 0 ${frame.width} ${H}`}
         className="h-auto w-full select-none"

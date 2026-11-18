@@ -19,32 +19,38 @@ time axis under explicit "From the pilots' tracks" / "From the weather model"
 group labels, so the predicted day reads against the day the field actually
 flew. (The day metric family below it keeps only its tables.)
 
-### How the modelled charts are drawn
+### How the day's charts are drawn
 
-The three modelled charts (`MetWindChart`, `MetSkyChart`, `MetThermalChart`)
-take their geometry from one `ChartFrame` (`charts/day-profile/frame.ts`) that
-the panel decides once for the stack, so an hour is at the same x in all of
-them.
+Both surfaces draw their charts in one `ChartFrame`
+(`charts/day-profile/frame.ts`) that the panel measures once for its stack,
+so an hour is at the same x in every chart: three modelled charts on the task
+page, and the same three above the three track-derived charts on the
+task-analysis page.
 
-- **On the task page the frame is measured.** The viewBox is as wide as the
-  chart is drawn, one unit is one CSS pixel, and labels are 13 px at every
-  width. Chart heights are multiples of that type size, so they do not grow
-  with the page. Before issue #860 the charts were a fixed 560-unit drawing
-  scaled to the page, which painted their labels at 5 px on a phone.
-- **On the task-analysis page the frame is still the fixed one**
-  (`LEGACY_FRAME`). The three track-derived charts have not had their label
-  pass, and all six charts must share one left and right edge.
+- **The frame is in CSS pixels.** The viewBox is as wide as the chart is
+  drawn, and labels are 13 px at every width. Chart heights are multiples of
+  that type size, so they do not grow with the page. Before issue #860 the
+  charts were a fixed 560-unit drawing scaled to the page, which painted
+  their labels at 5 px on a phone.
 - **What does not fit in the plot is text above it**: the title, the source
-  stamp and the legend (`MetChartHeader`, `MetLegend`). The y ticks are bare
-  numbers with the unit printed once. Time labels thin to every second tick
-  when neighbours would touch (`tickLabelStride`); the gridlines do not.
+  stamp (modelled charts) and the legend (`ChartHeader`, `MetLegend`). The y
+  ticks are bare numbers with the unit printed once. Time labels thin to
+  every second tick when neighbours would touch (`tickLabelStride`); the
+  gridlines do not.
 - **One hour is selected for the whole stack** (`HourColumns.tsx`): a tap or a
   drag on a phone, the pointer on a desktop, arrow keys from a keyboard. The
-  hour is a band through all three charts, and `MetReadout` prints the three
-  charts' figures for it. The wording is in `met-readout.ts`, which also names
-  each hour column for a screen reader. Nothing is hover-only.
-- Coverage: `e2e/task-weather-charts.spec.ts`, on a desktop and a phone. It
-  measures the painted label sizes; it does not assert on classes.
+  hour is a band through every chart. Each chart prints its own figures for
+  that hour in its legend row, beside the line they belong to, and the hour
+  beside its title. Nothing floats over a plot, and nothing is hover-only.
+  Each hour column is also named with its figures in a sentence
+  (`met-readout.ts` for the modelled charts).
+- **Wind by leg is rows, not one drawing.** A leg's name and wind are a line
+  of text over a strip on the shared time axis. A row is a button that opens
+  the leg's full sentence.
+- A fact that used to answer a hover and is not about one hour (the takeoff
+  spread) is printed in the legend.
+- Coverage: `e2e/task-weather-charts.spec.ts`, both pages, on a desktop and a
+  phone. It measures the painted label sizes; it does not assert on classes.
 
 ## Provider architecture
 
