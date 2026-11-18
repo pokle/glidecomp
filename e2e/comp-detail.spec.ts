@@ -245,7 +245,7 @@ test("scores page: the views and the class are lists, and the URL keeps them", a
   });
 });
 
-test("scores page: a pilot's row opens their tasks, a task opens its report card, and Back returns", async ({
+test("scores page: a pilot's row opens their tasks, a task opens its report card, and the bar's Back returns", async ({
   page,
 }) => {
   const [, classB] = comp.pilot_classes;
@@ -267,10 +267,12 @@ test("scores page: a pilot's row opens their tasks, a task opens its report card
   await tasks.getByRole("link").first().click();
   await expect(page).toHaveURL(/\/task\/[a-z0-9-]+\/pilot\/[a-z0-9-]+$/);
 
-  // Back twice is the standings as they were left: the same class.
-  await page.goBack();
+  // The bar's back control is a real Back to where the reader came from,
+  // and says so: the report card belongs under its task, but it was opened
+  // from the pilot's page, and "Back to Task 1" there went to the task.
+  await page.getByRole("link", { name: `Back to ${pilotName}` }).click();
   await expect(tasks).toBeVisible({ timeout: 15_000 });
-  await page.goBack();
+  await page.getByRole("link", { name: "Back to Scores" }).click();
   await expect(standings).toBeVisible({ timeout: 15_000 });
   await expect(
     page.getByRole("radiogroup", { name: "Pilot class" }).getByRole("radio", { name: classB, exact: true })

@@ -20,6 +20,7 @@ import { Link as AriaLink } from "react-aria-components";
 import { ChevronRightIcon } from "lucide-react";
 import { LinkButton } from "@/react/rac/button";
 import { navRowClass } from "@/react/rac/nav-list";
+import { openedHereFrom } from "../lib/leave";
 import { Card } from "@/react/rac/card";
 import { SectionHeader } from "../components/SectionHeader";
 import { ordinal } from "../lib/format";
@@ -87,7 +88,7 @@ export function CompScoresSummary({
                   {state.scores.class_scores.length > 1 ? (
                     <h3 className="mb-1.5 font-semibold">{cls.pilot_class}</h3>
                   ) : null}
-                  <ScoreList label={`Top 3 — ${cls.pilot_class}`}>
+                  <ScoreList label={`Top 3 — ${cls.pilot_class}`} page={compName ?? "Competition"}>
                     {top.map((p) => (
                       <ScoreLinkRow
                         key={p.comp_pilot_id}
@@ -99,7 +100,11 @@ export function CompScoresSummary({
                     ))}
                     {more > 0 ? (
                       <li>
-                        <AriaLink href={classHref} className={navRowClass}>
+                        <AriaLink
+                          href={classHref}
+                          routerOptions={openedHereFrom(compName ?? "Competition")}
+                          className={navRowClass}
+                        >
                           <span className="min-w-0 flex-1 pl-13 text-muted-foreground">
                             + {more} more pilot{more === 1 ? "" : "s"}
                           </span>

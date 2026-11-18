@@ -69,7 +69,7 @@ import { Button, LinkButton, buttonVariants } from "./button";
 import { Menu, MenuHeader, MenuItem, MenuSection, MenuSeparator } from "./menu";
 import { useTabsCollectionPass } from "./tabs";
 import { cn } from "@/react/lib/utils";
-import { openedHere, useLeave } from "@/react/lib/leave";
+import { openedFromLabel, openedHere, useLeave } from "@/react/lib/leave";
 import {
   DEV_SIGN_IN_ENABLED,
   signInAsDev,
@@ -189,7 +189,7 @@ function Bar({
   const leave = useLeave();
   const goToSignIn = useGoToSignIn();
   // Signing in from the bar comes back to the page it was asked from.
-  const { pathname, search } = useLocation();
+  const { pathname, search, state: entryState } = useLocation();
   const here = pathname + search;
   const { user, loading } = useUser();
   const width = WIDTH[useContext(PageWidthContext)];
@@ -221,7 +221,9 @@ function Bar({
     leading = (
       <RouterLink
         to={parent.to}
-        aria-label={`Back to ${parent.label}`}
+        // Back goes where the reader came from when a page of ours opened
+        // this one, so it is named for that page when the opener said which.
+        aria-label={`Back to ${openedFromLabel(entryState) ?? parent.label}`}
         // Read by the unsaved-changes guard: this is Back, and Back never asks.
         data-bar-back
         onClick={onClick}

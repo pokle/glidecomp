@@ -188,7 +188,7 @@ export function CompPilotScoresPage() {
             <span className="min-w-0 flex-1">Tasks</span>
             <span className="shrink-0 pr-7 text-right">Points</span>
           </div>
-          <ScoreList label={`${pilot.pilot_name}'s tasks`}>
+          <ScoreList label={`${pilot.pilot_name}'s tasks`} page={pilot.pilot_name}>
             {tasks.map((task) => (
               <TaskRow
                 key={task.task_id}
