@@ -24,9 +24,16 @@
  * caption, regeneration fails loudly instead of shipping a stale story.
  *
  * Chart conventions (docs/accessibility-standard.md + the site tokens):
- * series identity carried by hue AND line style (cleaned is dashed — never
- * colour alone), direct labels + a legend, exact numbers in the visible
- * caption, no client JS.
+ * series identity carried by hue AND line style (raw GPS is solid, the
+ * barometer is dotted, cleaned is dashed — never colour alone), a legend
+ * under the plot that draws each line in its own style, exact numbers in the
+ * visible caption, no client JS.
+ *
+ * Label size (accessibility standard §7, issue #860): a static SVG scales its
+ * type with its width, and this page cannot measure itself as the React
+ * charts do. So the drawing is NARROW (see W below), the labels are 13 units,
+ * and the figure's width is capped. The labels are then painted at 11px or
+ * more on a 320px screen and do not grow large on a desktop.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -207,9 +214,27 @@ const SYNTHETIC: SyntheticExample[] = [
 
 // --- tiny chart helpers (mirrors the SPA's chart-utils conventions) --------
 
-const W = 560;
-const H = 250;
-const M = { top: 14, right: 118, bottom: 30, left: 52 };
+/** Label size, in viewBox units. */
+const FONT = 13;
+/**
+ * The drawing's width, in viewBox units. On a 320px screen the SVG is 272px
+ * wide, so a FONT-unit label is painted at 272 / W * FONT = 11.3px. A wider
+ * drawing would take the labels under 11px there. Do not widen it without
+ * e2e/data-cleaning-charts.spec.ts, which measures the painted size.
+ */
+const W = 312;
+const H = 212;
+/**
+ * The figure's widest, as a Tailwind class: 26rem is 416px, where a label is
+ * painted at 416 / W * FONT = 17.3px. The size on a phone and the size on a
+ * desktop are one ratio in a static SVG, so this cap is the only thing that
+ * keeps the type from growing with the page.
+ */
+const FIGURE_MAX_W = 'max-w-[26rem]';
+// The margins hold type, so they are sized for FONT: the left one for a y
+// tick as wide as "-8,000", the top one for the unit stamp, the bottom one
+// for the time ticks and the zone under them. The right one holds nothing.
+const M = { top: 20, right: 8, bottom: 40, left: 50 };
 
 function scale(domain: [number, number], range: [number, number]) {
   const [d0, d1] = domain;
@@ -283,7 +308,7 @@ function renderFigure(d: FigureData): string {
   const lines: string[] = [];
   const push = (s: string) => lines.push(s);
 
-  push(`<figure id="${d.id}" class="mb-8">`);
+  push(`<figure id="${d.id}" class="mb-8 ${FIGURE_MAX_W}">`);
   push(`  <h3 class="text-base font-semibold mb-2">${d.title}</h3>`);
   push(`  <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${ariaLabel.replace(/"/g, '&quot;')}" class="w-full h-auto">`);
   // gridlines
@@ -298,53 +323,34 @@ function renderFigure(d: FigureData): string {
     push(`    <rect x="${bandX0.toFixed(1)}" y="${M.top}" width="${(bandX1 - bandX0).toFixed(1)}" height="${H - M.top - M.bottom}" class="fill-chart-2/10" />`);
   }
   // axis labels
-  push(`    <g aria-hidden="true" class="text-[10px] text-muted-foreground">`);
+  push(`    <g aria-hidden="true" class="text-[${FONT}px] text-muted-foreground">`);
   for (const t of ticks) {
     // The topmost tick would collide with the "m" unit label — skip its text
     // (the gridline stays).
-    if (y(t) < M.top + 10) continue;
-    push(`      <text x="${M.left - 6}" y="${(y(t) + 3).toFixed(1)}" text-anchor="end" class="fill-current">${t.toLocaleString('en-AU')}</text>`);
+    if (y(t) < M.top + FONT) continue;
+    push(`      <text x="${M.left - 6}" y="${(y(t) + 4.5).toFixed(1)}" text-anchor="end" class="fill-current">${t.toLocaleString('en-AU')}</text>`);
   }
-  push(`      <text x="${M.left - 6}" y="${M.top - 3}" text-anchor="end" class="fill-current">m</text>`);
-  for (const tm of xTickMs) {
-    push(`      <text x="${x(tm).toFixed(1)}" y="${H - M.bottom + 14}" text-anchor="middle" class="fill-current">${fmtTime(tm, d.utcOffsetHours)}</text>`);
-  }
-  push(`      <text x="${W - M.right}" y="${H - 4}" text-anchor="end" class="fill-current">${d.zoneLabel} (UTC+${d.utcOffsetHours})</text>`);
+  push(`      <text x="${M.left - 6}" y="${M.top - 6}" text-anchor="end" class="fill-current">m</text>`);
+  // The first and last time sit INSIDE the plot's edges. Centred on them, a
+  // label this size would run off the drawing on the right.
+  const xAnchors = ['start', 'middle', 'end'];
+  xTickMs.forEach((tm, i) => {
+    push(`      <text x="${x(tm).toFixed(1)}" y="${H - M.bottom + 16}" text-anchor="${xAnchors[i]}" class="fill-current">${fmtTime(tm, d.utcOffsetHours)}</text>`);
+  });
+  push(`      <text x="${W - M.right}" y="${H - 6}" text-anchor="end" class="fill-current">${d.zoneLabel} (UTC+${d.utcOffsetHours})</text>`);
   push(`    </g>`);
-  // series: barometer first (underneath), then raw GPS, cleaned on top
-  push(`    <path d="${path(baroPts)}" fill="none" class="stroke-chart-3" stroke-width="1.5" />`);
+  // series: barometer first (underneath), then raw GPS, cleaned on top.
+  // Each has its own line style, and the legend under the plot draws the
+  // same three styles. There are no labels on the lines: at FONT units they
+  // would need a right margin a third of the drawing wide.
+  push(`    <path d="${path(baroPts)}" fill="none" class="stroke-chart-3" stroke-width="2" stroke-dasharray="2 3" />`);
   push(`    <path d="${path(gpsPts)}" fill="none" class="stroke-chart-1" stroke-width="1.5" />`);
   push(`    <path d="${path(cleanPts)}" fill="none" class="stroke-chart-2" stroke-width="2.5" stroke-dasharray="6 3" />`);
-  // direct labels at the right edge (identity never colour-alone: the dash
-  // pattern and these labels carry it too)
-  const labelX = W - M.right + 6;
-  const gpsEndY = gpsPts[gpsPts.length - 1][1];
-  const cleanEndY = cleanPts[cleanPts.length - 1][1];
-  const baroEndY = baroPts[baroPts.length - 1][1];
-  // Cleaned and raw GPS coincide outside repairs — nudge labels apart; same
-  // for a barometer hugging the GPS line.
-  const cleanLabelY = Math.abs(cleanEndY - gpsEndY) < 12 ? gpsEndY - 12 : cleanEndY;
-  let baroLabelY = d.baroAlive ? baroEndY + 12 : baroEndY - 4;
-  if (Math.abs(baroLabelY - gpsEndY) < 12) baroLabelY = gpsEndY + 14;
-  // Keep the label inside the plot (a line ending at the bottom edge would
-  // push it into the x-axis ticks); if the clamp lands it on the other
-  // labels, stack it above them instead.
-  const labelMaxY = H - M.bottom - 4;
-  if (baroLabelY > labelMaxY) baroLabelY = labelMaxY;
-  if (Math.abs(baroLabelY - gpsEndY) < 12 || Math.abs(baroLabelY - cleanLabelY) < 12) {
-    baroLabelY = Math.min(gpsEndY, cleanLabelY) - 12;
-  }
-  const baroLabel = d.baroAlive ? 'barometer' : 'barometer (logged 0)';
-  push(`    <g aria-hidden="true" class="text-[10px]">`);
-  push(`      <text x="${labelX}" y="${(gpsEndY + 3).toFixed(1)}" class="fill-current text-link">raw GPS</text>`);
-  push(`      <text x="${labelX}" y="${(cleanLabelY + 3).toFixed(1)}" class="fill-current text-positive">cleaned</text>`);
-  push(`      <text x="${labelX}" y="${(baroLabelY + 3).toFixed(1)}" class="fill-current text-caution">${baroLabel}</text>`);
-  push(`    </g>`);
   push(`  </svg>`);
   // legend (HTML, text in muted ink, swatches carry identity)
   push(`  <div aria-hidden="true" class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">`);
   push(`    <span class="inline-flex items-center gap-1.5"><span class="inline-block h-0.5 w-4 bg-chart-1"></span>raw GPS altitude</span>`);
-  push(`    <span class="inline-flex items-center gap-1.5"><span class="inline-block h-0.5 w-4 bg-chart-3"></span>raw barometric altitude</span>`);
+  push(`    <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 border-t-2 border-dotted border-chart-3"></span>raw barometric altitude</span>`);
   push(`    <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 border-t-2 border-dashed border-chart-2"></span>cleaned</span>`);
   if (d.ranges.length > 0) {
     push(`    <span class="inline-flex items-center gap-1.5"><span class="inline-block h-3 w-3 bg-chart-2/10 border border-border"></span>repaired fixes</span>`);
