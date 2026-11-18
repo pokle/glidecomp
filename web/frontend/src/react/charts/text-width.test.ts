@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approxTextWidth, truncateToWidth } from "./text-width";
+import { approxTextWidth, truncateToWidth, wrapToWidth } from "./text-width";
 
 describe("truncateToWidth", () => {
   it("leaves a label that fits alone", () => {
@@ -22,5 +22,28 @@ describe("truncateToWidth", () => {
 
   it("is an ellipsis alone where nothing fits", () => {
     expect(truncateToWidth("Jon Durand", 13, 1)).toBe("…");
+  });
+});
+
+describe("wrapToWidth", () => {
+  const title = "How much of the thermal the pilot climbed before leaving it (per cent)";
+
+  it("keeps a title that fits on one line", () => {
+    expect(wrapToWidth("Glide speed", 13, 300)).toEqual(["Glide speed"]);
+  });
+
+  it("breaks at spaces, and no line is wider than the room", () => {
+    const lines = wrapToWidth(title, 13, 280);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.join(" ")).toBe(title);
+    for (const line of lines) expect(approxTextWidth(line, 13)).toBeLessThanOrEqual(280);
+  });
+
+  it("gives a word wider than the room a line of its own", () => {
+    expect(wrapToWidth("a incomprehensibilities b", 13, 40)).toEqual([
+      "a",
+      "incomprehensibilities",
+      "b",
+    ]);
   });
 });

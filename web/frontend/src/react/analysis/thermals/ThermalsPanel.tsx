@@ -61,6 +61,8 @@ import { formatMetricValue } from "../types";
 import { unitDisplay } from "../units";
 import { ValueBar } from "../ValueBar";
 import { degToCompass } from "../charts/day-profile/shared";
+import { useChartLabelSize } from "@/react/charts/use-chart-label-size";
+import { approxTextWidth } from "@/react/charts/text-width";
 
 /** One band's model wind, interpolated from the task's weather column. */
 interface BandModelWind {
@@ -315,6 +317,13 @@ function ThermalRose({
   distanceText: (m: number) => string;
 }) {
   const c = ROSE_SIZE / 2;
+  // The rose is drawn at whatever size its wrapper gives it — under 300px in
+  // a phone's pane, the whole viewport on the map page — on one 320-unit
+  // drawing whose scale the map backdrop shares. So the drawing stays, and
+  // the type is sized to be painted at 13px whatever the rose's size
+  // (`charts/use-chart-label-size.ts`). It was 9 units, which a phone painted
+  // at 8px (issue #860). `fs` is that size; offsets that hold type use it.
+  const { svgRef, fontSize: fs } = useChartLabelSize(ROSE_SIZE);
   const sectors = aggregateSectors(shape);
   const maxAbs = Math.max(...sectors.map((s) => Math.abs(s.mean ?? 0)), 0.5);
   const { coreRadius, extent, metresPerPx } = roseGeometry(shape);
@@ -346,7 +355,7 @@ function ThermalRose({
     const x1 = c + r1 * Math.cos(a);
     const y1 = c + r1 * Math.sin(a);
     const ah = Math.atan2(y1 - y0, x1 - x0);
-    const lr = dashed ? r1 - 26 : r1 - 12;
+    const lr = dashed ? r1 - fs * 2.5 : r1 - fs * 1.15;
     return (
       <g key={key} className={dashed ? "stroke-muted-foreground" : "stroke-foreground/80"} fill="none">
         <path d={`M${x0},${y0} L${x1},${y1}`} strokeWidth={1.6} strokeDasharray={dashed ? "4 3" : undefined} />
@@ -356,10 +365,11 @@ function ThermalRose({
         />
         <text
           x={c + lr * Math.cos(a)}
-          y={c + lr * Math.sin(a) + 3}
+          y={c + lr * Math.sin(a) + fs * 0.35}
           textAnchor="middle"
+          fontSize={fs}
           className={cn(
-            "fill-current text-[9px]",
+            "fill-current",
             HALO,
             dashed ? "text-muted-foreground" : "text-foreground/80"
           )}
@@ -381,7 +391,14 @@ function ThermalRose({
   return (
     // No width cap of its own: the figure wrapper decides how big the rose
     // draws (max-w-80 inline; the thermal map page spends the viewport).
-    <svg viewBox={`0 0 ${ROSE_SIZE} ${ROSE_SIZE}`} className="h-auto w-full" role="img" aria-label={label}>
+    <svg
+      ref={svgRef}
+      data-chart="thermal-rose"
+      viewBox={`0 0 ${ROSE_SIZE} ${ROSE_SIZE}`}
+      className="h-auto w-full"
+      role="img"
+      aria-label={label}
+    >
       {/* Sector wedges: relative climb by side of the core. */}
       <g aria-hidden>
         {sectors.map((s) =>
@@ -399,15 +416,17 @@ function ThermalRose({
         {sectors.map((s) => {
           if (s.mean === null) return null;
           const r = (Math.abs(s.mean) / maxAbs) * ROSE_R;
-          const lr = r >= 46 ? r - 14 : r + 14;
+          // Inside the tip of a wedge long enough to hold it, else beyond it.
+          const lr = r >= fs * 4.5 ? r - fs * 1.4 : r + fs * 1.2;
           const a = ((s.bearing - 90) * Math.PI) / 180;
           return (
             <text
               key={s.bearing}
               x={c + lr * Math.cos(a)}
-              y={c + lr * Math.sin(a) + 3}
+              y={c + lr * Math.sin(a) + fs * 0.35}
               textAnchor="middle"
-              className={cn("fill-current text-[9px] text-foreground/80", HALO)}
+              fontSize={fs}
+              className={cn("fill-current text-foreground/80", HALO)}
             >
               {s.mean >= 0 ? "+" : ""}
               {formatMetricValue(climbUnit, s.mean * climbFactor)}
@@ -426,7 +445,8 @@ function ThermalRose({
           x={c}
           y={c - coreRadius / metresPerPx - 5}
           textAnchor="middle"
-          className={cn("fill-current text-[9px] text-muted-foreground", HALO)}
+          fontSize={fs}
+          className={cn("fill-current text-muted-foreground", HALO)}
         >
           {`⌀ ${distanceText(coreRadius * 2)}`}
         </text>
@@ -434,7 +454,8 @@ function ThermalRose({
           x={c}
           y={c + extent / metresPerPx - 7}
           textAnchor="middle"
-          className={cn("fill-current text-[9px] text-muted-foreground", HALO)}
+          fontSize={fs}
+          className={cn("fill-current text-muted-foreground", HALO)}
         >
           {`⌀ ${distanceText(extent * 2)}`}
         </text>
@@ -462,10 +483,21 @@ function ThermalRose({
         )}
       </g>
       <g aria-hidden>
-        <text x={c} y={12} textAnchor="middle" className={cn("fill-current text-[10px] text-muted-foreground", HALO)}>
+        <text
+          x={c}
+          y={fs * 1.05}
+          textAnchor="middle"
+          fontSize={fs}
+          className={cn("fill-current text-muted-foreground", HALO)}
+        >
           N
         </text>
-        <text x={4} y={ROSE_SIZE - 5} className={cn("fill-current text-[9px] text-muted-foreground", HALO)}>
+        <text
+          x={4}
+          y={ROSE_SIZE - fs * 0.4}
+          fontSize={fs}
+          className={cn("fill-current text-muted-foreground", HALO)}
+        >
           mean climb ({climbUnit}) by sector
         </text>
         {shape.wind ? windArrow(shape.wind.direction, false, "measured", "actual") : null}
@@ -760,34 +792,51 @@ function ClimbProfile({
   altitudeLabel: (m: number) => string;
 }) {
   const bands = shape.bands;
-  const h = bands.length * PROFILE_ROW + 18;
+  // The type is sized to be painted at 13px at the width the profile is
+  // drawn (`charts/use-chart-label-size.ts`); it was 9 units, which a phone
+  // painted at 8px (issue #860). Rows and margins hold type, so they are
+  // measured in it.
+  const { svgRef, fontSize: fs } = useChartLabelSize(PROFILE_W);
+  const row = Math.max(PROFILE_ROW, fs * 1.45);
+  const values = bands.map((b) => formatMetricValue(climbUnit, b.meanVario * climbFactor));
+  const h = bands.length * row + fs * 1.6;
   const maxV = Math.max(...bands.map((b) => b.meanVario), 0.5);
-  const labelW = 56;
-  const valueW = 44;
+  const labelW =
+    Math.max(...bands.map((b) => approxTextWidth(altitudeLabel(b.altMin), fs))) + fs * 0.7;
+  const valueW = Math.max(...values.map((v) => approxTextWidth(v, fs))) + fs * 0.6;
   const plotW = PROFILE_W - labelW - valueW;
   return (
     <svg
+      ref={svgRef}
+      data-chart="climb-profile"
       viewBox={`0 0 ${PROFILE_W} ${h}`}
       className="h-auto w-full max-w-80"
       role="img"
       aria-label={`Mean climb by altitude band, from ${altitudeLabel(bands[0].altMin)} to ${altitudeLabel(bands[bands.length - 1].altMax)}. Exact numbers are in the band table.`}
     >
       {bands.map((b, i) => {
-        const y = (bands.length - 1 - i) * PROFILE_ROW + 3;
+        const y = (bands.length - 1 - i) * row + 3;
         const w = Math.max((b.meanVario / maxV) * plotW, 1);
+        const baseline = y + (row - 6) / 2 + fs * 0.35;
         return (
-          <g key={b.altMid} aria-hidden>
-            <text x={labelW - 5} y={y + PROFILE_ROW - 7} textAnchor="end" className="fill-current text-[9px] text-muted-foreground">
+          <g key={b.altMid} aria-hidden fontSize={fs}>
+            <text x={labelW - fs * 0.4} y={baseline} textAnchor="end" className="fill-current text-muted-foreground">
               {altitudeLabel(b.altMin)}
             </text>
-            <rect x={labelW} y={y} width={w} height={PROFILE_ROW - 6} rx={2} className="fill-chart-3/70" />
-            <text x={labelW + w + 4} y={y + PROFILE_ROW - 7} className="fill-current text-[9px] text-muted-foreground">
-              {formatMetricValue(climbUnit, b.meanVario * climbFactor)}
+            <rect x={labelW} y={y} width={w} height={row - 6} rx={2} className="fill-chart-3/70" />
+            <text x={labelW + w + fs * 0.35} y={baseline} className="fill-current text-muted-foreground">
+              {values[i]}
             </text>
           </g>
         );
       })}
-      <text x={labelW} y={h - 4} className="fill-current text-[9px] text-muted-foreground" aria-hidden>
+      <text
+        x={labelW}
+        y={h - fs * 0.4}
+        fontSize={fs}
+        className="fill-current text-muted-foreground"
+        aria-hidden
+      >
         mean climb ({climbUnit}) by band
       </text>
     </svg>
