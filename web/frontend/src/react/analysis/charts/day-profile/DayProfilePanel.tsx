@@ -25,9 +25,10 @@
  * looking at; every modelled chart additionally carries its provider inside
  * the plot.
  *
- * Each chart is a labelled `role="img"`; the day metrics' tables further
- * down the page remain the exact, screen-reader-navigable reading, and one
- * shared readout line voices whatever the pointer is over.
+ * Each chart is a labelled group; the day metrics' tables further
+ * down the page remain the exact, screen-reader-navigable reading. One hour
+ * is selected for the whole stack, and each chart prints its figures for it
+ * in its own legend row; nothing is hover-only.
  *
  * The task page shows the modelled group alone (TaskWeatherPanel) — it has
  * no per-pilot series to set against the model.
@@ -45,13 +46,12 @@ import type { TaskWeather } from "@/react/weather/types";
 import { sourceKindLabel } from "@/react/weather/types";
 import { zoneAbbrev } from "@/react/lib/time";
 import { buildTimeAxis } from "./time-axis";
-import { PLOT_LEFT, PLOT_RIGHT } from "./shared";
 import { TimeAxisTitle } from "./TimeAxisParts";
 import { WindHourlyChart } from "./WindHourlyChart";
 import { ClimbHourlyChart } from "./ClimbHourlyChart";
 import { WindLegsGantt } from "./WindLegsGantt";
-import { MetChartsGroup, MetAttribution, MetReadout } from "./MetChartsGroup";
-import { LEGACY_FRAME } from "./frame";
+import { MetChartsGroup, MetAttribution } from "./MetChartsGroup";
+import { useChartFrame } from "./frame";
 import { weatherInstants } from "./met-shared";
 
 const HOUR_MS = 3_600_000;
@@ -132,9 +132,13 @@ export function DayProfilePanel({
   weatherPending?: boolean;
 }) {
   const timeZone = compTimezone ?? undefined;
-  const [readout, setReadout] = useState<string | null>(null);
-  // The modelled charts' selected hour (tap, drag, hover or arrow keys).
+  // One hour selected for the whole stack: tap or drag on a phone, hover with
+  // a mouse, arrow keys from a keyboard (HourColumns.tsx). Each chart prints
+  // its own figures for it in its legend row.
   const [selectedMs, setSelectedMs] = useState<number | null>(null);
+  // The stack is laid out at the width it is really drawn — measured once
+  // here, so the six charts cannot disagree about where an hour is.
+  const { ref: frameRef, frame } = useChartFrame();
 
   const { wind, climb, legs, timing } = useMemo(() => {
     const all = metrics.flatMap((m) => m.extraSeries ?? []);
@@ -182,9 +186,9 @@ export function DayProfilePanel({
   const axis = useMemo(
     () =>
       Number.isFinite(windowStartMs)
-        ? buildTimeAxis([windowStartMs, windowEndMs], timeZone, [PLOT_LEFT, PLOT_RIGHT])
+        ? buildTimeAxis([windowStartMs, windowEndMs], timeZone, [frame.plotLeft, frame.plotRight])
         : null,
-    [windowStartMs, windowEndMs, timeZone]
+    [windowStartMs, windowEndMs, timeZone, frame]
   );
 
   const showWind = wind !== null && wind.hours.length > 0;
@@ -212,7 +216,7 @@ export function DayProfilePanel({
   );
 
   return (
-    <figure className="space-y-1">
+    <figure ref={frameRef} className="space-y-1">
       {/* ── Group 1: modelled — the day as predicted ──────────────────── */}
       {showWeather && weather ? (
         <>
@@ -224,19 +228,10 @@ export function DayProfilePanel({
             weather={weather}
             hours={shownWeatherHours}
             axis={axis}
-            // The old fixed geometry, until the three track-derived charts
-            // below have their own label pass: all six share one left and
-            // right edge, so they change frame together or not at all.
-            frame={LEGACY_FRAME}
+            frame={frame}
             timeZone={timeZone}
             selectedMs={selectedMs}
             onSelect={setSelectedMs}
-          />
-          <MetReadout
-            weather={weather}
-            hours={shownWeatherHours}
-            timeZone={timeZone}
-            selectedMs={selectedMs}
           />
         </>
       ) : weatherPending ? (
@@ -255,7 +250,7 @@ export function DayProfilePanel({
           A labelled break, because everything above is modelled and
           everything below is measured from the pilots' own tracks. */}
       {showFlown ? (
-        <div className={showModelGroup ? "space-y-1 border-t" : "space-y-1"}>
+        <div className={showModelGroup ? "space-y-3 border-t" : "space-y-3"}>
           <GroupHeading
             title="From the pilots' tracks"
             detail="What the field actually flew — wind, climb strength and leg timing measured from every pilot's tracklog."
@@ -270,28 +265,44 @@ export function DayProfilePanel({
             </div>
           ) : null}
           {showWind ? (
-            <WindHourlyChart series={wind} axis={axis} timeZone={timeZone} setReadout={setReadout} />
+            <WindHourlyChart
+              series={wind}
+              axis={axis}
+              frame={frame}
+              timeZone={timeZone}
+              selectedMs={selectedMs}
+              onSelect={setSelectedMs}
+            />
           ) : null}
           {showClimb ? (
             <ClimbHourlyChart
               series={climb}
               timing={timing}
               axis={axis}
+              frame={frame}
               timeZone={timeZone}
-              setReadout={setReadout}
+              selectedMs={selectedMs}
+              onSelect={setSelectedMs}
             />
           ) : null}
           {showLegs && legs ? (
-            <WindLegsGantt series={legs} timing={timing} axis={axis} timeZone={timeZone} setReadout={setReadout} />
+            <WindLegsGantt
+              series={legs}
+              timing={timing}
+              axis={axis}
+              frame={frame}
+              timeZone={timeZone}
+              selectedMs={selectedMs}
+            />
           ) : null}
         </div>
       ) : null}
 
       {/* The axis all of them share, named once at the foot of the stack. */}
-      <TimeAxisTitle zone={zone} />
+      <TimeAxisTitle zone={zone} frame={frame} />
 
-      <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
-        {readout ?? "Hover a chart for exact figures."}
+      <p className="text-xs text-muted-foreground print:hidden">
+        Select an hour or a leg on a chart to see its exact figures.
       </p>
       {/* Two conventions a reader cannot deduce from the charts stay visible:
           the shared axis, and which way the arrows point. How the per-leg bars

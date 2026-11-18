@@ -12,18 +12,13 @@
  * are three chances to disagree by a pixel. So the panel measures, and the
  * charts are told.
  *
- * A measured frame is in CSS pixels: the viewBox is as wide as the chart is
+ * The frame is in CSS pixels: the viewBox is as wide as the chart is
  * drawn, so one unit is one pixel, `fontSize` is a real type size and a 2-unit
  * stroke is a 2px line at every width. Margins hold type, so they are
  * multiples of the type size, and so is every height a chart derives.
- *
- * {@link LEGACY_FRAME} is the old fixed geometry. The task-analysis page's
- * stack still uses it: its three track-derived charts have not had their own
- * label pass, and all six must share one left and right edge.
  */
 import { useEffect, useMemo, useState } from "react";
 import { CHART_LABEL_PX } from "@/react/charts/use-chart-label-size";
-import { MARGIN, W } from "./shared";
 
 export interface ChartFrame {
   /** ViewBox width. */
@@ -33,18 +28,11 @@ export interface ChartFrame {
   plotRight: number;
   /** Label size in viewBox units; also the unit ("em") heights are set in. */
   fontSize: number;
-  /** True when one viewBox unit is one CSS pixel. */
-  measured: boolean;
 }
 
-/** The fixed 560-unit geometry, with its 10-unit type. */
-export const LEGACY_FRAME: ChartFrame = {
-  width: W,
-  plotLeft: MARGIN.left,
-  plotRight: W - MARGIN.right,
-  fontSize: 10,
-  measured: false,
-};
+/** The width assumed before the stack is measured — on the server, and in
+ * the browser's first render, which must agree with it. */
+const UNMEASURED_WIDTH = 560;
 
 /** Narrower than this a stack is not being laid out, it is being measured on
  * its way in (a collapsed parent); draw for a small phone and wait. */
@@ -66,7 +54,6 @@ export function frameForWidth(cssWidth: number, rootPx = 16): ChartFrame {
     plotLeft: Math.round(fontSize * 3.5),
     plotRight: width - Math.round(fontSize * 1.4),
     fontSize,
-    measured: true,
   };
 }
 
@@ -81,7 +68,7 @@ export function useChartFrame(): {
   frame: ChartFrame;
 } {
   const [el, setEl] = useState<HTMLElement | null>(null);
-  const [size, setSize] = useState({ width: W, rootPx: 16 });
+  const [size, setSize] = useState({ width: UNMEASURED_WIDTH, rootPx: 16 });
 
   useEffect(() => {
     if (!el || typeof ResizeObserver === "undefined") return;

@@ -24,8 +24,9 @@ import { formatTimeRange } from "@/react/lib/time";
 import type { TimeAxis } from "./time-axis";
 import type { ChartFrame } from "./frame";
 import { TimeTickLabels } from "./TimeAxisParts";
-import { MetChartHeader, sourceSentence } from "./MetSourceTag";
-import { HourColumns, useHourPointer, type HourColumn } from "./HourColumns";
+import { ChartHeader, sourceSentence } from "./MetSourceTag";
+import { MetLegend, type LegendEntry } from "./MetLegend";
+import { HourColumns, columnAt, hourRange, useHourPointer, type HourColumn } from "./HourColumns";
 import { cloudReading } from "./met-readout";
 import { coverOpacity } from "./met-shared";
 
@@ -89,9 +90,29 @@ export function MetSkyChart({
 
   const peakLow = Math.max(0, ...cells.map((c) => c.cloud.lowPct ?? 0));
 
+  // The lanes are named beside themselves, so this legend is empty until an
+  // hour is chosen: then it is that hour's cover, layer by layer.
+  const sel = columnAt(cells, selectedMs);
+  const legend: LegendEntry[] = sel
+    ? LANES.filter(({ key }) => sel.cloud[key] !== null).map(({ key, label }) => ({
+        key,
+        kind: "note" as const,
+        text: label,
+        value: `${Math.round(sel.cloud[key]!)}%`,
+      }))
+    : [];
+  if (sel && sel.rainMm && sel.rainMm > 0) {
+    legend.push({ key: "rain", kind: "note", text: "rain", value: `${sel.rainMm.toFixed(1)} mm` });
+  }
+
   return (
     <div className="space-y-0.5" data-met-chart="cloud">
-      <MetChartHeader title="Weather: cloud" source={source} />
+      <ChartHeader
+        title="Weather: cloud"
+        when={sel ? hourRange(sel.tMs, timeZone) : null}
+        source={source}
+      />
+      <MetLegend entries={legend} />
       <svg
         viewBox={`0 0 ${frame.width} ${H}`}
         className="h-auto w-full select-none"

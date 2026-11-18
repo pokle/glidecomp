@@ -1,19 +1,22 @@
 /**
- * The task page's weather charts on a phone and on a desktop (issue #860).
+ * The weather charts on a phone and on a desktop (issue #860): the three
+ * modelled charts on the task page, and the same three with the three
+ * track-derived charts on Task analysis → Weather.
  *
- * The three charts (wind, cloud, thermal ceiling) were one 560-unit drawing
- * scaled to the page, so on a phone their labels were painted at 5px, and
- * their exact figures answered a mouse hover and nothing else: a tap did
- * nothing and a keyboard could not reach them.
+ * They were one 560-unit drawing scaled to the page, so on a phone their
+ * labels were painted at 5px, and their exact figures answered a mouse hover
+ * and nothing else: a tap did nothing and a keyboard could not reach them.
  *
- * What this spec pins:
+ * What this spec pins, on both pages:
  * - every label in the charts is PAINTED at 11px or more, measured after the
  *   SVG's own scaling — a class or a `font-size` attribute says nothing about
  *   that, which is how the old charts said "10px" and painted 5.7;
  * - no label runs off its chart, and the page does not scroll sideways;
  * - choosing an hour (a tap on a phone, the pointer on a desktop) marks that
- *   hour in all three charts and prints all three charts' figures for it;
- * - arrow keys move the hour;
+ *   hour in every chart of the stack, and each chart prints its own figures
+ *   for it in its legend row;
+ * - arrow keys move the hour, and each hour is named with its figures;
+ * - a leg on the wind-by-leg chart is a row that opens its full sentence;
  * - nothing tells a reader to hover.
  *
  * The weather answer is a fixture served by `page.route`: the real one comes
@@ -22,10 +25,10 @@
  * case a task with no launch window produces.
  *
  * READ-ONLY against the seeded "Corryong Cup 2026" sample comp. Never waits
- * on "networkidle": the task page keeps a freshness poll in flight.
+ * on "networkidle": both pages keep a freshness poll in flight.
  */
 import { execSync } from "node:child_process";
-import { test, expect, type Page } from "./fixtures/test";
+import { test, expect, type Locator, type Page } from "./fixtures/test";
 import { FRONTEND_URL } from "./fixtures/stack";
 
 const COMP_NAME = "Corryong Cup 2026";
@@ -131,33 +134,54 @@ test.beforeAll(async ({ playwright }) => {
   await api.dispose();
 });
 
-/** Open the task page with the fixture weather and wait for the charts. */
-async function openCharts(page: Page) {
+const WIND = '[data-met-chart="wind"]';
+
+async function stubWeather(page: Page) {
   await page.route("**/api/comp/*/task/*/weather", (route) =>
     route.fulfill({ json: weatherFixture() })
   );
-  await page.goto(`/comp/${compId}/task/${taskId}`, { waitUntil: "domcontentloaded" });
-  const figure = page.locator("figure", { has: page.locator('[data-met-chart="wind"]') });
-  await expect(figure.locator("[data-met-chart]")).toHaveCount(3);
-  // The frame is measured after mount; the charts are laid out for the real
-  // width once the viewBox is as wide as the chart is drawn.
+}
+
+/** Wait until the stack is laid out for its real width: the viewBox is then
+ * as wide as the chart is drawn. The frame is measured after mount. */
+async function laidOut(figure: Locator) {
   await expect
     .poll(() =>
-      figure.locator('[data-met-chart="wind"] svg[role="group"]').evaluate((svg) => {
+      figure.locator(`${WIND} svg[role="group"]`).evaluate((svg) => {
         const el = svg as SVGSVGElement;
         return Math.abs(el.viewBox.baseVal.width - el.getBoundingClientRect().width);
       })
     )
     .toBeLessThan(1);
+}
+
+/** Open the task page with the fixture weather and wait for the charts. */
+async function openTaskPage(page: Page) {
+  await stubWeather(page);
+  await page.goto(`/comp/${compId}/task/${taskId}`, { waitUntil: "domcontentloaded" });
+  const figure = page.locator("figure", { has: page.locator(WIND) });
+  await expect(figure.locator("[data-met-chart]")).toHaveCount(3);
+  await laidOut(figure);
   return figure;
 }
 
-test("every chart label is painted at a readable size and stays on its chart", async ({
-  page,
-}) => {
-  const figure = await openCharts(page);
+/** Open Task analysis → Weather: the same three charts above the three
+ * drawn from the pilots' tracks. */
+async function openAnalysisPage(page: Page) {
+  await stubWeather(page);
+  await page.goto(`/comp/${compId}/task/${taskId}/analysis/weather`, {
+    waitUntil: "domcontentloaded",
+  });
+  const figure = page.locator("figure", { has: page.locator(WIND) });
+  await expect(figure.locator("[data-met-chart]")).toHaveCount(3, { timeout: 60_000 });
+  await expect(figure.locator("[data-day-chart]")).toHaveCount(3);
+  await laidOut(figure);
+  return figure;
+}
 
-  const report = await figure.evaluate((fig) => {
+/** Every label's painted size, and whether any leaves its chart. */
+async function measureLabels(figure: Locator) {
+  return figure.evaluate((fig) => {
     const small: string[] = [];
     const clipped: string[] = [];
     for (const svg of fig.querySelectorAll<SVGSVGElement>("svg[viewBox]")) {
@@ -171,9 +195,9 @@ test("every chart label is painted at a readable size and stays on its chart", a
         if (r.left < box.left - 0.5 || r.right > box.right + 0.5) clipped.push(label);
       }
     }
-    // The titles, the source stamp, the legends and the readout are text
+    // The titles, the source stamp, the legends and the leg rows are text
     // beside the SVGs.
-    for (const el of fig.querySelectorAll<HTMLElement>("p, span")) {
+    for (const el of fig.querySelectorAll<HTMLElement>("p, span, button")) {
       const px = parseFloat(getComputedStyle(el).fontSize);
       if (px < 11) small.push(`${el.textContent?.slice(0, 30)} (${px}px)`);
     }
@@ -184,62 +208,146 @@ test("every chart label is painted at a readable size and stays on its chart", a
       sideways: document.documentElement.scrollWidth > window.innerWidth,
     };
   });
+}
 
-  expect(report.texts).toBeGreaterThan(10);
-  expect(report.small).toEqual([]);
-  expect(report.clipped).toEqual([]);
-  expect(report.sideways).toBe(false);
-
-  // The source is on every chart, and nothing asks for a hover.
-  await expect(figure.locator("[data-met-source]")).toHaveCount(3);
-  await expect(figure).not.toContainText(/hover/i);
-});
-
-test("choosing an hour marks it on all three charts and prints their figures", async ({
-  page,
-  hasTouch,
-}) => {
-  const figure = await openCharts(page);
-  const readout = figure.locator("[data-met-readout]");
-  await expect(readout).toHaveText("Select an hour on a chart to see its exact figures.");
-
-  const column = figure.locator(`[data-met-chart="cloud"] [data-hour="${CHOSEN_MS}"]`);
+async function choose(column: Locator, hasTouch: boolean) {
   if (hasTouch) await column.tap();
   else await column.hover();
+}
 
-  await expect(figure.locator("[data-selected]")).toHaveCount(3);
-  await expect(readout).toContainText("14:00–15:00 AEDT");
-  await expect(readout).toContainText(
-    "Wind: 23 km/h from 290° (WNW) at ~1500 m, surface 12 km/h from 270° (W), gusting 25 km/h"
-  );
-  await expect(readout).toContainText("Cloud: low 0%, mid 40%, high 20%");
-  await expect(readout).toContainText(
-    "Height: thermal top 2950 m AGL, cloud base 3100 m AGL, blue, CAPE 120 J/kg"
-  );
+test.describe("the task page", () => {
+  test("every chart label is painted at a readable size and stays on its chart", async ({
+    page,
+  }) => {
+    const figure = await openTaskPage(page);
+    const report = await measureLabels(figure);
+    expect(report.texts).toBeGreaterThan(10);
+    expect(report.small).toEqual([]);
+    expect(report.clipped).toEqual([]);
+    expect(report.sideways).toBe(false);
+
+    // The source is on every chart, and nothing asks for a hover.
+    await expect(figure.locator("[data-met-source]")).toHaveCount(3);
+    await expect(figure).not.toContainText(/hover/i);
+    await expect(figure).toContainText("Select an hour on a chart to see its exact figures.");
+  });
+
+  test("choosing an hour marks it on all three charts, and each prints its figures", async ({
+    page,
+    hasTouch,
+  }) => {
+    const figure = await openTaskPage(page);
+    const wind = figure.locator(WIND);
+    await expect(wind.locator("[data-chart-legend]")).toContainText("flying height ~1500 m");
+    await expect(figure.locator("[data-chart-when]")).toHaveCount(0);
+
+    await choose(figure.locator(`[data-met-chart="cloud"] [data-hour="${CHOSEN_MS}"]`), hasTouch);
+
+    await expect(figure.locator("[data-selected]")).toHaveCount(3);
+    await expect(figure.locator("[data-chart-when]")).toHaveText([
+      "· 14:00–15:00 AEDT",
+      "· 14:00–15:00 AEDT",
+      "· 14:00–15:00 AEDT",
+    ]);
+    const legend = (chart: string) =>
+      figure.locator(`[data-met-chart="${chart}"] [data-chart-legend]`);
+    await expect(legend("wind")).toContainText("flying height 23 km/h WNW");
+    await expect(legend("wind")).toContainText("surface 12 km/h W, gusting 25");
+    await expect(legend("wind")).toContainText("direction 290°");
+    await expect(legend("cloud")).toHaveText("high 20%mid 40%low 0%");
+    await expect(legend("height")).toContainText("thermal top 2950 m");
+    await expect(legend("height")).toContainText("cloud base 3100 m");
+    await expect(legend("height")).toContainText("blue");
+    await expect(legend("height")).toContainText("CAPE 120 J/kg");
+  });
+
+  test("arrow keys move the hour, and each hour is named with its figures", async ({ page }) => {
+    const figure = await openTaskPage(page);
+    const wind = figure.locator(WIND);
+    const when = wind.locator("[data-chart-when]");
+
+    const column = wind.locator(`[data-hour="${CHOSEN_MS}"]`);
+    await expect(column).toHaveAttribute(
+      "aria-label",
+      "14:00–15:00 AEDT — 23 km/h from 290° (WNW) at ~1500 m, surface 12 km/h from 270° (W), gusting 25 km/h"
+    );
+    await column.focus();
+    await expect(when).toContainText("14:00–15:00 AEDT");
+
+    await page.keyboard.press("ArrowRight");
+    await expect(when).toContainText("15:00–16:00 AEDT");
+    await expect(wind.locator(`[data-hour="${CHOSEN_MS + HOUR_MS}"]`)).toBeFocused();
+    await expect(figure.locator("[data-selected]")).toHaveCount(3);
+
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await expect(when).toContainText("13:00–14:00 AEDT");
+
+    // One tab stop per chart: only the selected hour is in the tab order.
+    await expect(wind.locator('[tabindex="0"]')).toHaveCount(1);
+  });
 });
 
-test("arrow keys move the hour, and each hour is named with its figures", async ({ page }) => {
-  const figure = await openCharts(page);
-  const readout = figure.locator("[data-met-readout]");
-  const wind = figure.locator('[data-met-chart="wind"]');
+test.describe("Task analysis → Weather", () => {
+  test("all six charts are readable, and none of them asks for a hover", async ({ page }) => {
+    const figure = await openAnalysisPage(page);
+    const report = await measureLabels(figure);
+    expect(report.texts).toBeGreaterThan(20);
+    expect(report.small).toEqual([]);
+    expect(report.clipped).toEqual([]);
+    expect(report.sideways).toBe(false);
 
-  const column = wind.locator(`[data-hour="${CHOSEN_MS}"]`);
-  await expect(column).toHaveAttribute(
-    "aria-label",
-    "14:00–15:00 AEDT — 23 km/h from 290° (WNW) at ~1500 m, surface 12 km/h from 270° (W), gusting 25 km/h"
-  );
-  await column.focus();
-  await expect(readout).toContainText("14:00–15:00 AEDT");
+    await expect(figure).not.toContainText(/hover/i);
+    await expect(figure).toContainText(
+      "Select an hour or a leg on a chart to see its exact figures."
+    );
+    // What a hover over the takeoff lane used to say is printed.
+    await expect(figure.locator('[data-day-chart="climb"] [data-chart-legend]')).toContainText(
+      /takeoffs: \d+, \d\d:\d\d–\d\d:\d\d AEDT \(median \d\d:\d\d\)/
+    );
+  });
 
-  await page.keyboard.press("ArrowRight");
-  await expect(readout).toContainText("15:00–16:00 AEDT");
-  await expect(wind.locator(`[data-hour="${CHOSEN_MS + HOUR_MS}"]`)).toBeFocused();
-  await expect(figure.locator("[data-selected]")).toHaveCount(3);
+  test("one hour is marked through the whole stack, with each chart's own figures", async ({
+    page,
+    hasTouch,
+  }) => {
+    const figure = await openAnalysisPage(page);
+    const climb = figure.locator('[data-day-chart="climb"]');
+    const column = climb.locator("[data-hour]").nth(1);
+    const label = (await column.getAttribute("aria-label")) ?? "";
+    // "14:00–15:00 AEDT — median 1.4 m/s (p25–p75 …), 457 climbs"
+    const [, hour, median] = label.match(/^(.+?) — median ([\d.]+ \S+) /) ?? [];
+    expect(hour).toBeTruthy();
 
-  await page.keyboard.press("ArrowLeft");
-  await page.keyboard.press("ArrowLeft");
-  await expect(readout).toContainText("13:00–14:00 AEDT");
+    await choose(column, hasTouch);
 
-  // One tab stop per chart: only the selected hour is in the tab order.
-  await expect(wind.locator('[tabindex="0"]')).toHaveCount(1);
+    // The band: the three modelled charts, wind by hour and climb by hour.
+    await expect(figure.locator("[data-selected]")).toHaveCount(5);
+    await expect(climb.locator("[data-chart-when]")).toHaveText(`· ${hour}`);
+    await expect(climb.locator("[data-chart-legend]")).toContainText(`median climb ${median}`);
+    await expect(climb.locator("[data-chart-legend]")).toContainText(/p10–p90 [\d.]+–[\d.]+/);
+    await expect(
+      figure.locator('[data-day-chart="wind"] [data-chart-legend]')
+    ).toContainText(/wind speed [\d.]+ km\/h [NESW]+/);
+    await expect(figure.locator(`${WIND} [data-chart-when]`)).toHaveText(`· ${hour}`);
+  });
+
+  test("a leg is a row that opens its full sentence", async ({ page }) => {
+    const figure = await openAnalysisPage(page);
+    const legs = figure.locator('[data-day-chart="legs"]');
+    const first = legs.locator('[data-leg="0"]');
+    await expect(first).toHaveAttribute("aria-expanded", "false");
+    await expect(legs.locator("[data-leg-detail]")).toHaveCount(0);
+
+    await first.click();
+    await expect(first).toHaveAttribute("aria-expanded", "true");
+    await expect(legs.locator("[data-leg-detail]")).toHaveText(/ — flown \d\d:\d\d–\d\d:\d\d AEDT by \d+ pilots?/);
+
+    // Arrow keys walk the legs; a second leg replaces the first.
+    await page.keyboard.press("ArrowDown");
+    await expect(legs.locator('[data-leg="1"]')).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(legs.locator("[data-leg-detail]")).toHaveCount(1);
+    await expect(first).toHaveAttribute("aria-expanded", "false");
+  });
 });

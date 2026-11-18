@@ -22,7 +22,6 @@ import { useChartFrame } from "@/react/analysis/charts/day-profile/frame";
 import {
   MetChartsGroup,
   MetAttribution,
-  MetReadout,
 } from "@/react/analysis/charts/day-profile/MetChartsGroup";
 import { weatherInstants } from "@/react/analysis/charts/day-profile/met-shared";
 import { TimeAxisTitle } from "@/react/analysis/charts/day-profile/TimeAxisParts";
@@ -51,7 +50,8 @@ export function TaskWeatherPanel({
 }) {
   const timeZone = compTimezone ?? undefined;
   // One hour selected for the whole stack: tap or drag on a phone, hover with
-  // a mouse, arrow keys from a keyboard (see HourColumns.tsx).
+  // a mouse, arrow keys from a keyboard (see HourColumns.tsx). Each chart
+  // prints its own figures for it in its legend row.
   const [selectedMs, setSelectedMs] = useState<number | null>(null);
   // The stack is laid out at the width it is really drawn — measured once
   // here, so the three charts cannot disagree about where an hour is.
@@ -113,15 +113,12 @@ export function TaskWeatherPanel({
       {/* The axis all three share, named once at the foot of the stack. */}
       <TimeAxisTitle zone={zone} frame={frame} />
 
-      <MetReadout
-        weather={weather}
-        hours={hours}
-        timeZone={timeZone}
-        selectedMs={selectedMs}
-      />
+      <p className="text-xs text-muted-foreground print:hidden">
+        Select an hour on a chart to see its exact figures.
+      </p>
       <p className="text-xs text-muted-foreground">
-        All charts share that one time axis. Arrows fly WITH the wind — the
-        readout&rsquo;s direction figures are degrees the wind blows from.
+        All charts share that one time axis. Arrows fly WITH the wind —
+        direction figures are degrees the wind blows from.
       </p>
       <MetAttribution weather={weather} />
     </figure>

@@ -24,18 +24,43 @@
 import type { WeatherSource } from "@/react/weather/types";
 import { sourceKindLabel } from "@/react/weather/types";
 
-/** `aria-hidden`: the chart's accessible name already says what it is and
- * where it came from ({@link sourceSentence}). */
-export function MetChartHeader({ title, source }: { title: string; source: WeatherSource }) {
+/**
+ * `aria-hidden`: the chart's accessible name already says what it is and
+ * where it came from ({@link sourceSentence}).
+ *
+ * `when` is the selected hour, printed beside the title while one is chosen,
+ * so the figures in the legend row beneath say which hour they are for. The
+ * track-derived charts in the same stack use this row too, with no `source`:
+ * their title already says "From tracks".
+ */
+export function ChartHeader({
+  title,
+  when,
+  source,
+}: {
+  title: string;
+  when?: string | null;
+  source?: WeatherSource;
+}) {
   return (
     <div
       aria-hidden
       className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs text-muted-foreground"
     >
-      <span className="font-medium">{title}</span>
-      <span data-met-source>
-        {source.model} · {sourceKindLabel(source.kind)}
+      <span>
+        <span className="font-medium">{title}</span>
+        {when ? (
+          <span data-chart-when className="font-medium text-foreground">
+            {" "}
+            · {when}
+          </span>
+        ) : null}
       </span>
+      {source ? (
+        <span data-met-source>
+          {source.model} · {sourceKindLabel(source.kind)}
+        </span>
+      ) : null}
     </div>
   );
 }

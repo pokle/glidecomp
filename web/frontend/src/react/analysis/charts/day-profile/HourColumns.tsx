@@ -18,13 +18,34 @@
  *   its hours. Every column is named with that chart's figures for the hour.
  *
  * The selected hour is a band drawn through every chart of the stack, which
- * is also what shows a keyboard user where focus is.
+ * is also what shows a keyboard user where focus is. Each chart prints its
+ * own figures for that hour in its legend row (MetLegend.tsx).
  */
 import { useRef, useState } from "react";
+import { formatTimeRange } from "@/react/lib/time";
 import type { TimeAxis } from "./time-axis";
 import type { ChartFrame } from "./frame";
 
 const HOUR_MS = 3_600_000;
+
+/** The column an instant falls in. The selection is an instant, not a
+ * column: two charts in one stack may bucket their hours differently. */
+export function columnAt<T extends { tMs: number }>(
+  columns: readonly T[],
+  ms: number | null
+): T | null {
+  if (ms === null) return null;
+  return columns.find((c) => ms >= c.tMs && ms < c.tMs + HOUR_MS) ?? null;
+}
+
+/** "14:00–15:00 AEDT" for the hour starting at `tMs`. */
+export function hourRange(tMs: number, timeZone: string | undefined): string {
+  return formatTimeRange(
+    new Date(tMs).toISOString(),
+    new Date(tMs + HOUR_MS).toISOString(),
+    timeZone
+  );
+}
 
 export interface HourColumn {
   /** Start of the hour, epoch ms. */
@@ -89,7 +110,8 @@ export function HourColumns({
   const refs = useRef<(SVGGElement | null)[]>([]);
   const [focusIndex, setFocusIndex] = useState(0);
   // The chart's one tab stop is the selected hour where it has one.
-  const selectedIndex = columns.findIndex((c) => c.tMs === selectedMs);
+  const selectedColumn = columnAt(columns, selectedMs);
+  const selectedIndex = selectedColumn ? columns.indexOf(selectedColumn) : -1;
   const tabIndex = selectedIndex >= 0 ? selectedIndex : Math.min(focusIndex, columns.length - 1);
 
   function onKeyDown(e: React.KeyboardEvent, i: number) {
@@ -108,7 +130,7 @@ export function HourColumns({
       {columns.map((c, i) => {
         const x0 = axis.x(c.tMs);
         const width = Math.max(0, axis.x(c.tMs + HOUR_MS) - x0);
-        const selected = c.tMs === selectedMs;
+        const selected = i === selectedIndex;
         return (
           <g
             key={c.tMs}

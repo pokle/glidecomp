@@ -23,42 +23,34 @@
  * pilot's four circles cannot read as confidently as one measured from 800;
  * below the thin thresholds the label says the counts outright.
  *
- * Hover names the leg in the panel's shared readout; the Wind by leg table
- * below remains the exact, screen-reader-navigable reading.
+ * Each leg is a ROW of the page, not a row of one drawing (issue #860): its
+ * name and its wind are a line of real text, and its bar is a strip beneath
+ * on the stack's shared time axis. As one SVG the names and the wind labels
+ * were `<text>` that could not wrap or be cut short, and at a readable size
+ * they did not fit beside their bars. A row is a button: choosing it prints
+ * the leg's full sentence under it — what a hover over the row used to say.
+ * The Wind by leg table below remains the exact reading.
  */
+import { useRef, useState } from "react";
 import type { DayTimingSeries, WindLegsSeries } from "../../types";
 import { formatTimeRange } from "@/react/lib/time";
 import { useUnits } from "@/react/lib/units";
 import { formatMetricValue } from "../../types";
 import { unitDisplay } from "../../units";
 import type { TimeAxis } from "./time-axis";
-import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
-import { ChartTitle } from "@/react/charts/AxisTitle";
-import {
-  PLOT_LEFT,
-  PLOT_RIGHT,
-  W,
-  degToCompass,
-  windArrowPath,
-  windArrowTransform,
-  windLabel,
-} from "./shared";
+import type { ChartFrame } from "./frame";
+import { TimeTickLabels } from "./TimeAxisParts";
+import { ChartHeader } from "./MetSourceTag";
+import { MetLegend, type LegendEntry } from "./MetLegend";
+import { degToCompass, windArrowPath, windArrowTransform, windLabel } from "./shared";
 
-/** Rows start below the chart title; H is derived from it, so the whole
- * chart simply grows by the title's height. */
-const TOP = 20;
-const ROW_H = 28;
-const BAR_H = 9;
-/** Speed→arrow-length range; bounded so a rotated arrow stays in its row. */
-const ARROW_MIN = 8;
-const ARROW_MAX = 16;
-/** Rough px per character at the 9px label size, for the flip decision. */
-const LABEL_CHAR_W = 4.6;
-
+const HOUR_MS = 3_600_000;
 /** Below either of these, a leg's wind is one or two pilots' few minutes and
- * the label prints the counts rather than leaving the reader to hover. */
+ * the row prints the counts rather than leaving the reader to ask. */
 const THIN_ESTIMATES = 20;
 const THIN_PILOTS = 3;
+
+const FLOWN_FILL = { fill: "var(--chart-2)", opacity: 0.16 };
 
 type Leg = WindLegsSeries["legs"][number];
 
@@ -87,24 +79,34 @@ export function WindLegsGantt({
   series,
   timing,
   axis,
+  frame,
   timeZone,
-  setReadout,
+  selectedMs,
 }: {
   series: WindLegsSeries;
   timing: DayTimingSeries | null;
   axis: TimeAxis;
+  frame: ChartFrame;
   timeZone: string | undefined;
-  setReadout: (text: string | null) => void;
+  /** The stack's selected hour, drawn as a band through every leg's strip. */
+  selectedMs: number | null;
 }) {
   // Wind follows the speed preference; series values are km/h and convert
   // here at the display boundary. Arrow lengths use the km/h ratio directly
   // (a linear factor cancels out of speed/maxSpeed).
   const wind = unitDisplay("km/h", useUnits());
+  const [openLeg, setOpenLeg] = useState<number | null>(null);
+  const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   if (series.legs.length === 0) return null;
 
-  const rowsBottom = TOP + series.legs.length * ROW_H;
-  const H = rowsBottom + 18;
+  const em = frame.fontSize;
+  const stripH = em * 1.5;
+  const barH = em * 0.75;
+  const barY = (stripH - barH) / 2;
+  const arrowMin = em * 0.8;
+  const arrowMax = em * 1.4;
+
   const maxSpeed = Math.max(1, ...series.legs.map((l) => l.speedKmh ?? 0));
   // Confidence is relative to the best-sampled leg, the same ramp the hourly
   // chart uses for its buckets.
@@ -130,11 +132,12 @@ export function WindLegsGantt({
       ? circles
       : `${circles}, ${l.pilotsWithEstimates} pilot${l.pilotsWithEstimates === 1 ? "" : "s"}`;
   };
-
   const isThin = (l: Leg): boolean =>
     l.n < THIN_ESTIMATES || (l.pilotsWithEstimates !== undefined && l.pilotsWithEstimates < THIN_PILOTS);
 
-  const legReadout = (l: Leg): string => {
+  /** The leg in full: when it was flown and by how many, and what its wind
+   * was measured from. */
+  const legDetail = (l: Leg): string => {
     const { flown, circling } = windows(l);
     const flownPart =
       flown === null
@@ -150,163 +153,186 @@ export function WindLegsGantt({
     );
   };
 
+  function onKeyDown(e: React.KeyboardEvent, i: number) {
+    let next: number;
+    if (e.key === "ArrowDown") next = Math.min(i + 1, series.legs.length - 1);
+    else if (e.key === "ArrowUp") next = Math.max(i - 1, 0);
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = series.legs.length - 1;
+    else return;
+    e.preventDefault();
+    rowRefs.current[next]?.focus();
+  }
+
+  const legend: LegendEntry[] = [
+    { key: "flown", kind: "box", text: "leg flown", fillClass: "bg-chart-2/15" },
+    { key: "measured", kind: "box", text: "wind measured", fillClass: "bg-chart-2/60" },
+    { key: "direction", kind: "arrow", text: "direction", stroke: "var(--chart-2)", strokeWidth: 1.6 },
+  ];
+
   const measured = series.legs.filter((l) => l.n > 0).length;
+  const bandX =
+    selectedMs === null ? null : ([axis.x(selectedMs), axis.x(selectedMs + HOUR_MS)] as const);
+
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="h-auto w-full"
-      role="img"
+    <div
+      className="space-y-0.5"
+      data-day-chart="legs"
+      role="group"
       aria-label={
         `Wind by leg: ${series.legs.length} speed-section legs as time bars. Each pale bar spans when the ` +
         `field flew that leg; the solid band inside it spans only the circles the leg's wind was measured ` +
         `from, with an arrow and speed per leg (${measured} of ${series.legs.length} legs have estimates). ` +
         `The Wind by leg table below carries the exact numbers and sample counts.`
       }
-      onMouseLeave={() => setReadout(null)}
     >
-      {/* Named in-plot, matching the modelled charts in the same stack. */}
-      <ChartTitle x={PLOT_LEFT - 38} y={12}>
-        From tracks: wind by leg
-      </ChartTitle>
-
-      <TimeGridColumns axis={axis} top={TOP} bottom={rowsBottom} />
-      {/* Row separators. */}
-      {series.legs.map((_, i) => (
-        <line
-          key={`s${i}`}
-          x1={PLOT_LEFT}
-          x2={PLOT_RIGHT}
-          y1={TOP + (i + 1) * ROW_H}
-          y2={TOP + (i + 1) * ROW_H}
-          className="stroke-border"
-          strokeWidth={1}
-        />
-      ))}
-
-      {/* Task-clock rules (labelled on the climb chart above). */}
-      <g aria-hidden>
-        {rules.map((t, i) => (
-          <line
-            key={`r${t}-${i}`}
-            x1={axis.x(t)}
-            x2={axis.x(t)}
-            y1={TOP}
-            y2={rowsBottom}
-            className="stroke-muted-foreground/70"
-            strokeWidth={1}
-            strokeDasharray="3 3"
-          />
-        ))}
-      </g>
-
-      {series.legs.map((l, i) => {
-        const rowTop = TOP + i * ROW_H;
-        const barY = rowTop + 15;
-        const barCy = barY + BAR_H / 2;
-        const { flown: flownWin, circling } = windows(l);
-        const hasWind = circling !== null && l.speedKmh !== null && l.directionDeg !== null;
-        const span = (w: [number, number]): [number, number] => {
-          const a = axis.x(w[0]);
-          return [a, Math.max(axis.x(w[1]), a + 3)];
-        };
-        const [fx0, fx1] = flownWin ? span(flownWin) : [0, 0];
-        const [cx0, cx1] = circling ? span(circling) : [0, 0];
-        const arrowLen = hasWind ? ARROW_MIN + (ARROW_MAX - ARROW_MIN) * (l.speedKmh! / maxSpeed) : 0;
-        // Opacity says "how much evidence"; the same 0.4→1.0 ramp as the
-        // hourly chart's direction arrows.
-        const confidence = 0.4 + 0.6 * (l.n / maxN);
-        const text = hasWind
-          ? windLabel(l.speedKmh! * wind.factor, wind.unit, l.directionDeg!) +
-            (isThin(l) ? ` · ${sampleText(l)}` : "")
-          : "no circling on this leg";
-        // Labels sit past the FLOWN bar's end, flipping to its left when the
-        // text would run off the plot — but only if the left has room, else a
-        // long label on a bar that ends late would clip at the other edge.
-        const textW = text.length * LABEL_CHAR_W;
-        const labelRight = fx1 + 6 + textW <= PLOT_RIGHT || fx0 - 6 - textW < PLOT_LEFT;
-        const labelX = flownWin ? (labelRight ? fx1 + 6 : fx0 - 6) : PLOT_LEFT + 2;
-        return (
-          // Key by row index: concentric tasks (e.g. Kosciuszko Loop) repeat
-          // the same waypoint name in every leg label.
-          <g key={i} aria-hidden>
-            {/* The leg's name, printed over the grid with a background halo. */}
-            <text
-              x={PLOT_LEFT + 2}
-              y={rowTop + 11}
-              textAnchor="start"
-              className="fill-current stroke-background text-[10px] [paint-order:stroke] [stroke-width:3px]"
-            >
-              {l.label}
-            </text>
-            {/* Outer bar: when the field was on the leg. */}
-            {flownWin ? (
-              <rect
-                x={fx0}
-                width={fx1 - fx0}
-                y={barY}
-                height={BAR_H}
-                rx={2}
-                style={{ fill: "var(--chart-2)" }}
-                opacity={0.16}
-              />
-            ) : null}
-            {/* Inner band: when its wind was measured. */}
-            {hasWind ? (
-              <>
-                <rect
-                  x={cx0}
-                  width={cx1 - cx0}
-                  y={barY}
-                  height={BAR_H}
-                  rx={2}
-                  style={{ fill: "var(--chart-2)" }}
-                  // Floored well clear of the outer bar's 0.16: a thin leg
-                  // should read as tentative, not vanish — the reader still
-                  // has to find WHERE in the leg the wind was measured.
-                  opacity={0.38 + 0.32 * (l.n / maxN)}
-                />
-                <path
-                  d={windArrowPath(arrowLen)}
-                  transform={windArrowTransform((cx0 + cx1) / 2, barCy, l.directionDeg!)}
-                  fill="none"
-                  style={{ stroke: "var(--chart-2)" }}
-                  strokeWidth={1.6}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  opacity={confidence}
-                />
-              </>
-            ) : null}
-            <text
-              x={labelX}
-              y={barCy + 3}
-              textAnchor={flownWin && !labelRight ? "end" : "start"}
-              className={
-                hasWind
-                  ? "fill-current stroke-background text-[9px] text-muted-foreground [paint-order:stroke] [stroke-width:3px]"
-                  : "fill-current stroke-background text-[9px] italic text-muted-foreground [paint-order:stroke] [stroke-width:3px]"
-              }
-            >
-              {text}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* Hover targets: whole rows. */}
-      {series.legs.map((l, i) => (
-        <rect
-          key={`h${i}`}
-          x={PLOT_LEFT}
-          width={PLOT_RIGHT - PLOT_LEFT}
-          y={TOP + i * ROW_H}
-          height={ROW_H}
-          fill="transparent"
-          onMouseEnter={() => setReadout(legReadout(l))}
-        />
-      ))}
-
-      <TimeTickLabels axis={axis} y={rowsBottom + 14} />
-    </svg>
+      <ChartHeader title="From tracks: wind by leg" />
+      <MetLegend entries={legend} />
+      <div className="divide-y divide-border border-y border-border">
+        {series.legs.map((l, i) => {
+          const { flown: flownWin, circling } = windows(l);
+          const hasWind = circling !== null && l.speedKmh !== null && l.directionDeg !== null;
+          const span = (w: [number, number]): [number, number] => {
+            const a = axis.x(w[0]);
+            return [a, Math.max(axis.x(w[1]), a + 3)];
+          };
+          const [fx0, fx1] = flownWin ? span(flownWin) : [0, 0];
+          const [cx0, cx1] = circling ? span(circling) : [0, 0];
+          const arrowLen = hasWind ? arrowMin + (arrowMax - arrowMin) * (l.speedKmh! / maxSpeed) : 0;
+          // Opacity says "how much evidence"; the same 0.4→1.0 ramp as the
+          // hourly chart's direction arrows.
+          const confidence = 0.4 + 0.6 * (l.n / maxN);
+          const open = openLeg === i;
+          return (
+            // Key by row index: concentric tasks (e.g. Kosciuszko Loop) repeat
+            // the same waypoint name in every leg label.
+            <div key={i}>
+              <button
+                type="button"
+                ref={(el) => {
+                  rowRefs.current[i] = el;
+                }}
+                aria-expanded={open}
+                data-leg={i}
+                onClick={() => setOpenLeg(open ? null : i)}
+                onKeyDown={(e) => onKeyDown(e, i)}
+                className="block w-full cursor-pointer py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="flex items-baseline justify-between gap-3 text-xs">
+                  <span className="min-w-0 truncate">{l.label}</span>
+                  <span
+                    className={
+                      hasWind
+                        ? "shrink-0 text-muted-foreground"
+                        : "shrink-0 text-muted-foreground italic"
+                    }
+                  >
+                    {hasWind
+                      ? windLabel(l.speedKmh! * wind.factor, wind.unit, l.directionDeg!)
+                      : "no circling on this leg"}
+                  </span>
+                </span>
+                <svg
+                  aria-hidden
+                  viewBox={`0 0 ${frame.width} ${stripH}`}
+                  className="block h-auto w-full"
+                >
+                  {bandX ? (
+                    <rect
+                      x={bandX[0]}
+                      width={Math.max(0, bandX[1] - bandX[0])}
+                      y={0}
+                      height={stripH}
+                      className="fill-foreground/10"
+                    />
+                  ) : null}
+                  {axis.ticks.map((t) => (
+                    <line
+                      key={t.ms}
+                      x1={axis.x(t.ms)}
+                      x2={axis.x(t.ms)}
+                      y1={0}
+                      y2={stripH}
+                      className="stroke-border"
+                      strokeWidth={1}
+                    />
+                  ))}
+                  {/* Task-clock rules (labelled on the climb chart above). */}
+                  {rules.map((t, r) => (
+                    <line
+                      key={`r${t}-${r}`}
+                      x1={axis.x(t)}
+                      x2={axis.x(t)}
+                      y1={0}
+                      y2={stripH}
+                      className="stroke-muted-foreground/70"
+                      strokeWidth={1}
+                      strokeDasharray="3 3"
+                    />
+                  ))}
+                  {/* Outer bar: when the field was on the leg. */}
+                  {flownWin ? (
+                    <rect
+                      x={fx0}
+                      width={fx1 - fx0}
+                      y={barY}
+                      height={barH}
+                      rx={2}
+                      style={{ fill: FLOWN_FILL.fill }}
+                      opacity={FLOWN_FILL.opacity}
+                    />
+                  ) : null}
+                  {/* Inner band: when its wind was measured. */}
+                  {hasWind ? (
+                    <>
+                      <rect
+                        x={cx0}
+                        width={cx1 - cx0}
+                        y={barY}
+                        height={barH}
+                        rx={2}
+                        style={{ fill: "var(--chart-2)" }}
+                        // Floored well clear of the outer bar's 0.16: a thin
+                        // leg should read as tentative, not vanish — the
+                        // reader still has to find WHERE in the leg the wind
+                        // was measured.
+                        opacity={0.38 + 0.32 * (l.n / maxN)}
+                      />
+                      <path
+                        d={windArrowPath(arrowLen)}
+                        transform={windArrowTransform((cx0 + cx1) / 2, stripH / 2, l.directionDeg!)}
+                        fill="none"
+                        style={{ stroke: "var(--chart-2)" }}
+                        strokeWidth={1.6}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        opacity={confidence}
+                      />
+                    </>
+                  ) : null}
+                </svg>
+                {hasWind && isThin(l) ? (
+                  <span className="block text-xs text-muted-foreground">
+                    Measured from {sampleText(l)} only.
+                  </span>
+                ) : null}
+              </button>
+              {open ? (
+                <p data-leg-detail className="pb-1 text-xs text-muted-foreground">
+                  {legDetail(l)}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      <svg
+        aria-hidden
+        viewBox={`0 0 ${frame.width} ${em * 1.6}`}
+        className="h-auto w-full"
+      >
+        <TimeTickLabels axis={axis} y={em * 1.1} frame={frame} />
+      </svg>
+    </div>
   );
 }
