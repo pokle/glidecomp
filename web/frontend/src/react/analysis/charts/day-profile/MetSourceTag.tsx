@@ -1,39 +1,47 @@
 /**
- * The source stamp every weather chart in the panel carries.
+ * The title row every weather chart carries: what the chart is, and the
+ * source stamp.
  *
- * Not decoration and not optional. The charts above it in the stack are
- * derived from the pilots' own tracklogs — measurements of what happened.
- * The weather charts are a forecast model or a reanalysis sampled at a grid
- * cell that may be 25 km wide and hundreds of metres off in elevation. A
- * reader scanning down the stack must be able to tell, without moving their
- * eyes off the chart, which kind of thing they are looking at. So the model
- * name and the "modelled"/"reanalysis" qualifier are rendered INSIDE the
- * SVG, at the top right of each weather chart, rather than only in a caption
- * that print and screenshots would separate from the plot.
+ * The stamp is not decoration and not optional. The charts beside these in
+ * the task-analysis stack are derived from the pilots' own tracklogs —
+ * measurements of what happened. The weather charts are a forecast model or a
+ * reanalysis sampled at a grid cell that may be 25 km wide and hundreds of
+ * metres off in elevation. A reader scanning down the stack must be able to
+ * tell, without moving their eyes off the chart, which kind of thing they are
+ * looking at. So the model name and the "modelled"/"reanalysis" qualifier sit
+ * on EVERY weather chart, directly above its plot, rather than only in a
+ * caption at the foot of the stack that print and screenshots would separate
+ * from it.
+ *
+ * It is a row of real text and not `<text>` inside the SVG (issue #860). At
+ * a readable size the stamp alone is about 300px, and the chart on a phone is
+ * 319px: inside the SVG it could only be shrunk until it fitted, which is
+ * how it came to be painted at 5px. As text it wraps under the title.
  *
  * The full credit — provider, licence, grid point — lives once in the panel
  * caption, which is also where CC BY attribution is satisfied.
  */
 import type { WeatherSource } from "@/react/weather/types";
 import { sourceKindLabel } from "@/react/weather/types";
-import { PLOT_RIGHT } from "./shared";
 
-export function MetSourceTag({ source, y }: { source: WeatherSource; y: number }) {
+/** `aria-hidden`: the chart's accessible name already says what it is and
+ * where it came from ({@link sourceSentence}). */
+export function MetChartHeader({ title, source }: { title: string; source: WeatherSource }) {
   return (
-    <text
+    <div
       aria-hidden
-      x={PLOT_RIGHT}
-      y={y}
-      textAnchor="end"
-      className="fill-current text-[9px] text-muted-foreground"
+      className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs text-muted-foreground"
     >
-      {source.model} · {sourceKindLabel(source.kind)}
-    </text>
+      <span className="font-medium">{title}</span>
+      <span data-met-source>
+        {source.model} · {sourceKindLabel(source.kind)}
+      </span>
+    </div>
   );
 }
 
 /** The same stamp as a sentence, for a chart's accessible name — a screen
- * reader gets the provenance in the label rather than from a `<text>` node
+ * reader gets the provenance in the label rather than from a text node
  * it would read out of context. */
 export function sourceSentence(source: WeatherSource): string {
   return `Source: ${source.attribution} (${source.model}, ${sourceKindLabel(source.kind)}).`;

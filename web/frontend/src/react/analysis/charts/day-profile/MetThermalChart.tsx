@@ -27,24 +27,21 @@
 import type { WeatherHour, WeatherSource } from "@/react/weather/types";
 import { formatTimeRange } from "@/react/lib/time";
 import { useUnits } from "@/react/lib/units";
+import { formatMetricValue } from "../../types";
 import { unitDisplay } from "../../units";
-import { formatTickValue, linearScale, niceTicks } from "../chart-utils";
+import { linearScale, niceTicks } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
+import type { ChartFrame } from "./frame";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
-import { MetSourceTag, sourceSentence } from "./MetSourceTag";
-import { PLOT_LEFT, PLOT_RIGHT, W } from "./shared";
-import { separateLabels, usableCeilingM } from "./met-shared";
-import { SeriesEndLabels, type SeriesEndLabel } from "./SeriesEndLabels";
+import { MetChartHeader, sourceSentence } from "./MetSourceTag";
+import { MetLegend, type LegendEntry } from "./MetLegend";
+import { HourColumns, useHourPointer, type HourColumn } from "./HourColumns";
+import { heightReading } from "./met-readout";
+import { usableCeilingM } from "./met-shared";
 
 const HOUR_MS = 3_600_000;
-const H = 168;
-const PLOT = { top: 30, bottom: H - 26 };
-const TICK_LABEL_Y = H - 10;
 
-/** The band inline series labels must stay inside. */
-const LABEL_BAND: [number, number] = [PLOT.top + 8, PLOT.bottom - 3];
-
-/** One stroke definition per series, used by BOTH the line and its label
+/** One stroke definition per series, used by BOTH the line and its legend
  * swatch — the swatch is only trustworthy if it cannot drift from the line. */
 const BL_STROKE = { stroke: "var(--chart-3)", strokeWidth: 2 };
 const BASE_STROKE = { stroke: "var(--chart-5)", strokeWidth: 1.75, dash: "5 3" };
@@ -56,24 +53,35 @@ interface Point {
   blTop: number | null;
   /** Condensation level, display units AGL. */
   base: number | null;
-  capeJkg: number | null;
 }
 
 export function MetThermalChart({
   hours,
   source,
   axis,
+  frame,
   timeZone,
-  setReadout,
+  selectedMs,
+  onSelect,
 }: {
   hours: WeatherHour[];
   source: WeatherSource;
   axis: TimeAxis;
+  frame: ChartFrame;
   timeZone: string | undefined;
-  setReadout: (text: string | null) => void;
+  selectedMs: number | null;
+  onSelect: (tMs: number | null) => void;
 }) {
   // Heights follow the altitude preference; providers report metres.
   const alt = unitDisplay("m", useUnits());
+
+  const columns: HourColumn[] = hours.map((h) => {
+    const tMs = new Date(h.t).getTime();
+    const when = formatTimeRange(h.t, new Date(tMs + HOUR_MS).toISOString(), timeZone);
+    const reading = heightReading(h, alt);
+    return { tMs, label: reading ? `${when} — ${reading}` : `${when} — no height figures` };
+  });
+  const pointer = useHourPointer(frame, axis, columns, onSelect);
 
   const points: Point[] = hours.map((h) => {
     const tMs = new Date(h.t).getTime();
@@ -82,7 +90,6 @@ export function MetThermalChart({
       cx: axis.x(tMs + HOUR_MS / 2),
       blTop: h.boundaryLayerDepthM != null ? h.boundaryLayerDepthM * alt.factor : null,
       base: h.cloudBaseAglM != null ? h.cloudBaseAglM * alt.factor : null,
-      capeJkg: h.capeJkg,
     };
   });
 
@@ -91,12 +98,15 @@ export function MetThermalChart({
   );
   if (values.length === 0) return null;
 
-  const yMax = Math.max(...values) * 1.1;
-  const y = linearScale([0, yMax], [PLOT.bottom, PLOT.top]);
-  const yTicks = niceTicks([0, yMax], 3);
+  // Heights in ems of the label size: room for the unit stamp, the plot, and
+  // a row for the time labels.
+  const em = frame.fontSize;
+  const plot = { top: em * 1.5, bottom: em * 10 };
+  const H = plot.bottom + em * 2;
 
-  const clampLabel = (v: number) =>
-    Math.min(LABEL_BAND[1], Math.max(LABEL_BAND[0], v));
+  const yMax = Math.max(...values) * 1.1;
+  const y = linearScale([0, yMax], [plot.bottom, plot.top]);
+  const yTicks = niceTicks([0, yMax], 3);
 
   /** Line through the available points, lifting the pen across gaps. */
   const path = (pick: (p: Point) => number | null): string => {
@@ -145,171 +155,117 @@ export function MetThermalChart({
       ? "no thermal top in these hours"
       : "no thermal top — this dataset carries no boundary-layer height";
 
-  const readout = (p: Point): string => {
-    const when = formatTimeRange(
-      new Date(p.tMs).toISOString(),
-      new Date(p.tMs + HOUR_MS).toISOString(),
-      timeZone
-    );
-    const parts: string[] = [];
-    if (p.blTop !== null)
-      parts.push(`thermal top ${p.blTop.toFixed(0)} ${alt.unit} AGL`);
-    if (p.base !== null)
-      parts.push(`cloud base ${p.base.toFixed(0)} ${alt.unit} AGL`);
-    if (p.base !== null && p.blTop !== null) {
-      parts.push(p.base > p.blTop ? "blue" : "cumulus");
-    }
-    if (p.capeJkg !== null) parts.push(`CAPE ${Math.round(p.capeJkg)} J/kg`);
-    return `${when} — ${parts.join(", ")}`;
-  };
-
-  // Label positions for the two line ends, separated so they stay readable.
-  const lastBl = points.at(-1)?.blTop ?? null;
-  const lastBase = points.at(-1)?.base ?? null;
-  const endLabels: SeriesEndLabel[] = [];
-  if (hasBl && lastBl !== null && hasBase && lastBase !== null) {
-    const [yBl, yBase] = separateLabels(y(lastBl) - 5, y(lastBase) + 11, LABEL_BAND);
-    endLabels.push({ key: "bl", text: "thermal top", y: yBl, ...BL_STROKE });
-    endLabels.push({ key: "base", text: "cloud base", y: yBase, ...BASE_STROKE });
-  } else if (hasBl && lastBl !== null) {
-    endLabels.push({
-      key: "bl",
-      text: "thermal top",
-      y: clampLabel(y(lastBl) - 5),
-      ...BL_STROKE,
-    });
-  } else if (hasBase && lastBase !== null) {
-    endLabels.push({
-      key: "base",
-      text: "cloud base",
-      y: clampLabel(y(lastBase) + 11),
-      ...BASE_STROKE,
-    });
-  }
+  // Solid for the thermal top, dashed for cloud base. The two lines cross on
+  // exactly the interesting day (cloud base passing the thermal top is blue
+  // turning to cumulus), so the swatch, not the position, names them.
+  const legend: LegendEntry[] = [];
+  if (hasBl) legend.push({ key: "bl", text: "thermal top", ...BL_STROKE });
+  if (hasBase) legend.push({ key: "base", text: "cloud base", ...BASE_STROKE });
+  if (missingNote) legend.push({ key: "missing", kind: "note", text: missingNote });
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="h-auto w-full"
-      role="img"
-      aria-label={
-        `Modelled thermal ceiling by hour above ground level: ` +
-        [
-          hasBl ? "the top of the mixed layer" : null,
-          hasBase ? "the condensation level (cloud base)" : null,
-        ]
-          .filter(Boolean)
-          .join(" and ") +
-        `, peaking at ${Math.max(...values).toFixed(0)} ${alt.unit}. ` +
-        (missingNote ? `${missingNote}. ` : "") +
-        sourceSentence(source)
-      }
-      onMouseLeave={() => setReadout(null)}
-    >
-      <text
-        aria-hidden
-        x={PLOT_LEFT - 38}
-        y={12}
-        className="fill-current text-[10px] font-medium text-muted-foreground"
+    <div className="space-y-0.5" data-met-chart="height">
+      <MetChartHeader title="Weather: height" source={source} />
+      <MetLegend entries={legend} />
+      <svg
+        viewBox={`0 0 ${frame.width} ${H}`}
+        className="h-auto w-full select-none"
+        role="group"
+        aria-label={
+          `Modelled thermal ceiling by hour above ground level: ` +
+          [
+            hasBl ? "the top of the mixed layer" : null,
+            hasBase ? "the condensation level (cloud base)" : null,
+          ]
+            .filter(Boolean)
+            .join(" and ") +
+          `, peaking at ${Math.max(...values).toFixed(0)} ${alt.unit}. ` +
+          (missingNote ? `${missingNote}. ` : "") +
+          sourceSentence(source)
+        }
+        {...pointer}
       >
-        Weather: height
-      </text>
-      <MetSourceTag source={source} y={12} />
-      {missingNote ? (
-        <text
-          aria-hidden
-          x={PLOT_LEFT - 38}
-          y={24}
-          className="fill-current text-[9px] text-muted-foreground"
-        >
-          {missingNote}
-        </text>
-      ) : null}
-
-      <TimeGridColumns axis={axis} top={PLOT.top} bottom={PLOT.bottom} />
-      {yTicks.map((t) => (
-        <line
-          key={`gy${t}`}
-          x1={PLOT_LEFT}
-          x2={PLOT_RIGHT}
-          y1={y(t)}
-          y2={y(t)}
-          className="stroke-border"
-          strokeWidth={1}
-        />
-      ))}
-      <g aria-hidden className="text-[10px] text-muted-foreground">
+        <TimeGridColumns axis={axis} top={plot.top} bottom={plot.bottom} />
         {yTicks.map((t) => (
-          <text
-            key={`ty${t}`}
-            x={PLOT_LEFT - 6}
-            y={y(t) + 3}
-            textAnchor="end"
-            className="fill-current"
-          >
-            {formatTickValue(alt.unit, t)}
-          </text>
+          <line
+            key={`gy${t}`}
+            x1={frame.plotLeft}
+            x2={frame.plotRight}
+            y1={y(t)}
+            y2={y(t)}
+            className="stroke-border"
+            strokeWidth={1}
+          />
         ))}
-      </g>
+        {/* Bare numbers with the unit stamped once — and the stamp says AGL,
+            which the ticks never did. */}
+        <g aria-hidden fontSize={em} className="text-muted-foreground">
+          {yTicks.map((t) => (
+            <text
+              key={`ty${t}`}
+              x={frame.plotLeft - em * 0.6}
+              y={y(t) + em * 0.35}
+              textAnchor="end"
+              className="fill-current"
+            >
+              {formatMetricValue(alt.unit, t).replace(/\.0+$/, "")}
+            </text>
+          ))}
+          {/* From the chart's left edge, not right-aligned to the ticks as
+              `AxisUnit` is: the stamp can be wider than the margin. */}
+          <text x={0} y={plot.top - em * 0.3} className="fill-current">
+            {`${alt.unit} AGL`}
+          </text>
+        </g>
 
-      {/* Usable band — floor to whichever ceiling is lower that hour. */}
-      {usableRuns.map((r) => (
-        <path
-          key={`band${r[0].tMs}`}
-          aria-hidden
-          d={
-            r.map((p, i) => `${i === 0 ? "M" : "L"}${p.cx.toFixed(1)},${y(usableCeiling(p)!).toFixed(1)}`).join("") +
-            `L${r.at(-1)!.cx.toFixed(1)},${y(0).toFixed(1)}` +
-            `L${r[0].cx.toFixed(1)},${y(0).toFixed(1)}Z`
-          }
-          style={{ fill: "var(--chart-3)" }}
-          opacity={0.13}
+        {/* Usable band — floor to whichever ceiling is lower that hour. */}
+        {usableRuns.map((r) => (
+          <path
+            key={`band${r[0].tMs}`}
+            aria-hidden
+            d={
+              r.map((p, i) => `${i === 0 ? "M" : "L"}${p.cx.toFixed(1)},${y(usableCeiling(p)!).toFixed(1)}`).join("") +
+              `L${r.at(-1)!.cx.toFixed(1)},${y(0).toFixed(1)}` +
+              `L${r[0].cx.toFixed(1)},${y(0).toFixed(1)}Z`
+            }
+            style={{ fill: "var(--chart-3)" }}
+            opacity={0.13}
+          />
+        ))}
+
+        {hasBl ? (
+          <path
+            d={path((p) => p.blTop)}
+            fill="none"
+            style={{ stroke: BL_STROKE.stroke }}
+            strokeWidth={BL_STROKE.strokeWidth}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ) : null}
+        {hasBase ? (
+          <path
+            d={path((p) => p.base)}
+            fill="none"
+            style={{ stroke: BASE_STROKE.stroke }}
+            strokeWidth={BASE_STROKE.strokeWidth}
+            strokeDasharray={BASE_STROKE.dash}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ) : null}
+
+        <TimeTickLabels axis={axis} y={plot.bottom + em * 1.4} frame={frame} />
+        <HourColumns
+          columns={columns}
+          axis={axis}
+          top={0}
+          bottom={plot.bottom}
+          selectedMs={selectedMs}
+          onSelect={onSelect}
         />
-      ))}
-
-      {hasBl ? (
-        <path
-          d={path((p) => p.blTop)}
-          fill="none"
-          style={{ stroke: BL_STROKE.stroke }}
-          strokeWidth={BL_STROKE.strokeWidth}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-      ) : null}
-      {hasBase ? (
-        <path
-          d={path((p) => p.base)}
-          fill="none"
-          style={{ stroke: BASE_STROKE.stroke }}
-          strokeWidth={BASE_STROKE.strokeWidth}
-          strokeDasharray={BASE_STROKE.dash}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-      ) : null}
-
-      {/* Inline labels, each behind a sample of its own stroke — solid for
-          the thermal top, dashed for cloud base — and pushed apart where the
-          two lines converge, which is exactly the interesting day (cloud base
-          crossing the thermal top is blue turning to cumulus), so overlap
-          here is the common case, not an edge one. */}
-      <SeriesEndLabels x={PLOT_RIGHT - 2} labels={endLabels} />
-
-      {points.map((p) => (
-        <rect
-          key={`h${p.tMs}`}
-          x={axis.x(p.tMs)}
-          width={Math.max(0, axis.x(p.tMs + HOUR_MS) - axis.x(p.tMs))}
-          y={0}
-          height={PLOT.bottom}
-          fill="transparent"
-          onMouseEnter={() => setReadout(readout(p))}
-        />
-      ))}
-
-      <TimeTickLabels axis={axis} y={TICK_LABEL_Y} />
-    </svg>
+      </svg>
+    </div>
   );
 }
 

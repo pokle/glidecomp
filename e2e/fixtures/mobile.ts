@@ -47,6 +47,9 @@ export const MOBILE_SPEC_FILES = [
   // The comp page's task list: a row opens its task, and Back has to return
   // the list at the same scroll, on a screen where it runs well past the fold.
   "comp-tasks-list.spec.ts",
+  // The task page's weather charts (#860): a phone is where their labels were
+  // painted at 5px and where a hover readout could not be reached at all.
+  "task-weather-charts.spec.ts",
   // The routed task editors (#637) — settings, weather notes and the route
   // editor. Same reason as the comp settings pages: built mobile-first, and
   // the route editor is the surface that most needed it.
