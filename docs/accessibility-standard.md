@@ -307,6 +307,9 @@ differs. Know which surface you're touching:
   - Both are `(pointer: coarse)`-only. A mouse is already precise at 24px, and
     on the desktop an invisible 44px box would just steal clicks from its
     neighbours.
+- **A chart's dots and lines are not sized as targets.** The chart itself
+  answers the pointer and chooses the nearest mark (§7), so the target is the
+  whole plot.
 
 ---
 
@@ -417,9 +420,38 @@ they get explicit rules:
     deliberately; two chart families spelling the same furniture two ways is the
     drift a shared module prevents. Everything in them is presentation-only with
     no DOM access, so they are safe in the SSR bundle.
+- **A chart's labels are painted at 11px or more at every width** (issue
+  #860). An inline SVG scales its type with its width. `text-[10px]` in a
+  560-unit drawing is painted at 5.7px on a phone, and the source still says
+  10. There are two ways to hold a size:
+  - `charts/use-chart-box.ts`: the viewBox is as wide as the chart is drawn.
+    One unit is one pixel, labels are 13px, and margins are multiples of the
+    type size. Use this for a new chart. The weather charts, the horserace, the
+    leg waterfall and the consistency map are drawn this way.
+  - `charts/use-chart-label-size.ts`: a fixed viewBox, with the type grown
+    until it is painted at the size wanted. The rank scatter and the report
+    card's charts are drawn this way.
+  - Measure labels as PAINTED, after the SVG's scaling, in the e2e
+    (`e2e/analysis-charts.spec.ts`, `e2e/task-weather-charts.spec.ts`). A class
+    or a `font-size` attribute says nothing about the painted size.
+  - A label that has no room is moved, cut short with an ellipsis or left out.
+    It is never made smaller and never left to run off the chart.
+- **A mark that a chart can name is chosen by pointing near it, and no
+  instruction says "hover"** (issue #860). The chart answers the pointer and
+  finds the nearest dot or line (`charts/use-nearest-pointer.ts`):
+  - A tap chooses the nearest mark, however far away it is. A finger dragged
+    across the chart does the same. Vertical scrolling stays with the page.
+  - A mouse hovers or clicks within 32px of a mark. Empty space stays empty.
+  - Choosing moves focus to the mark. A tap and an arrow key therefore end in
+    the same state, and leaving the chart ends the choice.
+  - The chosen mark is named in the line ABOVE the plot
+    (`charts/ChartReadout.tsx`). A hand covers what is below a finger.
+  - An hour on the weather charts is chosen the same way along one axis
+    (`charts/day-profile/HourColumns.tsx`).
 - Chart/track colours meet the 3:1 non-text-contrast bar and are
   distinguishable without colour (line style, direct labels, markers) — see the
-  `dataviz` skill.
+  `dataviz` skill. The horserace is the worked example: each coloured line ends
+  in its pilot's rank, and the legend above the plot gives the rank a name.
 - Map interactions follow `docs/mapbox-interactions-spec.md`; any keyboard
   affordances added for accessibility become part of that single-source spec so
   all providers match.
@@ -446,6 +478,7 @@ Accessibility (docs/accessibility-standard.md)
 - [ ] Targets ≥24px (≥44px on a coarse pointer — grow it, or `touch-target`)
 - [ ] Alt text on images (empty for decorative)
 - [ ] Maps/charts: essential info also available as accessible text/table
+- [ ] Charts: labels painted at 11px or more on a phone; a mark is chosen by pointing near it, and nothing says "hover"
 ```
 
 ---

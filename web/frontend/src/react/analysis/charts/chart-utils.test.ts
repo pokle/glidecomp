@@ -7,8 +7,10 @@ import {
   loessTrend,
   niceTicks,
   percentileRank,
+  polylineExtent,
   quantileSorted,
   spreadLabels,
+  staggerRows,
 } from "./chart-utils";
 
 describe("percentileRank", () => {
@@ -156,6 +158,52 @@ describe("spreadLabels", () => {
   it("handles empty and single inputs", () => {
     expect(spreadLabels([], 11, 0, 100)).toEqual([]);
     expect(spreadLabels([50], 11, 0, 100)).toEqual([50]);
+  });
+});
+
+describe("staggerRows", () => {
+  it("keeps one row while the labels fit side by side", () => {
+    expect(staggerRows([40, 40, 40], 60, 8)).toBe(1);
+  });
+
+  it("steps down a row when neighbours would touch", () => {
+    // Seven 51px turnpoint names 37px apart: the Corryong horserace on a phone.
+    expect(staggerRows([51, 51, 51, 51, 51, 51, 51], 37, 8)).toBe(2);
+  });
+
+  it("sizes for the widest label, and stops at the cap", () => {
+    expect(staggerRows([20, 100, 20], 45, 8)).toBe(3);
+    expect(staggerRows([200, 200], 30, 8)).toBe(3);
+    expect(staggerRows([200, 200], 30, 8, 2)).toBe(2);
+  });
+
+  it("needs no rows for one label, or for no room at all", () => {
+    expect(staggerRows([500], 10, 8)).toBe(1);
+    expect(staggerRows([50, 50], 0, 8)).toBe(1);
+  });
+});
+
+describe("polylineExtent", () => {
+  // Rises left to right in pixels: y falls from 100 to 0.
+  const curve = [
+    { x: 0, y: 100 },
+    { x: 50, y: 60 },
+    { x: 100, y: 0 },
+  ];
+
+  it("reads the curve at the edges of the span, between its points", () => {
+    // At x=75 the second segment is at y=30; at x=100 it is at 0.
+    expect(polylineExtent(curve, 75, 100)).toEqual({ min: 0, max: 30 });
+  });
+
+  it("includes a point inside the span", () => {
+    // 25 → y=80, the vertex at 50 → 60, 75 → y=30.
+    expect(polylineExtent(curve, 25, 75)).toEqual({ min: 30, max: 80 });
+  });
+
+  it("has no answer where the curve does not pass", () => {
+    expect(polylineExtent(curve, 120, 160)).toBeNull();
+    expect(polylineExtent([], 0, 10)).toBeNull();
   });
 });
 

@@ -17,16 +17,21 @@
  * than leaving a silent absence.
  *
  * Labelling: the best/worst three pilots and the value extremes are named
- * permanently (selective direct labels); the focused or pinned dot is named
+ * permanently (selective direct labels); the selected or pinned dot is named
  * in place; and an opt-in checkbox labels every pilot, growing the chart
  * vertically so the names have room. In label-everyone mode the special
  * labels go bold to stand out of the crowd.
  *
+ * Selecting a dot: a tap, a click or a finger dragged across chooses the dot
+ * nearest the pointer (`charts/use-nearest-pointer.ts`), and a mouse moving
+ * near a dot does the same as a hover. Until issue #860 a dot answered only
+ * a mouse on its own 24-unit halo, about 14px across on a phone.
+ *
  * Accessibility: the figure carries a caption stating the statistics in
  * words; every dot is a focusable element with the pilot's name/value/rank as
  * its accessible name, arrow keys walk the dots in rank order, and the family
- * tables below the page remain the full data equivalent. A readout line under
- * the plot mirrors hover/focus for sighted users (works on touch, prints).
+ * tables below the page remain the full data equivalent. A readout line above
+ * the plot names the selected dot for sighted users.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/react/lib/utils";
@@ -45,6 +50,7 @@ import {
   linearScale,
   loessTrend,
   niceTicks,
+  polylineExtent,
   spreadLabels,
 } from "./chart-utils";
 // Re-exported where it grew up, so RankScatter's own tests and any reader
@@ -52,6 +58,10 @@ import {
 export { axisTitleFor };
 import { notableExcludedRanks, notableRanksPhrase } from "../exclusions";
 import { XAxisTitle, YAxisTitle } from "@/react/charts/AxisTitle";
+import { ChartReadout } from "@/react/charts/ChartReadout";
+import { approxTextWidth, truncateToWidth } from "@/react/charts/text-width";
+import { nearestPoint } from "@/react/charts/nearest";
+import { focusMark, nearestPointerProps } from "@/react/charts/use-nearest-pointer";
 
 const W = 560;
 /** The plot's viewBox width — the unit `minHeight` is expressed in, so a
@@ -253,9 +263,9 @@ export function RankScatter({
 
   const [focusIndex, setFocusIndex] = useState(0);
   const [focusedTrack, setFocusedTrack] = useState<string | null>(null);
-  const [readout, setReadout] = useState<ScatterPoint | null>(null);
+  const [hoveredTrack, setHoveredTrack] = useState<string | null>(null);
   const dotRefs = useRef<(SVGGElement | null)[]>([]);
-  // Page-wide pilot highlight (no-op outside the provider): hovering a dot
+  // Page-wide pilot highlight (no-op outside the provider): selecting a dot
   // lights the pilot up in the heatmap and tables, and vice versa.
   const { highlight, setHighlight } = usePilotHighlight();
   const { svgRef, fontSize } = useBodySizedLabel(W);
@@ -268,7 +278,10 @@ export function RankScatter({
   // line (the unit in words) is what stops a phone-width chart clipping
   // "kilometres per hour" off both sides.
   const margin = {
-    top: MARGIN.top,
+    // The top-ranked pilot's name sits at the top of the plot, and a line of
+    // body-sized type is taller than the 10 units this margin was cut for:
+    // its ascenders were sliced off by the frame.
+    top: Math.max(MARGIN.top, Math.round(fontSize * 0.65)),
     right: MARGIN.right,
     bottom: Math.max(
       MARGIN.bottom,
@@ -310,7 +323,7 @@ export function RankScatter({
   // caller's floor (the full-size chart page's measured aspect) comes in on
   // the same max(): whichever wants more room wins.
   const height = Math.max(
-    BASE_H + (margin.bottom - MARGIN.bottom),
+    BASE_H + (margin.bottom - MARGIN.bottom) + (margin.top - MARGIN.top),
     minHeight ?? 0,
     showAllLabels ? margin.top + margin.bottom + points.length * labelGap + 16 : 0
   );
@@ -325,10 +338,32 @@ export function RankScatter({
   const x = linearScale(xDomain, [plot.left + 10, plot.right - 10]);
   const y = linearScale([1, maxRank], [plot.top + 8, plot.bottom - 8]);
 
-  const trendPath = trendRanks
-    ? `M${trendRanks.map((p) => `${x(p.x).toFixed(1)},${y(p.y).toFixed(1)}`).join("L")}`
+  const trendPixels = trendRanks?.map((p) => ({ x: x(p.x), y: y(p.y) }));
+  const trendPath = trendPixels
+    ? `M${trendPixels.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join("L")}`
     : null;
   const trendEnd = trendRanks?.[trendRanks.length - 1];
+  // The curve's one label, at its right-hand end. It sits on the side of the
+  // curve AWAY from rank 1, because the permanent top-3 names live up there
+  // and the curve's better-ranked end usually points straight at them. And
+  // it sits clear of the curve along its whole width: at this type size a
+  // fixed offset from the end point put the word on the line it names.
+  const trendLabel = (() => {
+    const end = trendPixels?.[trendPixels.length - 1];
+    if (!trendEnd || !end || !trendPixels) return null;
+    const right = end.x - fontSize * 0.4;
+    const width = approxTextWidth("trend", fontSize) * 1.1;
+    const extent = polylineExtent(trendPixels, right - width, end.x) ?? {
+      min: end.y,
+      max: end.y,
+    };
+    const below = trendEnd.y < maxRank / 2;
+    const baseline = below ? extent.max + fontSize * 1.05 : extent.min - fontSize * 0.45;
+    return {
+      x: right,
+      y: Math.min(plot.bottom - fontSize * 0.3, Math.max(plot.top + fontSize * 0.9, baseline)),
+    };
+  })();
 
   const xTicks = niceTicks(xDomain, 5);
   // Rank ticks: always show 1 (it is the whole point of the axis), then
@@ -358,11 +393,14 @@ export function RankScatter({
 
   // What actually gets a label: everyone (opt-in), or the specials plus the
   // focused or pinned dot — naming the one you just clicked (or picked in
-  // Highlight a pilot) in place beats making you glance down at the readout.
+  // Highlight a pilot) in place beats making you glance away to the readout.
   const focusedIdx =
     focusedTrack !== null ? points.findIndex((p) => p.trackFile === focusedTrack) : -1;
+  // The dot under the mouse is highlighted page-wide through the provider.
+  // Read it here too, so the chart marks it where there is no provider.
+  const highlightTrack = hoveredTrack ?? highlight;
   const highlightedIdx =
-    highlight !== null ? points.findIndex((p) => p.trackFile === highlight) : -1;
+    highlightTrack !== null ? points.findIndex((p) => p.trackFile === highlightTrack) : -1;
   const labelIndices = showAllLabels
     ? points.map((_, i) => i)
     : [
@@ -378,12 +416,17 @@ export function RankScatter({
       : focusedIdx >= 0
         ? points[focusedIdx]
         : undefined;
+  // Named above the plot: what THIS chart chose — the dot under the mouse,
+  // else the one with focus — not the page's highlight, which may be a pin.
+  const named = points.find((p) => p.trackFile === (hoveredTrack ?? focusedTrack));
   // Adjacent ranks sit only a few pixels apart vertically, so the label
   // baselines are spread to at least a line-height apart.
   const labelYs = spreadLabels(
-    labelIndices.map((i) => y(points[i].rank) + 3),
+    labelIndices.map((i) => y(points[i].rank) + fontSize * 0.35),
     labelGap,
-    plot.top + 8,
+    // A baseline, measured from the top of the drawing: the first name's
+    // ascenders need the room above it.
+    fontSize * 0.85,
     plot.bottom - 2
   );
 
@@ -420,18 +463,30 @@ export function RankScatter({
     }
   }
 
+  const dots = points.map((p) => ({ x: x(p.value), y: y(p.rank) }));
+  const pointer = nearestPointerProps({
+    viewBoxWidth: W,
+    nearest: (px, py) => nearestPoint(dots, px, py),
+    onHover: (i) => {
+      const track = i === null ? null : points[i].trackFile;
+      setHoveredTrack(track);
+      setHighlight(track);
+    },
+    onPick: (i) => focusMark(dotRefs.current[i]),
+  });
+
   return (
-    <figure className="space-y-1">
+    <figure className="space-y-1" data-chart="rank-scatter">
+      <ChartReadout prompt="Select a dot to name the pilot behind it." lines={2}>
+        {named ? pointLabel(named) : null}
+      </ChartReadout>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${height}`}
-        className="h-auto w-full"
+        className="h-auto w-full select-none"
         role="group"
         aria-label={`${metric.label} against rank, scatter plot. ${caption}`}
-        onMouseLeave={() => {
-          setReadout(null);
-          setHighlight(null);
-        }}
+        {...pointer}
       >
         {/* Gridlines first, so dots draw over them. */}
         {xTicks.map((t) => (
@@ -491,7 +546,9 @@ export function RankScatter({
             the single most misreadable thing about this chart — the corner
             label that used to sit here said only "rank". */}
         <YAxisTitle
-          x={Math.max(12, Math.round(fontSize * 0.95))}
+          // A whole line of type in from the edge: the rotated line's ascent
+          // points left, and at 0.95 its box ran a hair off the frame.
+          x={Math.max(12, Math.round(fontSize * 1.05))}
           top={plot.top}
           bottom={plot.bottom}
           fontSize={fontSize}
@@ -520,27 +577,22 @@ export function RankScatter({
             role="img"
             aria-label={pointLabel(p)}
             tabIndex={i === focusIndex ? 0 : -1}
+            data-dot={p.trackFile}
             className="cursor-default outline-none"
             onKeyDown={(e) => onDotKeyDown(e, i)}
             onFocus={() => {
               setFocusIndex(i);
               setFocusedTrack(p.trackFile);
-              setReadout(p);
               setHighlight(p.trackFile);
             }}
             onBlur={() => {
               setFocusedTrack(null);
               setHighlight(null);
             }}
-            onMouseEnter={() => {
-              setReadout(p);
-              setHighlight(p.trackFile);
-            }}
           >
-            {/* Invisible halo: a 24px pointer/focus target over a 10px dot
-                (accessibility standard §4.5, WCAG 2.5.8). */}
-            <circle cx={x(p.value)} cy={y(p.rank)} r={12} className="fill-transparent" />
-            <circle cx={x(p.value)} cy={y(p.rank)} r={5} className="fill-chart-1/70" />
+            {/* The pointer is answered by the <svg>, which finds the nearest
+                dot, so a dot needs no invisible halo for a target. */}
+            <circle cx={dots[i].x} cy={dots[i].y} r={5} className="fill-chart-1/70" />
           </g>
         ))}
 
@@ -558,23 +610,29 @@ export function RankScatter({
           {labelIndices.map((pi, k) => {
             const p = points[pi];
             const px = x(p.value);
-            // Anchor away from the nearer plot edge so names never run off.
-            const onRight = px > (plot.left + plot.right) / 2;
+            // In label-everyone mode the special pilots go bold to stand out
+            // of the crowd.
+            const bold = showAllLabels && specialIndices.has(pi);
+            // Anchor away from the nearer edge, which is the side with more
+            // room — and where even that is too little, cut the name short
+            // and say so. A dot in the middle of a phone-width chart has room
+            // for about fifteen characters either side; a longer name ran
+            // off the frame and was sliced there. The line above the plot has
+            // a selected pilot's name in full.
+            const nameLeft = plot.left;
+            const nameRight = W - 2;
+            const onRight = px > (nameLeft + nameRight) / 2;
             const inset = Math.max(9, fontSize * 0.55);
+            const room = onRight ? px - inset - nameLeft : nameRight - (px + inset);
             return (
               <text
                 key={p.trackFile}
                 x={onRight ? px - inset : px + inset}
                 y={labelYs[k]}
                 textAnchor={onRight ? "end" : "start"}
-                className={cn(
-                  "fill-current",
-                  // In label-everyone mode the special pilots go bold to
-                  // stand out of the crowd.
-                  showAllLabels && specialIndices.has(pi) && "font-semibold"
-                )}
+                className={cn("fill-current", bold && "font-semibold")}
               >
-                {p.rank}. {p.name}
+                {truncateToWidth(`${p.rank}. ${p.name}`, fontSize * (bold ? 1.08 : 1), room)}
               </text>
             );
           })}
@@ -613,20 +671,19 @@ export function RankScatter({
 
         {/* Direct label rather than a legend box: with one curve, a legend
             would be a whole extra element to explain a single line, and this
-            names it where the eye already is. It sits on the side of the
-            curve's end AWAY from rank 1, because the permanent top-3 names
-            live up there and the curve's better-ranked end usually points
-            straight at them. Drawn last, over both dots and pilot names. */}
-        {trendEnd ? (
+            names it where the eye already is. Placed by `trendLabel` above,
+            at the chart's own type size: it was the one label left at 10
+            viewBox units, which a phone painted at 5.7px. Drawn last, over
+            both dots and pilot names. */}
+        {trendLabel ? (
           <text
             aria-hidden
-            x={x(trendEnd.x) - 6}
-            y={Math.min(
-              plot.bottom - 3,
-              Math.max(plot.top + 9, y(trendEnd.y) + (trendEnd.y < maxRank / 2 ? 15 : -9))
-            )}
+            x={trendLabel.x}
+            y={trendLabel.y}
             textAnchor="end"
-            className="fill-current stroke-background text-[10px] font-medium text-foreground [paint-order:stroke] [stroke-width:3px]"
+            fontSize={fontSize}
+            strokeWidth={Math.max(3, fontSize * 0.18)}
+            className="fill-current stroke-background font-medium text-foreground [paint-order:stroke]"
           >
             trend
           </text>
@@ -638,8 +695,8 @@ export function RankScatter({
             it punches through the curve) is the pin you can actually find —
             shape as well as colour, matching the glyph next to Highlight a
             pilot. Colour is not the only difference.
-            pointer-events none: the rank-order dots below keep the hit
-            target and the keyboard. */}
+            pointer-events none: the rank-order dots below keep the
+            keyboard, and the <svg> answers the pointer. */}
         {emphasized ? (
           <PilotHighlightMark
             x={x(emphasized.value)}
@@ -658,13 +715,6 @@ export function RankScatter({
           Label every pilot
         </Checkbox>
       ) : null}
-
-      {/* Visual mirror of hover/focus — the dots' aria-labels serve screen
-          readers, so no aria-live here (it would double-announce). Hidden in
-          print: an invitation to hover is meaningless on paper. */}
-      <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
-        {readout ? pointLabel(readout) : "Hover or focus a dot to name the pilot behind it."}
-      </p>
 
       {/* The axes now say which way is which, so the caption no longer
           opens by explaining them — it is the statistics, in words. */}

@@ -47,8 +47,8 @@ import type { MetricReport, TaskAnalysisReport } from "../analysis/types";
 const METRICS_SECTION = findTaskAnalysisSection("metrics")!;
 
 /**
- * Room kept below the plot for the rest of the figure — the "Label every
- * pilot" checkbox, the hover readout line and the caption. Measured at
+ * Room kept for the rest of the figure — the readout line above the plot, and
+ * the "Label every pilot" checkbox and the caption below it. Measured at
  * 67–115px across phone-to-desktop widths (the caption wraps more when
  * narrow), so 8rem covers it with a little slack. Erring generous only makes
  * the plot slightly smaller than it could be.

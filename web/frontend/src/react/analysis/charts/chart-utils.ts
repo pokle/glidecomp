@@ -62,6 +62,58 @@ export function axisTitleFor(metric: Pick<MetricReport, "label" | "unit">): stri
     : `${metric.label} (${unitWords(metric.unit)})`;
 }
 
+/**
+ * How many rows a run of evenly spaced axis labels needs so that neighbours
+ * in a row do not touch.
+ *
+ * Turnpoint names are six to eight characters. At a size a phone can read,
+ * seven of them are wider than the phone, so they step down over two or
+ * three rows (label `i` goes in row `i % rows`) rather than shrink, turn on
+ * their side or lose every second name. Capped at `maxRows`: past that the
+ * rows read as a pile, and a few touching labels are the smaller fault.
+ */
+export function staggerRows(
+  labelWidths: readonly number[],
+  spacing: number,
+  gap: number,
+  maxRows = 3
+): number {
+  if (labelWidths.length < 2 || !(spacing > 0)) return 1;
+  const widest = Math.max(...labelWidths);
+  return Math.min(maxRows, Math.max(1, Math.ceil((widest + gap) / spacing)));
+}
+
+/**
+ * The lowest and highest y a polyline reaches between two x positions, or
+ * null where it does not pass between them. `points` must run left to right.
+ *
+ * For putting a label beside a curve rather than on it: a label as wide as
+ * `x0`–`x1` clears the curve if it sits wholly above `min` or below `max`.
+ */
+export function polylineExtent(
+  points: readonly { x: number; y: number }[],
+  x0: number,
+  x1: number
+): { min: number; max: number } | null {
+  let min = Infinity;
+  let max = -Infinity;
+  const take = (v: number) => {
+    min = Math.min(min, v);
+    max = Math.max(max, v);
+  };
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    if (p.x >= x0 && p.x <= x1) take(p.y);
+    const q = points[i + 1];
+    if (!q || q.x === p.x) continue;
+    // Where the segment p–q crosses either edge of the span.
+    for (const edge of [x0, x1]) {
+      if (edge > p.x && edge < q.x) take(p.y + ((q.y - p.y) * (edge - p.x)) / (q.x - p.x));
+    }
+  }
+  return min <= max ? { min, max } : null;
+}
+
 /** One sample of a fitted trend, in DATA space (not pixels). */
 export interface TrendPoint {
   x: number;

@@ -28,9 +28,10 @@ import { RankScatter, SCATTER_WIDTH } from "./RankScatter";
 import { DistributionStrip } from "./DistributionStrip";
 
 /**
- * Room kept below the plot for the rest of the figure (checkbox, readout,
- * caption) when filling leftover height in the side-by-side column. Same
- * budget as the full-size chart page (pages/TaskAnalysisMetricChart.tsx).
+ * Room kept for the rest of the figure (the readout line above the plot, the
+ * checkbox and the caption below it) when filling leftover height in the
+ * side-by-side column. Same budget as the full-size chart page
+ * (pages/TaskAnalysisMetricChart.tsx).
  */
 const CAPTION_ALLOWANCE = 128;
 
