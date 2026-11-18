@@ -179,6 +179,7 @@ export const E2E_SHARDS = {
     "email-otp-signin.spec.ts", // 5.4s
     "account-name-sync.spec.ts", // 5.3s
     "static-pages.spec.ts", // 5.1s
+    "data-cleaning-charts.spec.ts", // new — the content page's charts, as painted (#860) (chromium + mobile)
     "search.spec.ts", // 4.6s
     "transient-api-failure.spec.ts", // 4.5s
     "stack-wait.spec.ts", // new — the stack wait reaches hooks; ~0s, chromium only

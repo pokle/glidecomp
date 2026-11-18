@@ -131,6 +131,10 @@ export const MOBILE_SPEC_FILES = [
   // phone — no sideways scroll, the figure no taller than the screen — and
   // Back has to work there.
   "task-thermal-map.spec.ts",
+  // The worked-example charts on /scoring/data-cleaning (#860): static SVG
+  // that a phone painted with 6px labels. The painted size is the whole
+  // subject, and it depends on the width.
+  "data-cleaning-charts.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */

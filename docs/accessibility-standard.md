@@ -431,9 +431,17 @@ they get explicit rules:
   - `charts/use-chart-label-size.ts`: a fixed viewBox, with the type grown
     until it is painted at the size wanted. The rank scatter and the report
     card's charts are drawn this way.
+  - A static SVG on a content page cannot measure itself: the page is
+    prerendered and must read with JavaScript off. Draw it on a narrow
+    viewBox with 13-unit labels and cap the figure's width. The cap matters:
+    the size on a phone and the size on a desktop are one ratio. The five
+    charts on `/scoring/data-cleaning` are drawn this way (312 units, capped
+    at 26rem: 11.3px at 320px wide, 17.3px at the cap), by
+    `web/scripts/generate-data-cleaning-charts.ts`.
   - Measure labels as PAINTED, after the SVG's scaling, in the e2e
-    (`e2e/analysis-charts.spec.ts`, `e2e/task-weather-charts.spec.ts`). A class
-    or a `font-size` attribute says nothing about the painted size.
+    (`e2e/analysis-charts.spec.ts`, `e2e/task-weather-charts.spec.ts`,
+    `e2e/data-cleaning-charts.spec.ts`). A class or a `font-size` attribute
+    says nothing about the painted size.
   - A label that has no room is moved, cut short with an ellipsis or left out.
     It is never made smaller and never left to run off the chart.
 - **A mark that a chart can name is chosen by pointing near it, and no

@@ -1304,3 +1304,29 @@ test.describe("SSR — a tab that outlived a deploy", () => {
     );
   });
 });
+
+// The dev stack serves these charts through `astro dev`. This is the build:
+// Astro has prerendered the page and Tailwind has kept only the classes it
+// found, so a class the generator writes (`text-[13px]`, the figure's
+// `max-w-…`) that the build dropped would show here and nowhere else.
+// e2e/data-cleaning-charts.spec.ts holds the full set of checks.
+test.describe("the built /scoring/data-cleaning charts", () => {
+  for (const width of [1280, 320]) {
+    test(`labels are painted between 11px and 18px at ${width}px wide`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/scoring/data-cleaning");
+      const painted = await page.evaluate(() =>
+        [...document.querySelectorAll<SVGSVGElement>("figure[id] svg[viewBox]")].flatMap((svg) => {
+          const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+          return [...svg.querySelectorAll("text")].map(
+            (t) => parseFloat(getComputedStyle(t).fontSize) * scale
+          );
+        })
+      );
+      // Five figures, seven labels each at the least.
+      expect(painted.length).toBeGreaterThanOrEqual(35);
+      expect(Math.min(...painted)).toBeGreaterThanOrEqual(11);
+      expect(Math.max(...painted)).toBeLessThanOrEqual(18);
+    });
+  }
+});
