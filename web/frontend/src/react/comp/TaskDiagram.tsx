@@ -32,6 +32,7 @@ import type { XCTask } from "@glidecomp/engine";
 import { cn } from "@/react/lib/utils";
 import { useUnits } from "../lib/units";
 import { unitDisplay } from "../analysis/units";
+import { CHART_LABEL_PX, useChartLabelSize } from "@/react/charts/use-chart-label-size";
 import {
   buildTaskDiagram,
   describeTaskRoute,
@@ -104,10 +105,22 @@ export function TaskDiagram({
   };
 
   const withLabels = showLabels ?? preset.labelFontSize > 0;
-  // A preset with no label size still needs one when labels are forced on.
+  // The size the names are PAINTED at is what a reader gets, and the diagram
+  // is scaled to its pane: the `md` preset's 10 units were 10px only in a
+  // pane 340px wide, and 8px on a phone (issue #860). So a labelled diagram
+  // measures the width it is drawn at and sizes its type for it
+  // (charts/use-chart-label-size.ts), and the layout places the names at that
+  // size. The preset's own size is the floor, for a diagram drawn larger than
+  // its preset. Rounded, so the server and the browser agree on the paths.
+  const measured = useChartLabelSize(preset.width, CHART_LABEL_PX.footnote);
   const labelFontSize = withLabels
-    ? preset.labelFontSize || Math.max(8, Math.round(preset.height / 11))
+    ? Math.max(
+        preset.labelFontSize || Math.max(8, Math.round(preset.height / 11)),
+        round2(measured.fontSize)
+      )
     : 0;
+  // How many drawing units one CSS pixel is, for sizing what a finger hits.
+  const unitsPerPx = measured.fontSize / CHART_LABEL_PX.footnote;
 
   const layout = useMemo(
     () =>
@@ -147,6 +160,9 @@ export function TaskDiagram({
 
   return (
     <svg
+      // Only a labelled diagram is measured: a glyph in a task list has no
+      // type to size, and a list of them would be a list of observers.
+      ref={withLabels ? measured.svgRef : undefined}
       viewBox={`0 0 ${layout.width} ${layout.height}`}
       width={layout.width}
       height={layout.height}
@@ -285,7 +301,9 @@ export function TaskDiagram({
       })}
 
       {/* Hit targets last so they sit on top of everything they select. Each is
-          ≥ 24 units across (WCAG 2.5.8 — the radius is half of that).
+          44 CSS px across on a labelled diagram, whatever size it is drawn at
+          (accessibility standard §4.5) — they were 24 units, which a phone
+          drew about 20px across — and never under 24 units.
 
           Keyboard: the turnpoints are a composite widget with a ROVING
           tabindex, not N tab stops. A twelve-turnpoint task would otherwise
@@ -298,7 +316,7 @@ export function TaskDiagram({
             <TurnpointHitArea
               key={`hit-${tp.index}`}
               turnpoint={tp}
-              radius={Math.max(12, preset.dotRadius * 4)}
+              radius={Math.max(12, preset.dotRadius * 4, withLabels ? 22 * unitsPerPx : 0)}
               interactive={interactive}
               isTabStop={tp.index === tabStopIndex}
               onEnter={() => setActive(tp)}

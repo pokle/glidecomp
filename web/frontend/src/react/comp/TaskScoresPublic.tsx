@@ -1,5 +1,5 @@
 /**
- * Public per-task scores: a compact top-3 podium per class plus the link to
+ * Public per-task scores: the top 3 of each class as rows, plus the link to
  * the competition's full scores page (/comp/:id/scores?task=:id), which is the
  * canonical public scores surface.
  *
@@ -22,7 +22,11 @@ import { useUser } from "../lib/user";
 import { formatInstant } from "../lib/time";
 import { useMounted } from "../lib/use-mounted";
 import { formatDistance, useUnits } from "../lib/units";
-import { formatRankedScore, ordinal } from "../lib/format";
+import { ordinal } from "../lib/format";
+import { openedHereFrom } from "../lib/leave";
+import { ChevronRightIcon } from "lucide-react";
+import { navRowClass } from "@/react/rac/nav-list";
+import { Points, ScoreLinkRow, ScoreList } from "./score-rows";
 import { pilotPath } from "../lib/slug";
 import { useCompName } from "./comp-name-context";
 import { HistoricalRulesNotice, RulesEditionBadge } from "./RulesEdition";
@@ -260,9 +264,15 @@ export function TaskScoresPublic({
             </p>
           ) : (
             <>
-              {score.class_scores.map((cls) => (
+              {score.class_scores.map((cls, i) => (
                 <ClassPodium
                   key={cls.pilot_class}
+                  // The first class is the scores page's default; another is named.
+                  moreHref={
+                    i === 0
+                      ? scoresHref
+                      : `${scoresHref}&class=${encodeURIComponent(cls.pilot_class)}`
+                  }
                   compId={compId}
                   taskId={taskId}
                   taskName={taskName}
@@ -292,9 +302,14 @@ export function TaskScoresPublic({
 }
 
 /**
- * Top 3 of one class, read-only. The full per-pilot table (and every other
- * pilot) lives on the scores page; each name links to the pilot's
+ * Top 3 of one class, as rows a finger can hit. The full list of the class is
+ * on the scores page, which the last row opens; each pilot's row opens their
  * step-by-step score explanation.
+ *
+ * The rows are the scores pages' own (`score-rows.tsx`), as the comp page's
+ * podium is. Until issue #860 a pilot here was a line of text with the name
+ * underlined: a link 22 px tall, where every other list of pilots had become
+ * rows (#885).
  */
 function ClassPodium({
   compId,
@@ -303,6 +318,7 @@ function ClassPodium({
   cls,
   showClassName,
   isOpenDistance,
+  moreHref,
 }: {
   compId: string;
   taskId: string;
@@ -310,44 +326,52 @@ function ClassPodium({
   cls: ClassScore;
   showClassName: boolean;
   isOpenDistance: boolean;
+  /** This class's full list on the scores page. */
+  moreHref: string;
 }) {
   const units = useUnits();
   const compName = useCompName();
   if (cls.pilots.length === 0) return null;
   const top = cls.pilots.slice(0, 3);
   const more = cls.pilots.length - top.length;
+  const page = taskName ?? "Task";
+  const distance = (m: number) => formatDistance(m, { decimals: 1, prefs: units }).withUnit;
 
   return (
-    <div className="mt-3">
-      {showClassName ? <h3 className="font-semibold">{cls.pilot_class}</h3> : null}
-      {/* No `text-sm`: the podium is primary content and takes the card's
-          body size (issue #704). */}
-      <ol className="mt-1.5 space-y-1">
+    <div className="mt-3 min-w-0">
+      {showClassName ? <h3 className="mb-1.5 font-semibold">{cls.pilot_class}</h3> : null}
+      <ScoreList label={`Top 3 — ${cls.pilot_class}`} page={page}>
         {top.map((p) => (
-          <li key={p.comp_pilot_id} className="flex flex-wrap items-baseline gap-x-2">
-            <span className="w-8 text-right tabular-nums text-muted-foreground">
-              {ordinal(p.rank)}
-            </span>
-            <AriaLink
-              href={pilotPath(compId, compName, taskId, taskName, p.comp_pilot_id, p.pilot_name)}
-              className="underline decoration-muted-foreground/40 underline-offset-4 outline-none data-hovered:decoration-current data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
-            >
-              {p.pilot_name}
-            </AriaLink>
-            <span className="tabular-nums text-muted-foreground">
-              {formatDistance(p.flown_distance, { decimals: 1, prefs: units }).withUnit}
-              {!isOpenDistance ? (
-                <> · <strong className="text-foreground">{formatRankedScore(p.total_score)}</strong> pts</>
-              ) : null}
-            </span>
-          </li>
+          <ScoreLinkRow
+            key={p.comp_pilot_id}
+            href={pilotPath(compId, compName, taskId, taskName, p.comp_pilot_id, p.pilot_name)}
+            rank={ordinal(p.rank)}
+            title={p.pilot_name}
+            // Open distance is ranked by the distance itself, so it is the
+            // row's figure; under GAP it is the row's second line.
+            detail={isOpenDistance ? undefined : distance(p.flown_distance)}
+            figure={
+              isOpenDistance ? (
+                <span className="shrink-0 text-right font-semibold tabular-nums">
+                  {distance(p.flown_distance)}
+                </span>
+              ) : (
+                <Points value={p.total_score} />
+              )
+            }
+          />
         ))}
-      </ol>
-      {more > 0 ? (
-        <p className="mt-1 pl-10 text-sm text-muted-foreground">
-          + {more} more pilot{more === 1 ? "" : "s"} scored
-        </p>
-      ) : null}
+        {more > 0 ? (
+          <li>
+            <AriaLink href={moreHref} routerOptions={openedHereFrom(page)} className={navRowClass}>
+              <span className="min-w-0 flex-1 pl-13 text-muted-foreground">
+                + {more} more pilot{more === 1 ? "" : "s"}
+              </span>
+              <ChevronRightIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+            </AriaLink>
+          </li>
+        ) : null}
+      </ScoreList>
     </div>
   );
 }
