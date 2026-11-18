@@ -18,10 +18,11 @@ import { bestDaylightWindow } from "@glidecomp/engine";
 import type { TaskWeather } from "./types";
 import { zoneAbbrev } from "@/react/lib/time";
 import { buildTimeAxis } from "@/react/analysis/charts/day-profile/time-axis";
-import { PLOT_LEFT, PLOT_RIGHT } from "@/react/analysis/charts/day-profile/shared";
+import { useChartFrame } from "@/react/analysis/charts/day-profile/frame";
 import {
   MetChartsGroup,
   MetAttribution,
+  MetReadout,
 } from "@/react/analysis/charts/day-profile/MetChartsGroup";
 import { weatherInstants } from "@/react/analysis/charts/day-profile/met-shared";
 import { TimeAxisTitle } from "@/react/analysis/charts/day-profile/TimeAxisParts";
@@ -49,7 +50,12 @@ export function TaskWeatherPanel({
   tooFarAhead?: boolean;
 }) {
   const timeZone = compTimezone ?? undefined;
-  const [readout, setReadout] = useState<string | null>(null);
+  // One hour selected for the whole stack: tap or drag on a phone, hover with
+  // a mouse, arrow keys from a keyboard (see HourColumns.tsx).
+  const [selectedMs, setSelectedMs] = useState<number | null>(null);
+  // The stack is laid out at the width it is really drawn — measured once
+  // here, so the three charts cannot disagree about where an hour is.
+  const { ref: frameRef, frame } = useChartFrame();
 
   // Only the flying day's daylight hours. A task with no launch-window or
   // deadline times falls back to a whole-day weather query (see the
@@ -70,8 +76,8 @@ export function TaskWeatherPanel({
   }, [weather]);
 
   const axis = useMemo(
-    () => buildTimeAxis(weatherInstants(hours), timeZone, [PLOT_LEFT, PLOT_RIGHT]),
-    [hours, timeZone]
+    () => buildTimeAxis(weatherInstants(hours), timeZone, [frame.plotLeft, frame.plotRight]),
+    [hours, timeZone, frame]
   );
 
   if (!weather || hours.length === 0 || !axis) {
@@ -94,20 +100,25 @@ export function TaskWeatherPanel({
   const zone = zoneAbbrev(new Date(axis.domainStart), timeZone);
 
   return (
-    <figure className="space-y-1">
+    <figure ref={frameRef} className="space-y-1">
       <MetChartsGroup
         weather={weather}
         hours={hours}
         axis={axis}
+        frame={frame}
         timeZone={timeZone}
-        setReadout={setReadout}
+        selectedMs={selectedMs}
+        onSelect={setSelectedMs}
       />
       {/* The axis all three share, named once at the foot of the stack. */}
-      <TimeAxisTitle zone={zone} />
+      <TimeAxisTitle zone={zone} frame={frame} />
 
-      <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
-        {readout ?? "Hover a chart for exact figures."}
-      </p>
+      <MetReadout
+        weather={weather}
+        hours={hours}
+        timeZone={timeZone}
+        selectedMs={selectedMs}
+      />
       <p className="text-xs text-muted-foreground">
         All charts share that one time axis. Arrows fly WITH the wind — the
         readout&rsquo;s direction figures are degrees the wind blows from.

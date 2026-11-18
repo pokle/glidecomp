@@ -50,7 +50,8 @@ import { TimeAxisTitle } from "./TimeAxisParts";
 import { WindHourlyChart } from "./WindHourlyChart";
 import { ClimbHourlyChart } from "./ClimbHourlyChart";
 import { WindLegsGantt } from "./WindLegsGantt";
-import { MetChartsGroup, MetAttribution } from "./MetChartsGroup";
+import { MetChartsGroup, MetAttribution, MetReadout } from "./MetChartsGroup";
+import { LEGACY_FRAME } from "./frame";
 import { weatherInstants } from "./met-shared";
 
 const HOUR_MS = 3_600_000;
@@ -132,6 +133,8 @@ export function DayProfilePanel({
 }) {
   const timeZone = compTimezone ?? undefined;
   const [readout, setReadout] = useState<string | null>(null);
+  // The modelled charts' selected hour (tap, drag, hover or arrow keys).
+  const [selectedMs, setSelectedMs] = useState<number | null>(null);
 
   const { wind, climb, legs, timing } = useMemo(() => {
     const all = metrics.flatMap((m) => m.extraSeries ?? []);
@@ -221,8 +224,19 @@ export function DayProfilePanel({
             weather={weather}
             hours={shownWeatherHours}
             axis={axis}
+            // The old fixed geometry, until the three track-derived charts
+            // below have their own label pass: all six share one left and
+            // right edge, so they change frame together or not at all.
+            frame={LEGACY_FRAME}
             timeZone={timeZone}
-            setReadout={setReadout}
+            selectedMs={selectedMs}
+            onSelect={setSelectedMs}
+          />
+          <MetReadout
+            weather={weather}
+            hours={shownWeatherHours}
+            timeZone={timeZone}
+            selectedMs={selectedMs}
           />
         </>
       ) : weatherPending ? (

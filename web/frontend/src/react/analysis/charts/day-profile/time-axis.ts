@@ -82,3 +82,16 @@ export function buildTimeAxis(
 
   return { domainStart, domainEnd, x: linearScale([domainStart, domainEnd], [x0, x1]), ticks };
 }
+
+/**
+ * How many ticks to step between LABELS so that neighbouring labels do not
+ * touch: 1 labels every tick, 2 every second one. The gridlines stay on every
+ * tick either way — a phone has room for eight hour lines, not for eight
+ * "13:00"s.
+ */
+export function tickLabelStride(axis: TimeAxis, minPitch: number): number {
+  if (axis.ticks.length < 2) return 1;
+  const pitch = Math.abs(axis.x(axis.ticks[1].ms) - axis.x(axis.ticks[0].ms));
+  if (!(pitch > 0)) return 1;
+  return Math.max(1, Math.ceil(minPitch / pitch));
+}

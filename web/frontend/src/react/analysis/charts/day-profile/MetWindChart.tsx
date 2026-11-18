@@ -19,39 +19,30 @@
  *
  * A dataset without pressure levels (ERA5, and so every pre-2022 comp) gets
  * the surface line alone, labelled as such.
+ *
+ * Geometry comes from the stack's {@link ChartFrame}, and every height here
+ * is a multiple of its type size — see frame.ts. The title, the source stamp
+ * and the legend are text ABOVE the plot, not in it.
  */
 import type { WeatherHour, WeatherSource } from "@/react/weather/types";
 import { flyingHeightLevel } from "@/react/weather/types";
 import { formatTimeRange } from "@/react/lib/time";
 import { useUnits } from "@/react/lib/units";
+import { formatMetricValue } from "../../types";
 import { unitDisplay } from "../../units";
-import { formatTickValue, linearScale, niceTicks } from "../chart-utils";
+import { linearScale, niceTicks } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
+import type { ChartFrame } from "./frame";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
-import { MetSourceTag, sourceSentence } from "./MetSourceTag";
-import { separateLabels } from "./met-shared";
-import { SeriesEndLabels, type SeriesEndLabel } from "./SeriesEndLabels";
-import {
-  PLOT_LEFT,
-  PLOT_RIGHT,
-  W,
-  degToCompass,
-  windArrowPath,
-  windArrowTransform,
-} from "./shared";
+import { MetChartHeader, sourceSentence } from "./MetSourceTag";
+import { MetLegend, type LegendEntry } from "./MetLegend";
+import { HourColumns, useHourPointer, type HourColumn } from "./HourColumns";
+import { flyingHeightLabel, windReading } from "./met-readout";
+import { windArrowPath, windArrowTransform } from "./shared";
 
 const HOUR_MS = 3_600_000;
-const H = 170;
-const LANE_Y = 26; // direction-arrow lane centreline
-const PLOT = { top: 42, bottom: H - 26 };
-const TICK_LABEL_Y = H - 10;
 
-/** The band inline series labels must stay inside, so a line ending at the
- * top or bottom of the range can't push its label onto the axis labels the
- * whole stack shares. */
-const LABEL_BAND: [number, number] = [PLOT.top + 8, PLOT.bottom - 3];
-
-/** One stroke definition per series, shared by the line and its label swatch
+/** One stroke definition per series, shared by the line and its legend swatch
  * so the swatch cannot come to describe a line that has since changed. */
 const LEVEL_STROKE = { stroke: "var(--chart-4)", strokeWidth: 2 };
 const SURFACE_STROKE = {
@@ -60,6 +51,7 @@ const SURFACE_STROKE = {
   dash: "3 2",
   opacity: 0.75,
 };
+const ARROW_STROKE = { stroke: "var(--chart-4)", strokeWidth: 1.6, opacity: 0.85 };
 
 interface Point {
   tMs: number;
@@ -67,7 +59,6 @@ interface Point {
   /** Wind at flying height, in display units; null when the dataset has none. */
   levelSpeed: number | null;
   levelDir: number | null;
-  levelHeightM: number | null;
   surfaceSpeed: number | null;
   surfaceDir: number | null;
   gust: number | null;
@@ -78,23 +69,25 @@ export function MetWindChart({
   source,
   terrainElevationM,
   axis,
+  frame,
   timeZone,
-  setReadout,
+  selectedMs,
+  onSelect,
 }: {
   hours: WeatherHour[];
   source: WeatherSource;
   /** The task's own terrain elevation (AMSL) — see the datum note below. */
   terrainElevationM: number | null;
   axis: TimeAxis;
+  frame: ChartFrame;
   timeZone: string | undefined;
-  setReadout: (text: string | null) => void;
+  selectedMs: number | null;
+  onSelect: (tMs: number | null) => void;
 }) {
   // Same conversion boundary as the pilot-derived wind chart: the engine and
   // every provider work in km/h, and the viewer's preference applies here.
   const wind = unitDisplay("km/h", useUnits());
   const alt = unitDisplay("m", useUnits());
-
-  if (hours.length === 0) return null;
 
   // Datum for "flying height" = terrain + 1000 m. Prefer the TASK's terrain
   // over the provider's grid elevation: a cell kilometres wide averages a
@@ -104,6 +97,17 @@ export function MetWindChart({
   // elevation remains the fallback, since it is at least self-consistent
   // with the AGL fields.
   const terrainM = terrainElevationM ?? source.pointElevationM;
+  const levelLabel = flyingHeightLabel(hours, terrainM, alt);
+
+  const columns: HourColumn[] = hours.map((h) => {
+    const tMs = new Date(h.t).getTime();
+    const when = formatTimeRange(h.t, new Date(tMs + HOUR_MS).toISOString(), timeZone);
+    const reading = windReading(h, terrainM, wind, levelLabel);
+    return { tMs, label: reading ? `${when} — ${reading}` : `${when} — no wind figures` };
+  });
+  const pointer = useHourPointer(frame, axis, columns, onSelect);
+
+  if (hours.length === 0) return null;
 
   const points: Point[] = hours.map((h) => {
     const tMs = new Date(h.t).getTime();
@@ -113,7 +117,6 @@ export function MetWindChart({
       cx: axis.x(tMs + HOUR_MS / 2),
       levelSpeed: level?.windSpeedKmh != null ? level.windSpeedKmh * wind.factor : null,
       levelDir: level?.windDirectionDeg ?? null,
-      levelHeightM: level?.heightM ?? null,
       surfaceSpeed:
         h.surface.windSpeedKmh != null ? h.surface.windSpeedKmh * wind.factor : null,
       surfaceDir: h.surface.windDirectionDeg,
@@ -122,13 +125,23 @@ export function MetWindChart({
   });
 
   const hasLevels = points.some((p) => p.levelSpeed !== null);
+  const hasSurface = points.some((p) => p.surfaceSpeed !== null);
   const speeds = points.flatMap((p) =>
     [p.levelSpeed, p.surfaceSpeed, p.gust].filter((v): v is number => v !== null)
   );
   if (speeds.length === 0) return null;
 
+  // Heights in ems of the label size: a lane for the arrows, the plot, and a
+  // row for the time labels.
+  const em = frame.fontSize;
+  const laneY = em * 0.95;
+  const plot = { top: em * 2.5, bottom: em * 10 };
+  const H = plot.bottom + em * 2;
+  const columnWidth = Math.abs(axis.x(points[0].tMs + HOUR_MS) - axis.x(points[0].tMs));
+  const arrowLen = Math.max(7, Math.min(em * 1.3, columnWidth * 0.75));
+
   const yMax = Math.max(5 * wind.factor, ...speeds) * 1.08;
-  const y = linearScale([0, yMax], [PLOT.bottom, PLOT.top]);
+  const y = linearScale([0, yMax], [plot.bottom, plot.top]);
   const yTicks = niceTicks([0, yMax], 3);
 
   /**
@@ -155,199 +168,129 @@ export function MetWindChart({
   // The arrow lane shows flying-height direction where we have it, surface
   // otherwise — one lane, never two, or the panel's alignment stops reading.
   const arrowDir = (p: Point): number | null => (hasLevels ? p.levelDir : p.surfaceDir);
-  const laneLabel = hasLevels ? "direction" : "sfc dir";
 
-  const heights = points
-    .map((p) => p.levelHeightM)
-    .filter((v): v is number => v !== null);
-  const levelLabel =
-    heights.length > 0
-      ? `~${Math.round((heights.reduce((a, b) => a + b, 0) / heights.length) * alt.factor)} ${alt.unit}`
-      : null;
-
-  const readout = (p: Point): string => {
-    const when = formatTimeRange(
-      new Date(p.tMs).toISOString(),
-      new Date(p.tMs + HOUR_MS).toISOString(),
-      timeZone
-    );
-    const parts: string[] = [];
-    if (p.levelSpeed !== null && p.levelDir !== null) {
-      parts.push(
-        `${p.levelSpeed.toFixed(0)} ${wind.unit} from ${Math.round(p.levelDir)}° ` +
-          `(${degToCompass(p.levelDir)}) at ${levelLabel ?? "flying height"}`
-      );
-    }
-    if (p.surfaceSpeed !== null && p.surfaceDir !== null) {
-      parts.push(
-        `surface ${p.surfaceSpeed.toFixed(0)} ${wind.unit} from ${Math.round(p.surfaceDir)}° ` +
-          `(${degToCompass(p.surfaceDir)})`
-      );
-    }
-    if (p.gust !== null) parts.push(`gusting ${p.gust.toFixed(0)} ${wind.unit}`);
-    return `${when} — ${parts.join(", ")}`;
-  };
-
-  // Label positions for the two line ends, separated where they converge.
-  const clampLabel = (v: number) => Math.min(LABEL_BAND[1], Math.max(LABEL_BAND[0], v));
-  const lastLevel = points.at(-1)?.levelSpeed ?? null;
-  const lastSurface = points.at(-1)?.surfaceSpeed ?? null;
-  const endLabels: SeriesEndLabel[] = [];
-  if (hasLevels && lastLevel !== null && lastSurface !== null) {
-    const [yLevel, ySurface] = separateLabels(
-      y(lastLevel) - 5,
-      y(lastSurface) + 11,
-      LABEL_BAND
-    );
-    endLabels.push({
-      key: "level",
-      text: `flying height ${levelLabel}`,
-      y: yLevel,
-      ...LEVEL_STROKE,
-    });
-    endLabels.push({
-      key: "surface",
-      text: "surface (10 m)",
-      y: ySurface,
-      ...SURFACE_STROKE,
-    });
-  } else if (hasLevels && lastLevel !== null) {
-    endLabels.push({
-      key: "level",
-      text: `flying height ${levelLabel}`,
-      y: clampLabel(y(lastLevel) - 5),
-      ...LEVEL_STROKE,
-    });
-  } else if (lastSurface !== null) {
-    endLabels.push({
-      key: "surface",
-      text: "surface (10 m)",
-      y: clampLabel(y(lastSurface) + 11),
-      ...SURFACE_STROKE,
+  const legend: LegendEntry[] = [];
+  if (hasLevels) {
+    legend.push({ key: "level", text: `flying height ${levelLabel}`, ...LEVEL_STROKE });
+  }
+  if (hasSurface) {
+    legend.push({ key: "surface", text: "surface (10 m)", ...SURFACE_STROKE });
+  }
+  if (points.some((p) => arrowDir(p) !== null)) {
+    legend.push({
+      key: "direction",
+      kind: "arrow",
+      text: hasLevels ? "direction" : "surface direction",
+      ...ARROW_STROKE,
     });
   }
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="h-auto w-full"
-      role="img"
-      aria-label={
-        `Modelled wind by hour across ${points.length} hour${points.length === 1 ? "" : "s"}: ` +
-        (hasLevels
-          ? `wind at flying height (${levelLabel}) with the 10 metre surface wind beneath it. `
-          : `10 metre surface wind only — this dataset carries no upper-level wind. `) +
-        sourceSentence(source)
-      }
-      onMouseLeave={() => setReadout(null)}
-    >
-      <text
-        aria-hidden
-        x={PLOT_LEFT - 38}
-        y={12}
-        className="fill-current text-[10px] font-medium text-muted-foreground"
+    <div className="space-y-0.5" data-met-chart="wind">
+      <MetChartHeader title="Weather: wind" source={source} />
+      {/* A legend row rather than labels on the lines: at a readable size
+          the labels cover the lines they name. Each entry carries a sample of
+          its own stroke, since the two lines are the same colour and only
+          the dash tells them apart. */}
+      <MetLegend entries={legend} />
+      <svg
+        viewBox={`0 0 ${frame.width} ${H}`}
+        className="h-auto w-full select-none"
+        role="group"
+        aria-label={
+          `Modelled wind by hour across ${points.length} hour${points.length === 1 ? "" : "s"}: ` +
+          (hasLevels
+            ? `wind at flying height (${levelLabel}) with the 10 metre surface wind beneath it. `
+            : `10 metre surface wind only — this dataset carries no upper-level wind. `) +
+          sourceSentence(source)
+        }
+        {...pointer}
       >
-        Weather: wind
-      </text>
-      <MetSourceTag source={source} y={12} />
-
-      <TimeGridColumns axis={axis} top={PLOT.top} bottom={PLOT.bottom} />
-      {yTicks.map((t) => (
-        <line
-          key={`gy${t}`}
-          x1={PLOT_LEFT}
-          x2={PLOT_RIGHT}
-          y1={y(t)}
-          y2={y(t)}
-          className="stroke-border"
-          strokeWidth={1}
-        />
-      ))}
-      <g aria-hidden className="text-[10px] text-muted-foreground">
+        <TimeGridColumns axis={axis} top={plot.top} bottom={plot.bottom} />
         {yTicks.map((t) => (
-          <text
-            key={`ty${t}`}
-            x={PLOT_LEFT - 6}
-            y={y(t) + 3}
-            textAnchor="end"
-            className="fill-current"
-          >
-            {formatTickValue(wind.unit, t)}
-          </text>
+          <line
+            key={`gy${t}`}
+            x1={frame.plotLeft}
+            x2={frame.plotRight}
+            y1={y(t)}
+            y2={y(t)}
+            className="stroke-border"
+            strokeWidth={1}
+          />
         ))}
-        <text
-          x={PLOT_LEFT - 6}
-          y={LANE_Y + 3}
-          textAnchor="end"
-          className="fill-current text-[9px]"
-        >
-          {laneLabel}
-        </text>
-      </g>
+        {/* Bare numbers, with the unit stamped once above them: "30 km/h" on
+            every tick is a margin a phone cannot spare. */}
+        <g aria-hidden fontSize={em} className="text-muted-foreground">
+          {yTicks.map((t) => (
+            <text
+              key={`ty${t}`}
+              x={frame.plotLeft - em * 0.6}
+              y={y(t) + em * 0.35}
+              textAnchor="end"
+              className="fill-current"
+            >
+              {formatMetricValue(wind.unit, t).replace(/\.0+$/, "")}
+            </text>
+          ))}
+          {/* From the chart's left edge, not right-aligned to the ticks as
+              `AxisUnit` is: the stamp can be wider than the margin. */}
+          <text x={0} y={plot.top - em * 0.3} className="fill-current">
+            {wind.unit}
+          </text>
+        </g>
 
-      {/* Surface wind: faint, and always the LOWER of the two on a normal
-          day. Drawn first so the flying-height line sits over it. */}
-      <path
-        d={path((p) => p.surfaceSpeed)}
-        fill="none"
-        style={{ stroke: SURFACE_STROKE.stroke }}
-        strokeWidth={SURFACE_STROKE.strokeWidth}
-        strokeDasharray={SURFACE_STROKE.dash}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        opacity={SURFACE_STROKE.opacity}
-      />
-      {hasLevels ? (
+        {/* Surface wind: faint, and always the LOWER of the two on a normal
+            day. Drawn first so the flying-height line sits over it. */}
         <path
-          d={path((p) => p.levelSpeed)}
+          d={path((p) => p.surfaceSpeed)}
           fill="none"
-          style={{ stroke: LEVEL_STROKE.stroke }}
-          strokeWidth={LEVEL_STROKE.strokeWidth}
+          style={{ stroke: SURFACE_STROKE.stroke }}
+          strokeWidth={SURFACE_STROKE.strokeWidth}
+          strokeDasharray={SURFACE_STROKE.dash}
           strokeLinejoin="round"
           strokeLinecap="round"
+          opacity={SURFACE_STROKE.opacity}
         />
-      ) : null}
-
-      {/* Inline series labels rather than a legend box: at this size a legend
-          costs more room than the words it explains. Each carries a sample of
-          its own stroke, since the two lines are the same colour and only the
-          dash tells them apart. Separated where they converge (a calm day
-          aloft) and clamped into the plot band, so neither lands on the
-          shared axis labels. */}
-      <SeriesEndLabels x={PLOT_RIGHT - 2} labels={endLabels} />
-
-      {/* Direction lane, same convention as the pilot-derived chart above:
-          arrows fly WITH the wind. */}
-      {points.map((p) => {
-        const dir = arrowDir(p);
-        return dir === null ? null : (
+        {hasLevels ? (
           <path
-            key={`a${p.tMs}`}
-            d={windArrowPath(13)}
-            transform={windArrowTransform(p.cx, LANE_Y, dir)}
+            d={path((p) => p.levelSpeed)}
             fill="none"
-            style={{ stroke: "var(--chart-4)" }}
-            strokeWidth={1.6}
-            strokeLinecap="round"
+            style={{ stroke: LEVEL_STROKE.stroke }}
+            strokeWidth={LEVEL_STROKE.strokeWidth}
             strokeLinejoin="round"
-            opacity={0.85}
+            strokeLinecap="round"
           />
-        );
-      })}
+        ) : null}
 
-      {points.map((p) => (
-        <rect
-          key={`h${p.tMs}`}
-          x={axis.x(p.tMs)}
-          width={Math.max(0, axis.x(p.tMs + HOUR_MS) - axis.x(p.tMs))}
-          y={0}
-          height={PLOT.bottom}
-          fill="transparent"
-          onMouseEnter={() => setReadout(readout(p))}
+        {/* Direction lane, same convention as the pilot-derived chart:
+            arrows fly WITH the wind. */}
+        {points.map((p) => {
+          const dir = arrowDir(p);
+          return dir === null ? null : (
+            <path
+              key={`a${p.tMs}`}
+              d={windArrowPath(arrowLen)}
+              transform={windArrowTransform(p.cx, laneY, dir)}
+              fill="none"
+              style={{ stroke: ARROW_STROKE.stroke }}
+              strokeWidth={ARROW_STROKE.strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={ARROW_STROKE.opacity}
+            />
+          );
+        })}
+
+        <TimeTickLabels axis={axis} y={plot.bottom + em * 1.4} frame={frame} />
+        <HourColumns
+          columns={columns}
+          axis={axis}
+          top={0}
+          bottom={plot.bottom}
+          selectedMs={selectedMs}
+          onSelect={onSelect}
         />
-      ))}
-
-      <TimeTickLabels axis={axis} y={TICK_LABEL_Y} />
-    </svg>
+      </svg>
+    </div>
   );
 }

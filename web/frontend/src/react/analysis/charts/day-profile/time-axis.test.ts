@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTimeAxis } from "./time-axis";
+import { buildTimeAxis, tickLabelStride } from "./time-axis";
 
 const T = (iso: string) => new Date(iso).getTime();
 
@@ -74,5 +74,26 @@ describe("buildTimeAxis", () => {
       [0, 560]
     )!;
     for (const t of axis.ticks) expect(t.ms % 3_600_000).toBe(0);
+  });
+});
+
+describe("tickLabelStride", () => {
+  const T = (iso: string) => new Date(iso).getTime();
+  const span: number[] = [T("2026-01-05T02:00:00Z"), T("2026-01-05T09:00:00Z")];
+
+  it("labels every tick when the labels have room", () => {
+    const axis = buildTimeAxis(span, "Australia/Melbourne", [44, 540])!;
+    expect(tickLabelStride(axis, 40)).toBe(1);
+  });
+
+  it("labels every second tick when neighbours would touch", () => {
+    // A phone: about 260px of plot for eight hourly ticks.
+    const axis = buildTimeAxis(span, "Australia/Melbourne", [46, 301])!;
+    expect(tickLabelStride(axis, 43)).toBe(2);
+  });
+
+  it("is 1 for an axis with a single tick", () => {
+    const axis = buildTimeAxis(span, "Australia/Melbourne", [0, 100])!;
+    expect(tickLabelStride({ ...axis, ticks: axis.ticks.slice(0, 1) }, 500)).toBe(1);
   });
 });

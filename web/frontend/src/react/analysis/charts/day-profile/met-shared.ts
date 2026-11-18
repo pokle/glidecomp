@@ -82,48 +82,6 @@ export function isBlueHour(hour: WeatherHour): boolean | null {
   return cloudBaseAglM > boundaryLayerDepthM;
 }
 
-/**
- * Push two inline series labels apart so they stay legible where their lines
- * converge, keeping both inside `[top, bottom]`.
- *
- * Needed because these labels sit at the END of their lines, and the two
- * lines meeting there is not an edge case — it is the interesting day. Cloud
- * base crossing the mixed-layer top is exactly when a blue day turns into a
- * cumulus one, and that is precisely where the two labels would overprint
- * into unreadable mush.
- *
- * `a` is nudged up and `b` down, preserving which is which; if the band is
- * too short for the gap, they are centred in it and the caller accepts the
- * overlap rather than drawing outside the plot.
- */
-export function separateLabels(
-  a: number,
-  b: number,
-  [top, bottom]: [number, number],
-  minGap = 11
-): [number, number] {
-  const clamp = (v: number) => Math.min(bottom, Math.max(top, v));
-  let ya = clamp(a);
-  let yb = clamp(b);
-  const gap = yb - ya;
-  if (gap >= minGap) return [ya, yb];
-
-  const mid = (ya + yb) / 2;
-  ya = mid - minGap / 2;
-  yb = mid + minGap / 2;
-
-  // Shift the pair as a unit back inside the band before giving up on it.
-  if (ya < top) {
-    yb += top - ya;
-    ya = top;
-  }
-  if (yb > bottom) {
-    ya -= yb - bottom;
-    yb = bottom;
-  }
-  return [clamp(ya), clamp(yb)];
-}
-
 /** Per-character widths as a fraction of the font size, for the UI sans at
  * label sizes. Four buckets is enough: the caller only needs to know roughly
  * where a right-anchored label starts. */
