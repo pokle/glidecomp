@@ -61,15 +61,20 @@ disclosed and are being fixed first.
 | SEC-50 | Dependency advisories, one critical | 2026-09-09 |
 | SEC-51 | Spreadsheet formula injection in the public waypoints CSV | 2026-09-23 |
 | SEC-52 | Dependency advisories, four high | 2026-09-30 |
+| SEC-53 | The security-report endpoint read an oversized request in full before refusing it | 2026-11-12 |
 | SEC-55 | The sign-in service exposed library endpoints the app never used | 2026-10-01 |
 | SEC-56 | Email sign-in codes could be guessed by a distributed attacker | 2026-10-01 |
 | SEC-63 | Dependency advisories, two critical (build and dev tooling) | 2026-10-07 |
 | SEC-67 | Dependency advisory, moderate (mobile build tooling) | 2026-10-14 |
+| SEC-68 | Sign-in accepted a provider ID token that was not bound to this site | 2026-11-12 |
 | SEC-70 | Open registration for AI-assistant connections could fill the shared database | 2026-10-28 |
 | SEC-71 | Dependency advisories, moderate (build and dev tooling) | 2026-10-28 |
 | SEC-75 | Anonymous track submission's per-caller budget could be sidestepped from one IPv6 network | 2026-11-06 |
 | SEC-76 | A hidden competition's page could be sent cacheable and indexable after a failed fetch | 2026-11-06 |
 | SEC-77 | Hidden-competition share links written to server logs | 2026-11-06 |
+| SEC-79 | Link addresses in the results PDF, and spreadsheet formulas behind a leading tab | 2026-11-12 |
+| SEC-80 | A hidden competition's manual flights could be read through another competition's address | 2026-11-14 |
+| SEC-81 | Certain characters in a name could rearrange a server-rendered page | 2026-11-14 |
 
 **Closed without a fix:** SEC-09 (`Math.random()` used where nothing depends on
 it being unpredictable), SEC-14 (a misleading code comment), SEC-19
