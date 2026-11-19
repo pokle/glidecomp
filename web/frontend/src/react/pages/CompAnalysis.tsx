@@ -496,7 +496,10 @@ function SeparationTable({
               <AriaLink
                 href={behaviourHref(m.id)}
                 routerOptions={openedHereFrom(COMP_ANALYSIS_LABEL)}
-                className="outline-none after:absolute after:inset-0 data-focus-visible:after:ring-2 data-focus-visible:after:ring-ring/50 data-focus-visible:after:ring-inset"
+                // `after:z-10`: the track's own boxes are positioned and come later
+                // in the row, so without it they sit over the link and a tap
+                // on the track opened nothing.
+                className="outline-none after:absolute after:inset-0 after:z-10 data-focus-visible:after:ring-2 data-focus-visible:after:ring-ring/50 data-focus-visible:after:ring-inset"
               >
                 {m.label}
                 <ChevronRightIcon

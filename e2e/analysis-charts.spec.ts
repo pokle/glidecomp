@@ -662,6 +662,8 @@ test("Comp analysis: the ranking is one track a row with a badge for each task, 
   const link = row.getByRole("link");
   await expect(link).toHaveCount(1);
   const name = (await link.innerText()).trim();
+  // On the screen first: a point off it belongs to no element.
+  await row.evaluate((tr) => tr.scrollIntoView({ block: "center" }));
   const rowBox = (await row.boundingBox())!;
   const hit = await row.evaluate((tr) => {
     const r = tr.getBoundingClientRect();
