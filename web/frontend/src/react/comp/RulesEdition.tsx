@@ -28,7 +28,7 @@ export function RulesEditionBadge({
   return (
     <a
       href="/scoring/gap"
-      className="text-xs text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-foreground"
+      className="touch-target text-xs text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-foreground"
     >
       {rulesEditionLabel(edition)}
     </a>

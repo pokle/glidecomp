@@ -87,17 +87,21 @@ const fieldBox = cn(
   "data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
 );
 
+// On a touch screen a segment is a target in its own right: a finger picks
+// "day" or "month" by tapping it. Each is as tall as the field and 44px wide,
+// where it was the width of its two digits (issue #860).
 const segmentClass = ({ isPlaceholder }: { isPlaceholder: boolean }) =>
   cn(
     "rounded px-0.5 tabular-nums outline-none focus:bg-accent focus:text-accent-foreground",
+    "pointer-coarse:-my-px pointer-coarse:inline-flex pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center",
     isPlaceholder && "text-muted-foreground"
   );
 
 const trailingButton =
-  "ml-1 inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50";
+  "touch-target ml-1 inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50";
 
 const navButton =
-  "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50 data-[disabled]:opacity-40";
+  "inline-flex size-7 pointer-coarse:size-11 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50 data-[disabled]:opacity-40";
 
 /**
  * Two cell scales. `touch` (44px) is the inline calendar's — the whole point

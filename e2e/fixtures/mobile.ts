@@ -54,6 +54,9 @@ export const MOBILE_SPEC_FILES = [
   // (#860): a phone painted their labels at 5px, and named a dot or a line
   // only for a mouse. A tap is this project's alone to try.
   "analysis-charts.spec.ts",
+  // The kit's small controls (#860): tags, checkboxes, disclosure headers and
+  // the time-zone toggle are sized for a finger only on a touch screen.
+  "kit-touch-targets.spec.ts",
   // The routed task editors (#637) — settings, weather notes and the route
   // editor. Same reason as the comp settings pages: built mobile-first, and
   // the route editor is the surface that most needed it.

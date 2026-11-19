@@ -175,3 +175,17 @@ test("a Delete account that never got an answer says so beside it", async ({ pag
   await expect(page).toHaveURL(/\/settings$/);
   await expect(toasts(page)).toHaveCount(0);
 });
+
+test("the phone and CIVL ID fields ask a phone for the right keyboard", async ({ page }) => {
+  // Issue #860: both phone fields were plain text fields, and the CIVL ID
+  // asked for the full keyboard here and the number pad on the pilot page.
+  const phone = field(page, "Phone");
+  await expect(phone).toHaveAttribute("type", "tel");
+  await expect(phone).toHaveAttribute("inputmode", "tel");
+  await expect(phone).toHaveAttribute("autocomplete", "tel");
+  // Somebody else's number: the phone pad, but not the reader's own card.
+  const emergency = field(page, "Emergency contact phone");
+  await expect(emergency).toHaveAttribute("type", "tel");
+  await expect(emergency).toHaveAttribute("autocomplete", "off");
+  await expect(field(page, "CIVL ID")).toHaveAttribute("inputmode", "numeric");
+});

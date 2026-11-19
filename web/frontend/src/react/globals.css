@@ -398,6 +398,39 @@
 
 }
 
+/* The app's own maps (the report card, the route, the waypoints) on a touch
+   screen: Mapbox's buttons and the map style select at the 44 px floor
+   (accessibility standard §4.5, issue #860), and the select's text at 16 px,
+   under which iOS zooms the page when it takes focus. The analysis page's
+   map has the same rules in analysis.css. Unlayered on purpose:
+   mapbox-gl.css is unlayered too, and an unlayered rule beats any rule in a
+   layer; the select's inline style needs !important. */
+@media (pointer: coarse) {
+  .mapboxgl-map .mapboxgl-ctrl-group button {
+    width: 44px;
+    height: 44px;
+  }
+  .mapboxgl-map .mapboxgl-ctrl-group select {
+    min-height: 44px;
+    font-size: 16px !important;
+  }
+  .mapboxgl-map .ann-toggle {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  /* The attribution's ⓘ sits in a corner: a bigger hit area that paints
+     nothing, rather than a bigger Mapbox button. */
+  .mapboxgl-map .mapboxgl-ctrl-attrib-button::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
 /* Indeterminate progress fill — the moving part of `rac/progress.tsx`'s
    ProgressBar when `isIndeterminate` (work is in flight, duration unknown).
    Tailwind has no keyframes of its own, so the animation lives here.

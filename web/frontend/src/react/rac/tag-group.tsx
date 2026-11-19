@@ -41,7 +41,7 @@ export function TagGroup({
   return (
     <AriaTagGroup className={cn("flex flex-col gap-1", className)} {...props}>
       {label ? <Label className="sr-only">{label}</Label> : null}
-      <TagList className="flex flex-wrap gap-1.5">{children}</TagList>
+      <TagList className="flex flex-wrap gap-1.5 pointer-coarse:gap-2">{children}</TagList>
     </AriaTagGroup>
   );
 }
@@ -56,6 +56,9 @@ export function Tag({ className, ...props }: Omit<TagProps, "className"> & { cla
         // Colour is never the only channel: RAC sets aria-checked on every tag
         // in a selectable group, so the state is announced either way.
         "h-5 data-[selection-mode]:h-7 data-[selection-mode]:cursor-default data-[selection-mode]:px-2.5",
+        // A tag that can be selected is a control, so on a touch screen it is
+        // one a finger can hit. A read-only tag is a label and stays small.
+        "pointer-coarse:data-[selection-mode]:h-11 pointer-coarse:data-[selection-mode]:min-w-11 pointer-coarse:data-[selection-mode]:justify-center pointer-coarse:data-[selection-mode]:px-3.5 pointer-coarse:data-[selection-mode]:text-sm",
         "data-[selection-mode]:data-hovered:bg-muted",
         "data-selected:border-primary data-selected:bg-primary data-selected:text-primary-foreground",
         "data-selected:data-hovered:bg-primary/90",
