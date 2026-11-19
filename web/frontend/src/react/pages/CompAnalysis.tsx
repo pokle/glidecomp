@@ -502,9 +502,12 @@ function SeparationTable({
                 className="outline-none after:absolute after:inset-0 after:z-10 data-focus-visible:after:ring-2 data-focus-visible:after:ring-ring/50 data-focus-visible:after:ring-inset"
               >
                 {m.label}
+                {/* At the row's right-hand edge, centred on the row, where
+                    every other list's chevron is. It was set after the name,
+                    so it wrapped onto a line of its own under a long one. */}
                 <ChevronRightIcon
                   aria-hidden="true"
-                  className="ml-1 inline size-4 align-[-0.125em] text-muted-foreground"
+                  className="absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted-foreground"
                 />
               </AriaLink>
             </Cell>
@@ -544,14 +547,16 @@ function SeparationTable({
  * The comp ranking's boxes, laid out as a list. The same grid as the task
  * page's ranking (analysis/SeparationRanking.tsx): the name beside how the
  * days compared and how it stood against the comp scores, and the track under
- * all three. A row is `relative`, for the link stretched over it.
+ * all three. A row is `relative`, for the link stretched over it and the
+ * chevron at its right-hand edge. The heading row keeps the same room on the
+ * right as a row keeps for its chevron, so the axis and the tracks line up.
  */
 const LIST = {
   table: "block [&_tbody]:block [&_thead]:block",
   header:
-    "[&_tr]:flex [&_tr]:flex-wrap [&_tr]:items-center [&_tr]:gap-x-4 [&_tr]:px-5 [&_tr]:py-2",
+    "[&_tr]:flex [&_tr]:flex-wrap [&_tr]:items-center [&_tr]:gap-x-4 [&_tr]:py-2 [&_tr]:pr-11 [&_tr]:pl-5",
   heading: "block h-auto p-0 text-muted-foreground",
-  row: "relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-5 py-3 [grid-template-areas:'name_days'_'name_comp'_'plot_plot']",
+  row: "relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 py-3 pr-11 pl-5 [grid-template-areas:'name_days'_'name_comp'_'plot_plot']",
   cell: "block p-0",
 };
 
