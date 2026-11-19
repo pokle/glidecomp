@@ -158,7 +158,9 @@ function StrategiesSection({
 
   return (
     <>
-      <Card aria-labelledby="separation-heading" className="gap-3">
+      {/* A plain section, not a Card: each row of the ranking is a card of
+          its own (rac/reading-list.tsx). */}
+      <section aria-labelledby="separation-heading" className="flex flex-col gap-3">
         <h2
           id="separation-heading"
           className="flex items-center gap-1 scroll-mt-32 text-lg font-semibold"
@@ -176,7 +178,7 @@ function StrategiesSection({
           report={report}
           chartHref={chartHref}
         />
-      </Card>
+      </section>
 
       {/* Renders nothing unless this task actually ran against the consensus
           the comp's other tasks formed — a debrief that only speaks when it

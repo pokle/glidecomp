@@ -563,6 +563,22 @@ export function taskSimilarityPath(
 }
 
 /**
+ * Two pilots compared behaviour by behaviour: the page a row of the
+ * pilot-similarity results opens. `search` names the pair and what they are
+ * compared on (`?pilot=`, `?with=`, `?class=`, `?metrics=`), so the page is
+ * the same after a reload.
+ */
+export function taskSimilarityPairPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  search = ""
+): string {
+  return `${taskSimilarityPath(compId, compName, taskId, taskName)}/pair${search}`;
+}
+
+/**
  * One thermal's rose over the terrain it worked, at the size of the screen —
  * a leaf of the thermals section (#816). Which thermal rides in the query
  * (`?thermal=`), as it does on the section page.

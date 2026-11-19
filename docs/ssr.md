@@ -32,7 +32,9 @@ copy drifted — read the module for the current set.
 **Server-rendered**: the competitions list; a competition's hub, its scores
 (`?view=`, `?class=` and `?task=` pick the view, the class and the task, and
 the server renders the one they name), one pilot's scores
-(`/scores/:pilot`), its waypoints and its COMP analysis; a task's page, each pilot's report card, the TASK analysis, each of
+(`/scores/:pilot`), its waypoints, its COMP analysis and one behaviour of it
+(`/analysis/behaviour/:metric`, always `noindex`, and a 404 for a behaviour no
+report carries); a task's page, each pilot's report card, the TASK analysis, each of
 its sections (`/analysis/:section`) and one metric's chart at full size
 (`/analysis/metrics/:metric`, #815). The metric chart is always `noindex`: it
 is a bigger copy of something an indexable page already shows. An unknown
@@ -52,7 +54,8 @@ as an id.
 
 - **Public**: the task's QR code (`/task/:id/qr`, #813 — a picture for a
   camera), the pilot-similarity page (`/task/:id/analysis/similar`, derived
-  client-side) and one thermal's rose and map at the size of the screen
+  client-side), the comparison of two pilots that a row of it opens
+  (`/analysis/similar/pair`) and one thermal's rose and map at the size of the screen
   (`/analysis/thermals/map`, #816 — the map is browser-only, and everything
   readable about the thermal is server-rendered on `/analysis/thermals`).
 - **Signed-in**: starting a competition (`/comp/new`; a signed-out reader is

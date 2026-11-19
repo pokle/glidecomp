@@ -49,69 +49,56 @@ import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
 import { TagGroup, Tag } from "@/react/rac/tag-group";
 import { Loading } from "@/react/rac/progress";
 import { SimpleSelect } from "@/react/rac/select";
-import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { DotMeter, DotMeterAxis } from "@/react/rac/meter";
+import {
+  READING_AXIS_INSET,
+  READING_LINK_ROOM,
+  READING_NAME,
+  ReadingRow,
+  ReadingRowLink,
+  ReadingRows,
+} from "@/react/rac/reading-list";
 
 import { MetricDistribution } from "../analysis/charts/MetricDistribution";
 import { NotFound } from "../components/NotFound";
-import { api } from "../../comp/api";
-import { fetchWithRetry, type CompDetailData, type TaskDetailData } from "../comp/types";
+import {
+  PairAxis,
+  PairBehaviourRow,
+  formatSimilarity,
+  similarityOnTrack,
+} from "../analysis/similarity-rows";
+import { openedHereFrom } from "../lib/leave";
 import { COMP_ANALYSIS_LABEL, underTaskAnalysis } from "../lib/crumbs";
-import { compAnalysisPath, compUrlId, idFromSegment, taskAnalysisPath } from "../lib/slug";
+import {
+  compAnalysisPath,
+  compUrlId,
+  taskAnalysisPath,
+  taskSimilarityPairPath,
+} from "../lib/slug";
 import { reportViewState, taskAnalysisPages } from "../analysis/TaskAnalysisFrame";
-import { useUnits } from "../lib/units";
 import { cn } from "../lib/utils";
-import { displayReport } from "../analysis/units";
+import {
+  SIMILARITY_CLASS_PARAM,
+  SIMILARITY_METRICS_PARAM,
+  SIMILARITY_LABEL,
+  SIMILARITY_PILOT_PARAM,
+  SIMILARITY_WITH_PARAM,
+  useSimilarity,
+} from "../analysis/use-similarity";
 import {
   FAMILY_ORDER,
   FAMILY_LABELS,
-  formatMetricValue,
-  findSimilarPilots,
   type MetricFamily,
-  type TaskAnalysisData,
 } from "../analysis/types";
 
 /** URL parameters this sheet round-trips its whole state through. */
-const PILOT_PARAM = "pilot";
-const CLASS_PARAM = "class";
-const METRICS_PARAM = "metrics";
+const PILOT_PARAM = SIMILARITY_PILOT_PARAM;
+const CLASS_PARAM = SIMILARITY_CLASS_PARAM;
+const METRICS_PARAM = SIMILARITY_METRICS_PARAM;
 const CHART_PARAM = "chart";
 
 /** How many neighbours the table shows before the "show everyone" toggle. */
 const TOP_N = 12;
-
-/** A signed z-score, e.g. "+1.4 SD" — always with its sign, so above and below
- * the field average are told apart at a glance. */
-function fmtZ(z: number): string {
-  return `${z >= 0 ? "+" : "−"}${Math.abs(z).toFixed(1)} SD`;
-}
-
-/** The similarity as a diverging bar. Colour is never the only channel — the
- * number sits beside it, and the bar is decorative to AT.
- *
- * The scale is asymmetric because the measure is: Tanimoto reaches 1 for two
- * pilots who flew alike but only −1/3 for two who did the opposite, so each
- * side is drawn against its own limit rather than letting a full-strength
- * opposite render as a third of a bar. */
-function SimilarityBar({ value, muted }: { value: number; muted?: boolean }) {
-  const limit = value >= 0 ? 1 : 1 / 3;
-  const half = Math.min(50, (Math.abs(value) / limit) * 50);
-  return (
-    <span aria-hidden className="relative block h-2 w-24 rounded-full bg-muted">
-      <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
-      <span
-        className={cn(
-          "absolute inset-y-0 rounded-full",
-          muted ? "bg-muted-foreground/40" : value >= 0 ? "bg-primary" : "bg-destructive"
-        )}
-        style={
-          value >= 0
-            ? { left: "50%", width: `${half}%` }
-            : { right: "50%", width: `${half}%` }
-        }
-      />
-    </span>
-  );
-}
 
 /**
  * A pilot as this sheet names them: their rank on the task, then their name.
@@ -134,110 +121,29 @@ function PilotName({ rank, name }: { rank: number | undefined; name: string }) {
 }
 
 export function TaskPilotSimilarity() {
-  const { compId: compParam, taskId: taskParam } = useParams<{
-    compId: string;
-    taskId: string;
-  }>();
-  const compId = idFromSegment(compParam ?? "");
-  const taskId = idFromSegment(taskParam ?? "");
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const [data, setData] = useState<TaskAnalysisData | null>(null);
-  const [task, setTask] = useState<TaskDetailData | null>(null);
-  const [comp, setComp] = useState<CompDetailData | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "notFound" | "error">(
-    "loading"
-  );
+  const {
+    compId,
+    taskId,
+    searchParams,
+    setSearchParams,
+    status,
+    task,
+    comp,
+    classes,
+    selectedClass,
+    report,
+    rankByTrack,
+    available,
+    metricsParam,
+    selectedMetricIds,
+    subject,
+    similarity,
+  } = useSimilarity();
   const [showAll, setShowAll] = useState(false);
 
-  // The report this page derives from. Through fetchWithRetry rather than a
-  // bare fetch: "notFound" is a terminal state nothing re-fetches, so a
-  // dropped request must not be recorded as "no such task" (issue #481).
   useEffect(() => {
-    if (!compId || !taskId) return;
-    let cancelled = false;
-    (async () => {
-      setStatus("loading");
-      try {
-        const res = await fetchWithRetry(() =>
-          fetch(
-            `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/analysis`,
-            { credentials: "include" }
-          )
-        );
-        if (cancelled) return;
-        if (res.status === 404 || res.status === 400) {
-          setStatus("notFound");
-          return;
-        }
-        if (!res.ok) {
-          setStatus("error");
-          return;
-        }
-        setData((await res.json()) as TaskAnalysisData);
-        setStatus("ready");
-      } catch {
-        if (!cancelled) setStatus("error");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [compId, taskId]);
-
-  // Names for the heading and breadcrumbs. Cosmetic — the sheet works without.
-  useEffect(() => {
-    if (!compId || !taskId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const [taskRes, compRes] = await Promise.all([
-          api.api.comp[":comp_id"].task[":task_id"].$get({
-            param: { comp_id: compId, task_id: taskId },
-          }),
-          api.api.comp[":comp_id"].$get({ param: { comp_id: compId } }),
-        ]);
-        if (cancelled) return;
-        if (taskRes.ok) {
-          const t = (await taskRes.json()) as unknown as TaskDetailData;
-          setTask(t);
-          document.title = `GlideComp - Who flew like me: ${t.name}`;
-        }
-        if (compRes.ok) setComp((await compRes.json()) as unknown as CompDetailData);
-      } catch {
-        // Cosmetic only.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [compId, taskId]);
-
-  const classes = data?.classes ?? [];
-  const classParam = searchParams.get(CLASS_PARAM);
-  const selectedClass =
-    classParam && classes.some((c) => c.pilot_class === classParam)
-      ? classParam
-      : (classes[0]?.pilot_class ?? "");
-  const active = classes.find((c) => c.pilot_class === selectedClass);
-
-  // Values converted to the viewer's units for DISPLAY. A z-score and the
-  // cosine are both invariant under the linear conversion — that is the point
-  // of normalising — so the geometry is identical either way and this only
-  // changes the raw numbers printed beside each z.
-  const units = useUnits();
-  const report = useMemo(
-    () => (active ? displayReport(active.report, units) : null),
-    [active, units]
-  );
-
-  // Task rank by track file, for the label beside each name. The report's
-  // pilot list is already in rank order and carries the rank outright, so this
-  // costs no extra request and cannot disagree with the scores page.
-  const rankByTrack = useMemo(
-    () => new Map((report?.pilots ?? []).map((p) => [p.trackFile, p.rank])),
-    [report]
-  );
+    if (task) document.title = `GlideComp - Who flew like me: ${task.name}`;
+  }, [task]);
 
   /** Write one parameter; `null` clears it. */
   function setParam(key: string, value: string | null) {
@@ -247,31 +153,6 @@ export function TaskPilotSimilarity() {
     setSearchParams(next, { replace: true });
   }
 
-  // Every behaviour this field offers, in registry order. `outcome` metrics
-  // are absent by construction — findSimilarPilots refuses them, and they are
-  // score-derived, which is exactly what this page is not about.
-  const available = useMemo(() => {
-    if (!report) return [];
-    // Ask the engine which metrics are usable by running it over everything:
-    // the returned `metrics` array IS the usable set, so the checkbox list and
-    // the vectors can never disagree about what is on offer.
-    const probe = report.pilots[0]
-      ? findSimilarPilots(report, { subjectTrackFile: report.pilots[0].trackFile })
-      : null;
-    return probe?.metrics ?? [];
-  }, [report]);
-
-  // Selection: the URL when it names metrics still on offer, otherwise all of
-  // them. A metric that left the registry is dropped rather than erroring —
-  // a saved link outlives a metric set.
-  const metricsParam = searchParams.get(METRICS_PARAM);
-  const selectedMetricIds = useMemo(() => {
-    const ids = available.map((m) => m.id);
-    if (metricsParam === null) return ids;
-    const wanted = new Set(metricsParam.split(",").filter(Boolean));
-    const kept = ids.filter((id) => wanted.has(id));
-    return kept.length > 0 ? kept : ids;
-  }, [metricsParam, available]);
   const selectedSet = useMemo(() => new Set(selectedMetricIds), [selectedMetricIds]);
 
   /** Write a selection, keeping it in the registry order the checkboxes read
@@ -308,15 +189,6 @@ export function TaskPilotSimilarity() {
     if (ids.size === 0 && available[0]) ids.add(available[0].id);
     writeSelection(ids);
   }
-
-  // The subject. The NAME rather than the trackFile, matching PilotPicker: a
-  // URL a person can read beats an internal filename. An unresolvable name
-  // falls back to the first pilot rather than rendering nothing.
-  const pilotParam = searchParams.get(PILOT_PARAM);
-  const subject =
-    (pilotParam ? report?.pilots.find((p) => p.pilotName === pilotParam) : null) ??
-    report?.pilots[0] ??
-    null;
 
   // The combobox's text is local view state; the URL still owns WHO is picked.
   // Both `selectedKey` and `inputValue` are controlled per RAC gotcha #12, so
@@ -357,14 +229,6 @@ export function TaskPilotSimilarity() {
     return all.filter((p) => contains(p.pilotName, pilotQuery));
   }, [report, pilotQuery, settled, contains]);
 
-  const similarity = useMemo(() => {
-    if (!report || !subject) return null;
-    return findSimilarPilots(report, {
-      subjectTrackFile: subject.trackFile,
-      metricIds: selectedMetricIds,
-    });
-  }, [report, subject, selectedMetricIds]);
-
   // Only a set with nothing usable in it has no answer at all — narrowing to a
   // single behaviour is a supported mode (ranked by gap), not an error.
   const nothingUsable = report !== null && subject !== null && similarity === null;
@@ -401,7 +265,7 @@ export function TaskPilotSimilarity() {
   // pages beside it, with the class and the pilot being read.
   const bar = (
     <PageBar
-      title="Who flew like me?"
+      title={SIMILARITY_LABEL}
       trail={underTaskAnalysis(compId, comp?.name, taskId, task?.name)}
       related={taskAnalysisPages(
         compId,
@@ -443,6 +307,23 @@ export function TaskPilotSimilarity() {
   const analysisHref = taskAnalysisPath(compId, comp?.name, taskId, task?.name);
   const neighbours = similarity?.neighbours ?? [];
   const shown = showAll ? neighbours : neighbours.slice(0, TOP_N);
+  const resultsLabel = `Pilots ranked by behavioural similarity to ${subject?.pilotName ?? "this pilot"}`;
+  /** The comparison of the subject with one pilot: the page a row opens. It
+   * carries the class, the subject and the behaviours, so the two pages
+   * cannot disagree. The chart's own choice stays behind. */
+  const pairHref = (withName: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.delete(CHART_PARAM);
+    if (subject) next.set(PILOT_PARAM, subject.pilotName);
+    next.set(SIMILARITY_WITH_PARAM, withName);
+    return taskSimilarityPairPath(
+      compUrlId(comp, compId),
+      comp?.name,
+      taskId,
+      task?.name,
+      `?${next.toString()}`
+    );
+  };
   const byFamily = new Map<MetricFamily, typeof available>();
   for (const m of available) {
     const list = byFamily.get(m.family);
@@ -598,24 +479,34 @@ export function TaskPilotSimilarity() {
             </Alert>
           ) : (
             <>
-              <Card aria-labelledby="results-heading" className="gap-3">
+              {/* A plain section, not a Card: each pilot is a card of their
+                  own, with the heading above them on the ground
+                  (rac/reading-list.tsx). */}
+              <section aria-labelledby="results-heading" className="flex flex-col gap-3">
                 <h2 id="results-heading" className="text-lg font-semibold">
                   Closest to {subject.pilotName}
                 </h2>
-                {byGap ? (
-                  <p className="text-sm text-muted-foreground">
-                    On a single behaviour there is no shape to compare, so these
-                    pilots are ranked by how near they sat to {subject.pilotName} on
-                    it — closest first.
-                  </p>
-                ) : null}
+                <p className="text-sm text-muted-foreground">
+                  {byGap ? (
+                    <>
+                      On a single behaviour there is no shape to compare, so these
+                      pilots are ranked by how near they sat to {subject.pilotName} on
+                      it — closest first.
+                    </>
+                  ) : (
+                    <>
+                      Compared on the {similarity?.metrics.length} behaviours ticked
+                      above. A row opens the comparison with that pilot.
+                    </>
+                  )}
+                </p>
                 {chartMetric ? (
-                  <section aria-labelledby="spread-heading" className="flex flex-col gap-2">
+                  <Card aria-labelledby="spread-heading" className="gap-2">
                     <h3 id="spread-heading" className="text-base font-medium">
                       Where the field sat on this behaviour
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Each dot is one pilot. The table below compares pilots across
+                      Each dot is one pilot. The list below compares pilots across
                       every behaviour you ticked; this is the plain spread behind one
                       of them.
                     </p>
@@ -639,99 +530,98 @@ export function TaskPilotSimilarity() {
                       subjectTrackFile={subject.trackFile}
                       ringed={neighbours.slice(0, 3)}
                     />
-                  </section>
+                  </Card>
                 ) : null}
 
-                <Table
-                  aria-label={`Pilots ranked by behavioural similarity to ${subject.pilotName}`}
-                  scrollLabel="Similarity results"
-                >
-                  <TableHeader>
-                    <Column isRowHeader>Pilot</Column>
-                    {byGap ? (
-                      <>
-                        <Column>Their value</Column>
-                        <Column>Gap (SD)</Column>
-                      </>
-                    ) : (
-                      <>
-                        <Column>Similarity</Column>
-                        <Column>Needs to beat</Column>
-                        <Column>Shape only</Column>
-                        <Column>Typical gap (SD)</Column>
-                        <Column>Shared</Column>
-                        <Column>What made them alike</Column>
-                      </>
-                    )}
-                  </TableHeader>
-                  <TableBody>
-                    {shown.map((n) => (
-                      <Row key={n.trackFile}>
-                        <Cell>
-                          <PilotName
-                            rank={rankByTrack.get(n.trackFile)}
-                            name={n.pilotName}
+                {/* A LIST of pilots on one shared axis, at every width (issues
+                    #804, #860). It was a table of seven columns, 1,010px wide
+                    in a phone's 319px window. A row is now the pilot, the
+                    similarity, one dot on the axis above the list and what
+                    made the pair alike; the other figures are on the page the
+                    row opens (TaskPilotSimilarityPair). */}
+                {byGap ? (
+                  <>
+                    <div className={READING_AXIS_INSET}>
+                      <PairAxis />
+                    </div>
+                    <ReadingRows aria-label={resultsLabel}>
+                      {shown.map((n) => (
+                        <PairBehaviourRow
+                          key={n.trackFile}
+                          contribution={n.contributions[0]}
+                          subjectName={subject.pilotName}
+                          otherName={n.pilotName}
+                          name={
+                            <PilotName rank={rankByTrack.get(n.trackFile)} name={n.pilotName} />
+                          }
+                          figure={`${n.typicalGap.toFixed(2)} SD`}
+                          figureLabel="Gap"
+                        />
+                      ))}
+                    </ReadingRows>
+                  </>
+                ) : (
+                  <>
+                    <DotMeterAxis
+                      className={cn(READING_AXIS_INSET, READING_LINK_ROOM)}
+                      lower="flew the opposite way"
+                      higher="flew alike"
+                      ticks={[]}
+                    />
+                    <ReadingRows aria-label={resultsLabel}>
+                      {shown.map((n) => (
+                        <ReadingRow key={n.trackFile} className={READING_LINK_ROOM}>
+                          <div className="flex items-baseline justify-between gap-3">
+                            <ReadingRowLink
+                              href={pairHref(n.pilotName)}
+                              routerOptions={openedHereFrom(SIMILARITY_LABEL)}
+                              className={READING_NAME}
+                            >
+                              <PilotName
+                                rank={rankByTrack.get(n.trackFile)}
+                                name={n.pilotName}
+                              />
+                            </ReadingRowLink>
+                            <span
+                              className={cn(
+                                "font-semibold whitespace-nowrap tabular-nums",
+                                !n.aboveNoiseFloor && "text-muted-foreground"
+                              )}
+                            >
+                              <span className="sr-only">Similarity </span>
+                              {formatSimilarity(n.similarity)}
+                            </span>
+                          </div>
+                          {/* The dashed tick is what this pilot's similarity
+                              has to beat; a dot short of it is hollow, and the
+                              words under the track say so. */}
+                          <DotMeter
+                            className="mt-1"
+                            value={similarityOnTrack(n.similarity)}
+                            threshold={similarityOnTrack(n.noiseFloor)}
+                            hollow={!n.aboveNoiseFloor}
+                            showFigure={false}
+                            showTrack
+                            ticks={[0]}
+                            label={`Similarity to ${subject.pilotName}`}
+                            valueLabel={`${formatSimilarity(n.similarity)}, needs to beat ${n.noiseFloor.toFixed(2)}`}
                           />
-                        </Cell>
-                        {byGap ? (
-                          <>
-                            <Cell className="tabular-nums">
-                              {formatMetricValue(
-                                n.contributions[0].unit,
-                                n.contributions[0].neighbourValue
-                              )}{" "}
-                              {n.contributions[0].unit} ({fmtZ(n.contributions[0].neighbourZ)})
-                            </Cell>
-                            <Cell className="tabular-nums">{n.typicalGap.toFixed(2)}</Cell>
-                          </>
-                        ) : (
-                          <>
-                            <Cell>
-                              <span className="flex items-center gap-2">
-                                <span
-                                  className={cn(
-                                    "tabular-nums",
-                                    !n.aboveNoiseFloor && "text-muted-foreground"
-                                  )}
-                                >
-                                  {n.similarity.toFixed(3)}
-                                </span>
-                                <SimilarityBar
-                                  value={n.similarity}
-                                  muted={!n.aboveNoiseFloor}
-                                />
-                                {n.aboveNoiseFloor ? null : (
-                                  <span className="text-xs text-muted-foreground">
-                                    too little data to tell
-                                  </span>
-                                )}
-                              </span>
-                            </Cell>
-                            <Cell className="tabular-nums text-muted-foreground">
-                              {n.noiseFloor.toFixed(2)}
-                            </Cell>
-                            <Cell className="tabular-nums text-muted-foreground">
-                              {n.shapeOnly.toFixed(2)}
-                            </Cell>
-                            <Cell className="tabular-nums">{n.typicalGap.toFixed(2)}</Cell>
-                            <Cell className="tabular-nums">{n.sharedMetrics}</Cell>
-                            <Cell>
-                              <span className="text-xs text-muted-foreground">
-                                {n.contributions
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {n.aboveNoiseFloor
+                              ? n.contributions
                                   .slice(0, 3)
                                   .map(
                                     (c) =>
                                       `${c.contribution >= 0 ? "+" : "−"} ${c.shortLabel ?? c.label}`
                                   )
-                                  .join(", ")}
-                              </span>
-                            </Cell>
-                          </>
-                        )}
-                      </Row>
-                    ))}
-                  </TableBody>
-                </Table>
+                                  .join(", ")
+                              : `too little in common to tell (needs ${n.noiseFloor.toFixed(2)})`}
+                          </p>
+                        </ReadingRow>
+                      ))}
+                    </ReadingRows>
+                  </>
+                )}
                 {neighbours.length > TOP_N ? (
                   <div>
                     <Button size="sm" variant="outline" onPress={() => setShowAll((s) => !s)}>
@@ -756,50 +646,7 @@ export function TaskPilotSimilarity() {
                     </ul>
                   </details>
                 ) : null}
-              </Card>
-
-              {shown[0] && !byGap ? (
-                <Card aria-labelledby="drivers-heading" className="gap-3">
-                  <h2 id="drivers-heading" className="text-lg font-semibold">
-                    Why {subject.pilotName} and {shown[0].pilotName} came out closest
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Each behaviour pushes the pair together (+) or apart (−). The
-                    contributions add up to the similarity score,{" "}
-                    {shown[0].similarity.toFixed(3)}.
-                  </p>
-                  <Table
-                    aria-label={`Per-behaviour contributions for ${shown[0].pilotName}`}
-                    scrollLabel="Contributions"
-                  >
-                    <TableHeader>
-                      <Column isRowHeader>Behaviour</Column>
-                      <Column>{subject.pilotName}</Column>
-                      <Column>{shown[0].pilotName}</Column>
-                      <Column>Contribution</Column>
-                    </TableHeader>
-                    <TableBody>
-                      {shown[0].contributions.map((c) => (
-                        <Row key={c.metricId}>
-                          <Cell>{c.shortLabel ?? c.label}</Cell>
-                          <Cell className="tabular-nums">
-                            {formatMetricValue(c.unit, c.subjectValue)} {c.unit} (
-                            {fmtZ(c.subjectZ)})
-                          </Cell>
-                          <Cell className="tabular-nums">
-                            {formatMetricValue(c.unit, c.neighbourValue)} {c.unit} (
-                            {fmtZ(c.neighbourZ)})
-                          </Cell>
-                          <Cell className="tabular-nums">
-                            {c.contribution >= 0 ? "+" : "−"}
-                            {Math.abs(c.contribution).toFixed(3)}
-                          </Cell>
-                        </Row>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </Card>
-              ) : null}
+              </section>
             </>
           )}
 
@@ -831,8 +678,9 @@ export function TaskPilotSimilarity() {
                   <dt className="font-medium text-foreground">Needs to beat</dt>
                   <dd>
                     What two unrelated pilots score one time in twenty over this
-                    many behaviours (0.67 for three, 0.21 for twenty-two). Rows
-                    below it are greyed: not enough in common to say anything.
+                    many behaviours (0.67 for three, 0.21 for twenty-two). It is
+                    the dashed tick on a row. A pilot below it has a hollow
+                    dot: not enough in common to say anything.
                   </dd>
                 </>
               )}

@@ -170,6 +170,11 @@ const TaskQrPage = lazy(() =>
 );
 // Client-only (a noindex shell in the SSR Function), and lazy so it costs
 // nothing on the pages that do not open it.
+const TaskPilotSimilarityPair = lazy(() =>
+  import("./pages/TaskPilotSimilarityPair").then((m) => ({
+    default: m.TaskPilotSimilarityPair,
+  }))
+);
 const TaskPilotSimilarity = lazy(() =>
   import("./pages/TaskPilotSimilarity").then((m) => ({
     default: m.TaskPilotSimilarity,
@@ -436,6 +441,13 @@ export function AppRoutes() {
             <Route
               path="/comp/:compId/task/:taskId/analysis/similar"
               element={<TaskPilotSimilarity />}
+            />
+            {/* Two pilots compared, opened from a row of the page above. A
+                page of its own, left with Back; client-only like its parent,
+                so it has a COMP_SHELL_ROUTES entry too. */}
+            <Route
+              path="/comp/:compId/task/:taskId/analysis/similar/pair"
+              element={<TaskPilotSimilarityPair />}
             />
             {/* One thermal's rose over the terrain it worked, at the size of
                 the screen — a leaf of the thermals section, where it was a

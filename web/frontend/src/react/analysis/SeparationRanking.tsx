@@ -29,6 +29,7 @@ import { useSearchParams } from "react-router-dom";
 import type { Key, Selection } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DotMeter, DotMeterAxis } from "@/react/rac/meter";
+import { READING_TABLE } from "@/react/rac/reading-list";
 import { Badge } from "@/react/rac/badge";
 import { LinkButton } from "@/react/rac/button";
 import { MasterDetail } from "@/react/components/MasterDetail";
@@ -208,10 +209,9 @@ export function SeparationRanking({
               : undefined
           }
           onWideChange={report ? onWideChange : undefined}
-          // Stacked the pane IS the view, inside a Card that already is the
-          // surface: a second rounded, bordered box spent ~2rem of a phone's
-          // width on chrome the chart needs. Side by side the pane is a
-          // column of its own and the card comes back.
+          // The pane is a card at every width: the section around it is
+          // not one (each row of the list is), so stacked the chart would
+          // otherwise sit on the page's ground.
           paneWidthClassName="w-full"
           // Side by side the pane is a column of its own, stuck under the
           // page's bar AND the class select and pilot highlight stuck beneath
@@ -219,26 +219,12 @@ export function SeparationRanking({
           // Give it the rest of the window's height so the scatter can fill
           // it. Stacked it sizes from content. Paper too.
           paneWrapClassName="scroll-mt-28 @5xl:top-28"
-          paneClassName="rounded-none border-0 bg-transparent @5xl:rounded-lg @5xl:border @5xl:bg-card @5xl:h-[calc(100vh-9rem)] @5xl:max-h-[calc(100vh-9rem)] print:h-auto"
+          paneClassName="rounded-xl border bg-card shadow-card @5xl:h-[calc(100vh-9rem)] @5xl:max-h-[calc(100vh-9rem)] print:h-auto"
           master={
             <RankingTable
               ranked={ranked}
               ariaLabel="Behaviour ranking"
               subjectLabel="Behaviour"
-              // Stacked, the table spans the panel edge to edge: the card's
-              // 20px of side padding is a tenth of a phone's width, and paying
-              // it here pushed the Strength column into a sideways scroll the
-              // old full-width layout never had. Horizontal rules only, since
-              // the box now meets the card's own sides.
-              //
-              // Side by side the bleed comes off — the column is already
-              // inside the grid. w-auto is load-bearing: the viewport is
-              // `w-full`, so negative margins alone would slide it left
-              // rather than widen it.
-              viewportClassName={cn(
-                "-mx-5 w-auto border-y",
-                "@5xl:mx-0 @5xl:w-full @5xl:border-y-0"
-              )}
               fieldSize={fieldSize}
               pilots={report?.pilots}
               selection={
@@ -269,11 +255,7 @@ export function SeparationRanking({
                 headingId={detailHeadingId}
                 showAllLabels={showAllLabels}
                 onShowAllLabelsChange={setShowAllLabels}
-                // No inner pad stacked: the Card already pays p-5, and a
-                // second p-4 was a nested card's margins after the chrome
-                // came off. Side by side the pane is a card again, so the
-                // pad returns with it.
-                className="rounded-none border-0 p-0 @5xl:p-4"
+                className="rounded-none border-0 p-4"
                 fillViewport
                 // The inline plot is still a few hundred pixels on a phone;
                 // this is the way to the whole screen. Useful at every
@@ -376,12 +358,9 @@ function RankingTable({
   fieldSize,
   pilots,
   selection,
-  viewportClassName,
 }: {
   ranked: RankedMetric[];
   ariaLabel: string;
-  /** Classes for the table's scroll viewport — see rac/table's Table. */
-  viewportClassName?: string;
   /** First column's header. "Behaviour" for the ranking, "Outcome" for the
    * checks below it — the engine calls both a metric, but the reader is owed
    * the distinction: one is something a pilot did, the other is the result
@@ -400,8 +379,7 @@ function RankingTable({
   return (
     <Table
       aria-label={ariaLabel}
-      scrollLabel={ariaLabel}
-      viewportClassName={viewportClassName}
+      viewportClassName={LIST.viewport}
       // A LIST of rows on one shared axis, at every width (issues #804, #860).
       // It was four columns: 642px wide in a phone's 359px window, with a bar
       // for the strength and a second bar for the pilots measured. Each row
@@ -409,7 +387,7 @@ function RankingTable({
       // pilots were measured, over ONE mark: a dot on the axis drawn once
       // above the list. It is still one table with the kit's roles, so
       // selection and the keyboard are unchanged; its boxes are laid out as
-      // a grid (LIST below).
+      // the kit's reading list, a card for each row (LIST below).
       className={LIST.table}
       {...(selection
         ? {
@@ -460,7 +438,7 @@ function RankingTable({
       <TableBody>
         {ranked.map(({ metric, correlation }) => (
           <Row key={metric.id} id={metric.id} className={LIST.row}>
-            <Cell className={cn(LIST.cell, "[grid-area:name] whitespace-normal text-base")}>
+            <Cell className={cn(LIST.cell, LIST.name, "[grid-area:name]")}>
               <span className="inline-flex items-center gap-1">
                 {metric.label}
                 <MetricExplanation
@@ -510,26 +488,21 @@ function RankingTable({
 }
 
 /**
- * The ranking table's boxes, laid out as a list.
+ * The ranking table's boxes, laid out as the kit's reading list
+ * (rac/reading-list.tsx): a card for each behaviour.
  *
- * - The table, its head and its body are blocks, so a row can be a grid as
- *   wide as the card.
  * - The headings are a wrapping line above the list, each with its ⓘ, which
  *   is the only way to those notes on a screen. Strength is last and full
  *   width, over the axis.
  * - A row is a grid: the name beside what its strength means and the pilots
  *   measured, and the dot on the shared axis under all three.
- *
- * The side padding is the card's own where the table runs edge to edge
- * (stacked), and the column's where it sits beside the chart (`@5xl`).
  */
 const LIST = {
-  table: "block [&_tbody]:block [&_thead]:block",
-  header:
-    "[&_tr]:flex [&_tr]:flex-wrap [&_tr]:items-center [&_tr]:gap-x-4 [&_tr]:px-5 [&_tr]:py-2 [&_tr]:@5xl:px-2",
-  heading: "block h-auto p-0 text-muted-foreground",
-  row: "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-5 py-3 [grid-template-areas:'name_verdict'_'name_count'_'plot_plot'] @5xl:px-2",
-  cell: "block p-0",
+  ...READING_TABLE,
+  row: cn(
+    READING_TABLE.row,
+    "[grid-template-areas:'name_verdict'_'name_count'_'plot_plot']"
+  ),
 };
 
 /**

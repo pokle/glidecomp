@@ -16,8 +16,6 @@ import { compAnalysisRows, hasAnyCorrelation } from "../analysis/types";
 import { formatShownRho, verdictWords } from "../analysis/units";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Link as AriaLink } from "react-aria-components";
-import { ChevronRightIcon } from "lucide-react";
 import { useCompAnalysis } from "../analysis/use-comp-analysis";
 import { taskReadings, taskReadingsWords } from "../analysis/comp-behaviour";
 import { openedHereFrom } from "../lib/leave";
@@ -28,6 +26,7 @@ import { ClassPicker } from "../analysis/ClassPicker";
 import { TaskAnalysisList, type TaskAnalysisLink } from "../analysis/TaskAnalysisList";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DotMeterAxis, MultiDotMeter } from "@/react/rac/meter";
+import { READING_LINK_ROOM, READING_TABLE, ReadingRowLink } from "@/react/rac/reading-list";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { cn } from "@/react/lib/utils";
 import { Card } from "@/react/rac/card";
@@ -262,7 +261,10 @@ export function CompAnalysis() {
         // which behaviours have explanatory power IS the finding, so the
         // separation ranking leads and everything else follows it.
         <div className="mt-6 flex flex-col gap-6">
-          <Card aria-labelledby="consistency-heading" className="gap-3">
+          {/* A plain section, not a Card: each row of the ranking is a card
+              of its own, with the heading above them on the ground
+              (rac/reading-list.tsx). */}
+          <section aria-labelledby="consistency-heading" className="flex flex-col gap-3">
             <h2 id="consistency-heading" className="text-lg font-semibold">
               Which behaviours went with better ranks, across tasks
             </h2>
@@ -288,7 +290,7 @@ export function CompAnalysis() {
                 pilot, so they have no row here — see the glossary.
               </p>
             ) : null}
-          </Card>
+          </section>
 
           {/* The map and the outcome checks were h3s nested inside the ranking
               section. They are peer READINGS of the same data, not sub-parts of
@@ -309,7 +311,7 @@ export function CompAnalysis() {
           </Card>
 
           {outcomeMetrics.length > 0 ? (
-            <Card aria-labelledby="outcome-heading" className="gap-3">
+            <section aria-labelledby="outcome-heading" className="flex flex-col gap-3">
               <h2
                 id="outcome-heading"
                 className="flex items-center gap-1 text-lg font-semibold"
@@ -331,7 +333,7 @@ export function CompAnalysis() {
                 fieldSize={active.aggregate.pilots.length}
                 behaviourHref={behaviourHref}
               />
-            </Card>
+            </section>
           ) : null}
 
           <Card aria-labelledby="comp-scores-heading" className="gap-3">
@@ -446,15 +448,15 @@ function SeparationTable({
   return (
     <Table
       aria-label={ariaLabel}
-      scrollLabel={ariaLabel}
       // A LIST of rows on one shared axis, at every width (issues #804,
       // #860), the shape the task page's ranking has. It was a table 793px
       // wide in a phone's 319px window: the name filled the screen and every
       // figure was off to the right. A row is now the behaviour's name, how
       // the days compared and how it stood against the comp scores, over one
       // track with a badge for each task (rac/meter.tsx, MultiDotMeter).
+      // Each row is a card of its own (rac/reading-list.tsx).
       className={LIST.table}
-      viewportClassName="-mx-5 w-auto border-y"
+      viewportClassName={LIST.viewport}
     >
       <TableHeader className={LIST.header}>
         {/* A row's first line is plainly its name; a screen reader keeps
@@ -488,28 +490,15 @@ function SeparationTable({
       <TableBody>
         {metrics.map((m) => (
           <Row key={m.id} className={LIST.row}>
-            <Cell className={cn(LIST.cell, "[grid-area:name] whitespace-normal text-base")}>
-              {/* The row's one link, stretched over the whole row: a real
-                  anchor, so it works with JavaScript off (docs/ssr.md), and
-                  the row is the target, not the name. It opens the
-                  behaviour's own page, which lists each task's figure. */}
-              <AriaLink
+            <Cell className={cn(LIST.cell, LIST.name, "[grid-area:name]")}>
+              {/* The row's one link, stretched over the whole row. It opens
+                  the behaviour's own page, which lists each task's figure. */}
+              <ReadingRowLink
                 href={behaviourHref(m.id)}
                 routerOptions={openedHereFrom(COMP_ANALYSIS_LABEL)}
-                // `after:z-10`: the track's own boxes are positioned and come later
-                // in the row, so without it they sit over the link and a tap
-                // on the track opened nothing.
-                className="outline-none after:absolute after:inset-0 after:z-10 data-focus-visible:after:ring-2 data-focus-visible:after:ring-ring/50 data-focus-visible:after:ring-inset"
               >
                 {m.label}
-                {/* At the row's right-hand edge, centred on the row, where
-                    every other list's chevron is. It was set after the name,
-                    so it wrapped onto a line of its own under a long one. */}
-                <ChevronRightIcon
-                  aria-hidden="true"
-                  className="absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-              </AriaLink>
+              </ReadingRowLink>
             </Cell>
             <Cell className={cn(LIST.cell, "[grid-area:plot]")}>
               <MultiDotMeter
@@ -544,20 +533,20 @@ function SeparationTable({
 }
 
 /**
- * The comp ranking's boxes, laid out as a list. The same grid as the task
- * page's ranking (analysis/SeparationRanking.tsx): the name beside how the
- * days compared and how it stood against the comp scores, and the track under
- * all three. A row is `relative`, for the link stretched over it and the
- * chevron at its right-hand edge. The heading row keeps the same room on the
- * right as a row keeps for its chevron, so the axis and the tracks line up.
+ * The comp ranking's boxes, laid out as the kit's reading list
+ * (rac/reading-list.tsx): a card for each behaviour. The name beside how the
+ * days compared and how it stood against the comp scores, and the track
+ * under all three. The heading row keeps the same room on the right as a row
+ * keeps for its chevron, so the axis and the tracks line up.
  */
 const LIST = {
-  table: "block [&_tbody]:block [&_thead]:block",
-  header:
-    "[&_tr]:flex [&_tr]:flex-wrap [&_tr]:items-center [&_tr]:gap-x-4 [&_tr]:py-2 [&_tr]:pr-11 [&_tr]:pl-5",
-  heading: "block h-auto p-0 text-muted-foreground",
-  row: "relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 py-3 pr-11 pl-5 [grid-template-areas:'name_days'_'name_comp'_'plot_plot']",
-  cell: "block p-0",
+  ...READING_TABLE,
+  header: cn(READING_TABLE.header, "[&_tr]:pr-11"),
+  row: cn(
+    READING_TABLE.row,
+    READING_LINK_ROOM,
+    "[grid-template-areas:'name_days'_'name_comp'_'plot_plot']"
+  ),
 };
 
 /**

@@ -199,6 +199,10 @@ export function DotMeter({
   valueLabel,
   maxMagnitude = 1,
   hollow = false,
+  threshold,
+  showFigure = true,
+  showTrack = false,
+  ticks = DOT_TICKS,
   className,
 }: {
   value: number;
@@ -207,6 +211,18 @@ export function DotMeter({
   valueLabel?: string;
   maxMagnitude?: number;
   hollow?: boolean;
+  /** A level this row's reading has to clear, drawn as a dashed tick on the
+   * same track (the similarity list's "needs to beat"). It differs from row
+   * to row, so it belongs to the row and not to the axis. */
+  threshold?: number;
+  /** False where the row prints the figure itself, beside its name. */
+  showFigure?: boolean;
+  /** Draw the track as a faint bar from end to end. For a track with no
+   * gridlines but its centre, which otherwise has nothing on its empty side. */
+  showTrack?: boolean;
+  /** The gridlines, as fractions of `maxMagnitude`. `[0]` for a track whose
+   * two sides are not on one scale, where only the centre means anything. */
+  ticks?: readonly number[];
   className?: string;
 }) {
   const clamped = Math.max(-maxMagnitude, Math.min(maxMagnitude, value));
@@ -237,7 +253,10 @@ export function DotMeter({
       className={cn("block w-full", className)}
     >
       <div aria-hidden className="relative mx-2 h-7 [print-color-adjust:exact]">
-        {DOT_TICKS.map((t) => (
+        {showTrack ? (
+          <span className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-muted" />
+        ) : null}
+        {ticks.map((t) => (
           <span
             key={t}
             className={cn(
@@ -251,6 +270,18 @@ export function DotMeter({
           className="absolute top-1/2 h-0.5 -translate-y-1/2 bg-foreground"
           style={{ left: `${Math.min(at, 50)}%`, width: `${Math.abs(at - 50)}%` }}
         />
+        {threshold === undefined ? null : (
+          <span
+            data-threshold
+            className="absolute inset-y-1 -translate-x-1/2 border-l-2 border-dashed border-foreground"
+            style={{
+              left: `${trackPercent(
+                Math.max(-maxMagnitude, Math.min(maxMagnitude, threshold)),
+                maxMagnitude
+              )}%`,
+            }}
+          />
+        )}
         <span
           className={cn(
             "absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-foreground",
@@ -258,12 +289,14 @@ export function DotMeter({
           )}
           style={{ left: `${at}%` }}
         />
-        <span
-          className="absolute top-1/2 -translate-y-1/2 text-xs tabular-nums text-foreground"
-          style={figureStyle}
-        >
-          {figure}
-        </span>
+        {showFigure ? (
+          <span
+            className="absolute top-1/2 -translate-y-1/2 text-xs tabular-nums text-foreground"
+            style={figureStyle}
+          >
+            {figure}
+          </span>
+        ) : null}
       </div>
     </AriaMeter>
   );
@@ -280,6 +313,8 @@ export function DotMeterAxis({
   lower,
   higher,
   maxMagnitude = 1,
+  ticks = DOT_TICKS,
+  formatTick,
   className,
 }: {
   /** What a reading to the left of zero means. */
@@ -287,6 +322,11 @@ export function DotMeterAxis({
   /** What a reading to the right of zero means. */
   higher: string;
   maxMagnitude?: number;
+  /** The figures under the ends, as fractions of `maxMagnitude`; the same
+   * list the rows' meters are given. Empty for an axis with no scale. */
+  ticks?: readonly number[];
+  /** How a tick's value is printed; the signed number by default. */
+  formatTick?: (value: number) => string;
   className?: string;
 }) {
   return (
@@ -295,20 +335,26 @@ export function DotMeterAxis({
         <span>← {lower}</span>
         <span className="text-right">{higher} →</span>
       </div>
-      <div className="relative mx-2 h-5 tabular-nums">
-        {DOT_TICKS.map((t) => (
-          <span
-            key={t}
-            className={cn(
-              "absolute top-0.5",
-              t === -1 ? "" : t === 1 ? "-translate-x-full" : "-translate-x-1/2"
-            )}
-            style={{ left: `${trackPercent(t * maxMagnitude, maxMagnitude)}%` }}
-          >
-            {t === 0 ? "0" : formatSigned(t * maxMagnitude, t % 1 === 0 ? 0 : 1)}
-          </span>
-        ))}
-      </div>
+      {ticks.length === 0 ? null : (
+        <div className="relative mx-2 h-5 tabular-nums">
+          {ticks.map((t) => (
+            <span
+              key={t}
+              className={cn(
+                "absolute top-0.5",
+                t === -1 ? "" : t === 1 ? "-translate-x-full" : "-translate-x-1/2"
+              )}
+              style={{ left: `${trackPercent(t * maxMagnitude, maxMagnitude)}%` }}
+            >
+              {formatTick
+                ? formatTick(t * maxMagnitude)
+                : t === 0
+                  ? "0"
+                  : formatSigned(t * maxMagnitude, t % 1 === 0 ? 0 : 1)}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -316,7 +362,8 @@ export function DotMeterAxis({
 /** One of several readings on a shared track; see {@link MultiDotMeter}. */
 export interface TrackReading {
   key: string;
-  /** What the badge says: a task's number. Two or three characters at most. */
+  /** What the badge says: a task's number, a pilot's initial. Two or three
+   * characters at most. */
   badge: string;
   value: number;
   /** The reading did not clear its noise floor: drawn as an outline. */
@@ -348,8 +395,11 @@ export function MultiDotMeter({
   label,
   valueLabel,
   maxMagnitude = 1,
+  ticks = DOT_TICKS,
   className,
 }: {
+  /** The gridlines, as fractions of `maxMagnitude`. */
+  ticks?: readonly number[];
   readings: readonly TrackReading[];
   label: string;
   /** Every reading, in words: what a screen reader announces. */
@@ -371,7 +421,7 @@ export function MultiDotMeter({
       className={cn("block w-full", className)}
     >
       <div aria-hidden className="relative mx-2 h-8 [print-color-adjust:exact]">
-        {DOT_TICKS.map((t) => (
+        {ticks.map((t) => (
           <span
             key={t}
             className={cn(

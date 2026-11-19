@@ -582,6 +582,35 @@ test("The task page: the route diagram's names are readable and its turnpoints c
   await expectNoSidewaysScroll(page);
 });
 
+/**
+ * Each row of a reading list is a card of its own (rac/reading-list.tsx): a
+ * gap shows the page's ground between one and the next, and the row has a
+ * border on every side. Rows divided by a hairline in one card left a reader
+ * unsure whether a track belonged to the name above it or the one below.
+ */
+async function expectSeparateCards(rows: Locator) {
+  const boxes = await rows.evaluateAll((els) =>
+    els.slice(0, 3).map((el) => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return {
+        top: r.top,
+        bottom: r.bottom,
+        borders: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+        radius: parseFloat(cs.borderTopLeftRadius),
+      };
+    })
+  );
+  expect(boxes.length).toBeGreaterThan(1);
+  for (let i = 1; i < boxes.length; i++) {
+    expect(boxes[i].top - boxes[i - 1].bottom, "a gap between rows").toBeGreaterThanOrEqual(8);
+  }
+  for (const b of boxes) {
+    expect(b.borders.every((w) => parseFloat(w) >= 1), "a border on every side").toBe(true);
+    expect(b.radius).toBeGreaterThan(0);
+  }
+}
+
 test("Winning strategies: the ranking is one dot a row on a shared axis", async ({ page }) => {
   // Issues #804 and #860: the ranking was four columns 642px wide in a phone's
   // 359px window, with a bar for the strength and a second bar for the pilots
@@ -591,15 +620,16 @@ test("Winning strategies: the ranking is one dot a row on a shared axis", async 
   await page.goto(`/comp/${compId}/task/${taskId}/analysis/strategies`, {
     waitUntil: "domcontentloaded",
   });
-  const region = page.getByRole("region", { name: "Behaviour ranking" });
   const ranking = page.getByRole("grid", { name: "Behaviour ranking" });
   await ranking.waitFor({ timeout: 60_000 });
   const rows = ranking.locator("tbody tr");
   await expect(rows.first()).toBeVisible();
 
-  // No wider than its window, at either width.
-  expect(await region.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+  // No wider than its window, at either width, and each row is a card of
+  // its own with a gap before the next.
+  expect(await ranking.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
   await expectNoSidewaysScroll(page);
+  await expectSeparateCards(rows);
 
   // The axis says what each end means, once.
   await expect(ranking.getByText("less of it did well")).toHaveCount(1);
@@ -635,14 +665,14 @@ test("Comp analysis: the ranking is one track a row with a badge for each task, 
   // and no mark for an average; the row opens a page that lists each task's
   // figure.
   await page.goto(`/comp/${compId}/analysis`, { waitUntil: "domcontentloaded" });
-  const region = page.getByRole("region", { name: "Behaviour ranking across tasks" });
   const ranking = page.getByRole("grid", { name: "Behaviour ranking across tasks" });
   await ranking.waitFor({ timeout: 60_000 });
   const rows = ranking.locator("tbody tr");
   await expect(rows.first()).toBeVisible();
 
-  expect(await region.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+  expect(await ranking.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
   await expectNoSidewaysScroll(page);
+  await expectSeparateCards(rows);
   await expect(ranking.getByText("less of it did well")).toHaveCount(1);
   await expect(ranking.getByText("more of it did well")).toHaveCount(1);
 
@@ -701,4 +731,86 @@ test("Comp analysis: a behaviour no report carries is a not-found", async ({ pag
   await expect(page.getByRole("heading", { name: "Behaviour not found" })).toBeVisible({
     timeout: 60_000,
   });
+});
+
+test("Who flew like me?: the results are one dot a pilot, and a row opens the comparison of the pair", async ({
+  page,
+}) => {
+  // Issues #804 and #860: the results were a table of seven columns, 1,010px
+  // wide in a phone's 319px window, and the breakdown by behaviour existed for
+  // the closest pilot only. Each pilot is now a card with one dot on a shared
+  // axis, and the card opens a page that compares the pair.
+  await page.goto(`/comp/${compId}/task/${taskId}/analysis/similar`, {
+    waitUntil: "domcontentloaded",
+  });
+  const list = page.getByRole("list", { name: /^Pilots ranked by behavioural similarity to / });
+  await list.waitFor({ timeout: 60_000 });
+  const rows = list.getByRole("listitem");
+  await expect(rows.first()).toBeVisible();
+  await expectNoSidewaysScroll(page);
+  await expectSeparateCards(rows);
+  await expect(page.getByText("← flew the opposite way", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("flew alike →", { exact: true })).toHaveCount(1);
+
+  // One meter a row. Its value text gives the similarity and what it has to
+  // beat, and the tick for that level is on the row's own track.
+  const row = rows.first();
+  const meter = row.getByRole("meter");
+  await expect(meter).toHaveCount(1);
+  await expect(meter).toHaveAttribute("aria-valuetext", /^−?\d\.\d{3}, needs to beat \d\.\d\d$/);
+  await expect(meter.locator("[data-threshold]")).toHaveCount(1);
+
+  // The row is one link, as big as the row: a tap on the track opens it.
+  const link = row.getByRole("link");
+  await expect(link).toHaveCount(1);
+  await row.evaluate((li) => li.scrollIntoView({ block: "center" }));
+  const hit = await row.evaluate((li) => {
+    const r = li.getBoundingClientRect();
+    const track = li.querySelector('[role~="meter"]')!.getBoundingClientRect();
+    return li
+      .querySelector("a")!
+      .contains(document.elementFromPoint(r.left + r.width * 0.25, track.top + track.height / 2));
+  });
+  expect(hit, "a tap on the track opens the row").toBe(true);
+  await link.click();
+
+  // The pair's page: both names, the figures the list left out, and a row a
+  // behaviour with both pilots on one track.
+  await expect(page).toHaveURL(/\/analysis\/similar\/pair\?.*with=/);
+  await expect(page.getByRole("heading", { level: 1, name: "Pilot comparison" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: / and / })).toBeVisible();
+  for (const term of ["Similarity", "Needs to beat", "Shape only", "Typical gap", "Behaviours shared"]) {
+    await expect(page.getByRole("term").filter({ hasText: new RegExp(`^${term}$`) })).toBeVisible();
+  }
+  const behaviours = page.getByRole("list", { name: /^Each behaviour, for / }).getByRole("listitem");
+  expect(await behaviours.count()).toBeGreaterThan(1);
+  await expectSeparateCards(behaviours);
+  const first = behaviours.first();
+  await expect(first.getByRole("meter")).toHaveAttribute("aria-valuetext", / SD, .* SD$/);
+  await expect(first.locator("[data-reading]")).toHaveCount(2);
+  await expect(first).toContainText(/[+−]\d\.\d{3}/);
+  await expectNoSidewaysScroll(page);
+
+  // A reload rebuilds the page from its URL, and Back returns to the results.
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { level: 2, name: / and / })).toBeVisible({
+    timeout: 60_000,
+  });
+  await page.goBack();
+  await expect(list).toBeVisible();
+});
+
+test("Who flew like me?: a pair the report does not hold says so, with the way back", async ({
+  page,
+}) => {
+  await page.goto(`/comp/${compId}/task/${taskId}/analysis/similar/pair?with=Nobody+At+All`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(page.getByText("These two pilots cannot be compared on this task.")).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(page.getByRole("link", { name: "Who flew like me?" }).last()).toHaveAttribute(
+    "href",
+    /\/analysis\/similar$/
+  );
 });

@@ -580,6 +580,18 @@ These are the standing imperatives. Each links to the reference that explains it
     the title's weight and the chevron — none of it decided, all of it
     copied. `variant="rows"` already makes a row `flex items-center gap-3`,
     so restating that says nothing.
+  - **A list of readings is a card for each row** (`rac/reading-list.tsx`,
+    owner decision 2026-11-19). Where every row has a name, a figure and a
+    mark on an axis the list shares (`rac/meter.tsx`), each row is a card of
+    its own with a gap before the next, and its name is bold. Rows divided by
+    a hairline in one card left a reader who was scrolling unsure whether a
+    track belonged to the name above it or the one below. The heading and the
+    axis sit above the cards on the ground, so the section is a plain
+    `<section>`, never a `Card`. One mark a row, and counts as words: a
+    second bar under the first reads as the same unit. Where a row has more
+    to say than fits, it opens a page. The three worked examples are the
+    Winning strategies ranking, the comp analysis ranking and the
+    "Who flew like me?" results.
   - **There is no editable grid.** An editable collection is a list of rows
     (`rac/grid-list.tsx`) that each open a page of their own — the pilots
     page (`comp/PilotsSection.tsx` → `pages/CompPilotPage.tsx`) is the worked
@@ -854,6 +866,10 @@ These are the standing imperatives. Each links to the reference that explains it
     a competition: `/comp/:id/analysis`, `pages/CompAnalysis.tsx`. It hangs off
     the COMP, and is a pure aggregation over the stored task analyses —
     `aggregateComp()`, materializing nothing.
+  - A row of the comp analysis ranking opens that behaviour's own page,
+    `/comp/:id/analysis/behaviour/:metric` (`pages/CompAnalysisBehaviour.tsx`):
+    each task's figure, linked to that task's chart. Public, SSR'd through the
+    comp analysis loader, always `noindex`.
   - Shared UI is `src/react/analysis/`; the CLI prints a task analysis with
     `bun run score-task -- --analysis` (and every task of a comp with
     `--comp <slug>`).
@@ -869,7 +885,9 @@ These are the standing imperatives. Each links to the reference that explains it
     (`/analysis/strategies|weather|thermals|metrics|style|method`, listed in
     `src/react/analysis/sections.ts` — the SSR route pattern is built from
     that list; the pilot-similarity sheet gets a box too but predates them and
-    keeps its own route). A box carries its name and one line of this-task fact,
+    keeps its own route; a row of its results opens two pilots compared,
+    `/analysis/similar/pair`, client-only like its parent). A box carries
+    its name and one line of this-task fact,
     never an explanation: it is there to be chosen between, and what needs
     explaining is on the other side of it. One report behind all of them:
     `use-task-report.ts` fetches it and `TaskAnalysisFrame` wears the trail, the
