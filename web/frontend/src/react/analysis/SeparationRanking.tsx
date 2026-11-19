@@ -28,7 +28,7 @@ import { useId, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Key, Selection } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
-import { DivergingMeter, ProportionMeter } from "@/react/rac/meter";
+import { DotMeter, DotMeterAxis } from "@/react/rac/meter";
 import { Badge } from "@/react/rac/badge";
 import { LinkButton } from "@/react/rac/button";
 import { MasterDetail } from "@/react/components/MasterDetail";
@@ -42,7 +42,7 @@ import {
   StrengthNote,
   VerdictLegend,
 } from "./ReadingNotes";
-import { verdictWords } from "./units";
+import { formatShownRho, shownRho, verdictWords } from "./units";
 import { MetricDetailPanel } from "./charts/MetricDetailPanel";
 import { ExpandIcon } from "./charts/ExpandIcon";
 import {
@@ -402,6 +402,15 @@ function RankingTable({
       aria-label={ariaLabel}
       scrollLabel={ariaLabel}
       viewportClassName={viewportClassName}
+      // A LIST of rows on one shared axis, at every width (issues #804, #860).
+      // It was four columns: 642px wide in a phone's 359px window, with a bar
+      // for the strength and a second bar for the pilots measured. Each row
+      // is now the behaviour's name, what its strength means and how many
+      // pilots were measured, over ONE mark: a dot on the axis drawn once
+      // above the list. It is still one table with the kit's roles, so
+      // selection and the keyboard are unchanged; its boxes are laid out as
+      // a grid (LIST below).
+      className={LIST.table}
       {...(selection
         ? {
             selectionMode: "single" as const,
@@ -417,27 +426,32 @@ function RankingTable({
           }
         : {})}
     >
-      <TableHeader>
-        <Column isRowHeader className="min-w-56">
+      <TableHeader className={LIST.header}>
+        {/* A row's first line is plainly its name, so this heading says
+            nothing a reader needs to see; a screen reader keeps it. */}
+        <Column isRowHeader className="sr-only">
           {subjectLabel}
         </Column>
-        {/* No aria-labels on these headers any more: the columns they
-            replaced were named "ρ" and "n", symbols a screen reader can only
-            spell out. "Strength" and "Pilots measured" say themselves, and an
-            aria-label would override the visible name for no gain.
-            Each carries the ⓘ holding the paragraph that used to explain it
-            below the table; all three are printed in HowToReadFootnote. */}
-        <Column className="w-48">
+        {/* Each heading carries the ⓘ holding the paragraph that explains it;
+            all three are printed in HowToReadFootnote. Strength comes last
+            and takes the full width, because the axis every row is read
+            against hangs under it. */}
+        <Column className={cn(LIST.heading, "order-last w-full")}>
           <HeaderWithNote label="Strength">
             <StrengthNote />
           </HeaderWithNote>
+          <DotMeterAxis
+            className="mt-1"
+            lower="less of it did well"
+            higher="more of it did well"
+          />
         </Column>
-        <Column className="w-32">
+        <Column className={LIST.heading}>
           <HeaderWithNote label="What it means">
             <VerdictLegend />
           </HeaderWithNote>
         </Column>
-        <Column className="w-36">
+        <Column className={LIST.heading}>
           <HeaderWithNote label="Pilots measured">
             <PilotsMeasuredNote />
           </HeaderWithNote>
@@ -445,8 +459,8 @@ function RankingTable({
       </TableHeader>
       <TableBody>
         {ranked.map(({ metric, correlation }) => (
-          <Row key={metric.id} id={metric.id}>
-            <Cell className="whitespace-normal">
+          <Row key={metric.id} id={metric.id} className={LIST.row}>
+            <Cell className={cn(LIST.cell, "[grid-area:name] whitespace-normal text-base")}>
               <span className="inline-flex items-center gap-1">
                 {metric.label}
                 <MetricExplanation
@@ -461,48 +475,32 @@ function RankingTable({
                 />
               </span>
             </Cell>
-            <Cell>
-              {/* min-w-24 on the bar, not just a column width: a percentage
-                  width contributes nothing to a table's min-content, so on a
-                  narrow screen the column would squeeze the bar — the actual
-                  reading — down to a few pixels instead of letting the table
-                  scroll (which its wrapper is set up for). */}
-              <div className="flex items-center gap-2">
-                <DivergingMeter
-                  className="min-w-24 flex-1"
-                  value={correlation.rho}
-                  label={`${metric.label}: Spearman correlation against rank`}
-                  valueLabel={correlation.rho.toFixed(2)}
-                />
-                {/* aria-hidden: the meter already announces this exact
-                    number as its value text. */}
-                <span
-                  aria-hidden
-                  className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground"
-                >
-                  {correlation.rho.toFixed(2)}
-                </span>
-              </div>
+            <Cell className={cn(LIST.cell, "[grid-area:plot]")}>
+              {/* The sign is the reader's, not the engine's: positive is more
+                  of the behaviour going with doing well (units.ts, shownRho).
+                  A reading that did not clear its noise floor is drawn
+                  hollow, and the words beside the name say so. */}
+              <DotMeter
+                value={shownRho(correlation.rho)}
+                hollow={
+                  correlation.verdict === "within noise" || correlation.verdict === "n too small"
+                }
+                label={`${metric.label}: Spearman correlation with doing well`}
+                valueLabel={formatShownRho(correlation.rho)}
+              />
             </Cell>
-            <Cell>
+            <Cell className={cn(LIST.cell, "[grid-area:verdict] justify-self-end")}>
               <VerdictBadge correlation={correlation} />
             </Cell>
-            <Cell>
-              <div className="flex items-center gap-2">
-                <ProportionMeter
-                  className="w-16 shrink-0"
-                  value={correlation.n}
-                  total={fieldSize}
-                  label={`${metric.label}: pilots measured`}
-                  valueLabel={`${correlation.n} of ${fieldSize} pilots`}
-                />
-                <span
-                  aria-hidden
-                  className="text-xs tabular-nums text-muted-foreground"
-                >
-                  {correlation.n} of {fieldSize}
-                </span>
-              </div>
+            <Cell
+              className={cn(
+                LIST.cell,
+                "[grid-area:count] justify-self-end text-xs tabular-nums text-muted-foreground"
+              )}
+            >
+              {/* Words, not a second bar: a bar here read as the same unit as
+                  the strength above it. */}
+              {correlation.n} of {fieldSize} pilots
             </Cell>
           </Row>
         ))}
@@ -510,6 +508,29 @@ function RankingTable({
     </Table>
   );
 }
+
+/**
+ * The ranking table's boxes, laid out as a list.
+ *
+ * - The table, its head and its body are blocks, so a row can be a grid as
+ *   wide as the card.
+ * - The headings are a wrapping line above the list, each with its ⓘ, which
+ *   is the only way to those notes on a screen. Strength is last and full
+ *   width, over the axis.
+ * - A row is a grid: the name beside what its strength means and the pilots
+ *   measured, and the dot on the shared axis under all three.
+ *
+ * The side padding is the card's own where the table runs edge to edge
+ * (stacked), and the column's where it sits beside the chart (`@5xl`).
+ */
+const LIST = {
+  table: "block [&_tbody]:block [&_thead]:block",
+  header:
+    "[&_tr]:flex [&_tr]:flex-wrap [&_tr]:items-center [&_tr]:gap-x-4 [&_tr]:px-5 [&_tr]:py-2 [&_tr]:@5xl:px-2",
+  heading: "block h-auto p-0 text-muted-foreground",
+  row: "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-5 py-3 [grid-template-areas:'name_verdict'_'name_count'_'plot_plot'] @5xl:px-2",
+  cell: "block p-0",
+};
 
 /**
  * A column header with its ⓘ. `whitespace-normal` because the kit's Column is

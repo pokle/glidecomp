@@ -41,7 +41,7 @@ import {
   type TaskAnalysisReport,
   type MetricReport,
 } from "../types";
-import { unitWords, verdictWords } from "../units";
+import { formatShownRho, unitWords, verdictWords } from "../units";
 import { usePilotHighlight } from "../PilotHighlightContext";
 import { PilotHighlightMark } from "../PilotHighlightMark";
 import {
@@ -138,7 +138,10 @@ export function captionText(
   if (c) {
     // verdictWords, not the raw token: this caption sits under the chart the
     // ranking's chip links to, and the two must say the same thing.
-    parts.push(`ρ = ${c.rho.toFixed(2)} (${verdictWords(c.verdict)}, n = ${c.n}).`);
+    // The figure is the reader's: positive is more of the behaviour going
+    // with doing well (units.ts, shownRho). The sentences below still decide
+    // on the engine's sign.
+    parts.push(`ρ = ${formatShownRho(c.rho)} (${verdictWords(c.verdict)}, n = ${c.n}).`);
     if (metric.direction === "neutral") {
       parts.push(
         c.rho === 0

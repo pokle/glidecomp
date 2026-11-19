@@ -581,3 +581,48 @@ test("The task page: the route diagram's names are readable and its turnpoints c
   await expect(rows.last()).toHaveAttribute("href", /\/scores\?task=/);
   await expectNoSidewaysScroll(page);
 });
+
+test("Winning strategies: the ranking is one dot a row on a shared axis", async ({ page }) => {
+  // Issues #804 and #860: the ranking was four columns 642px wide in a phone's
+  // 359px window, with a bar for the strength and a second bar for the pilots
+  // measured. Each row is now one dot on an axis drawn once above the list,
+  // and the figure is the correlation with DOING WELL: positive is more of
+  // the behaviour.
+  await page.goto(`/comp/${compId}/task/${taskId}/analysis/strategies`, {
+    waitUntil: "domcontentloaded",
+  });
+  const region = page.getByRole("region", { name: "Behaviour ranking" });
+  const ranking = page.getByRole("grid", { name: "Behaviour ranking" });
+  await ranking.waitFor({ timeout: 60_000 });
+  const rows = ranking.locator("tbody tr");
+  await expect(rows.first()).toBeVisible();
+
+  // No wider than its window, at either width.
+  expect(await region.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+  await expectNoSidewaysScroll(page);
+
+  // The axis says what each end means, once.
+  await expect(ranking.getByText("less of it did well")).toHaveCount(1);
+  await expect(ranking.getByText("more of it did well")).toHaveCount(1);
+
+  // One meter a row, with a signed figure, and the pilots measured in words.
+  const row = rows.first();
+  await expect(row.getByRole("meter")).toHaveCount(1);
+  await expect(row.getByRole("meter")).toHaveAttribute("aria-valuetext", /^[+−]\d\.\d\d$/);
+  await expect(row.getByText(/^\d+ of \d+ pilots$/)).toBeVisible();
+
+  // Glide speed is the top row of this task. Faster went with doing well, so
+  // its figure is POSITIVE, where the correlation with rank number was -0.79.
+  const glide = rows.filter({ hasText: "Glide speed between climbs" });
+  await expect(glide.getByRole("meter")).toHaveAttribute("aria-valuetext", /^\+/);
+
+  // Every row's dot is inside its row, and the rows' zero lines line up.
+  const zeros = await rows.evaluateAll((trs) =>
+    trs.map((tr) => {
+      const meter = tr.querySelector('[role~="meter"]')!;
+      const track = meter.firstElementChild!.getBoundingClientRect();
+      return Math.round(track.left + track.width / 2);
+    })
+  );
+  expect(new Set(zeros).size).toBe(1);
+});

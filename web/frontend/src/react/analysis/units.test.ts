@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { TO_SI, type UnitPreferences } from "@glidecomp/engine";
 import type { TaskAnalysisReport } from "./types";
-import { displayReport, unitDisplay, unitWords, verdictWords } from "./units";
+import {
+  displayReport,
+  formatShownRho,
+  shownRho,
+  unitDisplay,
+  unitWords,
+  verdictWords,
+} from "./units";
 
 const METRIC: UnitPreferences = {
   speed: "km/h",
@@ -103,5 +110,24 @@ describe("verdictWords", () => {
     // The one that sent a reader to a glossary: it named the test, not the
     // finding.
     expect(verdictWords("within noise")).toBe("could be chance");
+  });
+});
+
+describe("shownRho", () => {
+  // The engine correlates with rank, and rank 1 is best: flying faster came
+  // out at -0.79. A reader is shown the correlation with doing well.
+  it("turns the engine's sign over", () => {
+    expect(shownRho(-0.79)).toBe(0.79);
+    expect(shownRho(0.41)).toBe(-0.41);
+  });
+
+  it("keeps zero as zero, never minus zero", () => {
+    expect(Object.is(shownRho(0), 0)).toBe(true);
+  });
+
+  it("prints the sign a reader is shown", () => {
+    expect(formatShownRho(-0.79)).toBe("+0.79");
+    expect(formatShownRho(0.412)).toBe("−0.41");
+    expect(formatShownRho(0)).toBe("0.00");
   });
 });

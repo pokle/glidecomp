@@ -5,9 +5,10 @@
  * reading, not the completion of a task, and `role="meter"` is what tells a
  * screen reader so.
  *
- * The consumers so far are both in the task-analysis separation ranking:
+ * The consumers so far are the task and comp analysis rankings:
  * DivergingMeter for a signed Spearman ρ in [-1, 1], which grows from the
- * centre of its track, and ProportionMeter for a part of a whole (how much of
+ * centre of its track; DotMeter for the same reading as one mark on a track a
+ * whole list shares; and ProportionMeter for a part of a whole (how much of
  * the field a correlation actually measured). Sign is encoded by WHICH SIDE
  * the bar grows toward, never by colour alone, and the number is always
  * printed beside the bar (WCAG 1.4.1 Use of Color).
@@ -156,5 +157,158 @@ export function ProportionMeter({
         />
       </div>
     </AriaMeter>
+  );
+}
+
+/** Where a signed reading sits across a track, in percent: the centre is
+ * zero. */
+function trackPercent(value: number, maxMagnitude: number): number {
+  return (value / maxMagnitude + 1) * 50;
+}
+
+/** The gridlines every dot track and its axis share. */
+const DOT_TICKS = [-1, -0.5, 0, 0.5, 1];
+
+/** A signed reading in words a figure can carry: "+0.79", "−0.55", "0.00". */
+export function formatSigned(value: number, digits = 2): string {
+  const text = Math.abs(value).toFixed(digits);
+  return value > 0 ? `+${text}` : value < 0 ? `−${text}` : text;
+}
+
+/**
+ * A signed reading as ONE mark on a track that many rows share: a dot at the
+ * value, a line back to zero, and the number beside it.
+ *
+ * For a list of readings that are compared with one another (the behaviour
+ * ranking). A row used to carry a bar for its strength and a second bar for
+ * the pilots measured, one above the other on a phone, and the two read as
+ * the same unit. Here there is one mark a row and one axis for the list,
+ * drawn once above it by {@link DotMeterAxis}; the gridlines in each row line
+ * up with that axis because both are laid out in percent of the same width.
+ *
+ * `hollow` draws the dot as an outline: the reading is placed honestly but is
+ * not evidence. Outline against fill is a difference of shape, so it survives
+ * greyscale and print; the caller still says so in words beside it.
+ *
+ * Laid out in CSS percentages, with no measuring, so it is the same on the
+ * server and in the browser.
+ */
+export function DotMeter({
+  value,
+  label,
+  valueLabel,
+  maxMagnitude = 1,
+  hollow = false,
+  className,
+}: {
+  value: number;
+  label: string;
+  /** How the reading is announced; defaults to the signed number. */
+  valueLabel?: string;
+  maxMagnitude?: number;
+  hollow?: boolean;
+  className?: string;
+}) {
+  const clamped = Math.max(-maxMagnitude, Math.min(maxMagnitude, value));
+  const at = trackPercent(clamped, maxMagnitude);
+  const figure = formatSigned(clamped);
+  // The number sits beyond the dot, away from zero. A dot near either end has
+  // no room there, so its number goes on the far side of zero instead.
+  const nearEnd = Math.abs(clamped) / maxMagnitude > 0.7;
+  const figureStyle =
+    clamped < 0
+      ? nearEnd
+        ? { left: "calc(50% + 0.5rem)" }
+        : { right: `calc(${100 - at}% + 0.75rem)` }
+      : nearEnd
+        ? { right: "calc(50% + 0.5rem)" }
+        : { left: `calc(${at}% + 0.75rem)` };
+
+  return (
+    <AriaMeter
+      // aria-valuenow must sit inside minValue/maxValue, so it is the
+      // magnitude; aria-valuetext carries the signed reading, which is what a
+      // screen reader announces.
+      value={Math.abs(clamped) / maxMagnitude}
+      minValue={0}
+      maxValue={1}
+      aria-label={label}
+      valueLabel={valueLabel ?? figure}
+      className={cn("block w-full", className)}
+    >
+      <div aria-hidden className="relative mx-2 h-7 [print-color-adjust:exact]">
+        {DOT_TICKS.map((t) => (
+          <span
+            key={t}
+            className={cn(
+              "absolute inset-y-0 w-px",
+              t === 0 ? "bg-muted-foreground/60" : "bg-border"
+            )}
+            style={{ left: `${trackPercent(t * maxMagnitude, maxMagnitude)}%` }}
+          />
+        ))}
+        <span
+          className="absolute top-1/2 h-0.5 -translate-y-1/2 bg-foreground"
+          style={{ left: `${Math.min(at, 50)}%`, width: `${Math.abs(at - 50)}%` }}
+        />
+        <span
+          className={cn(
+            "absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-foreground",
+            hollow ? "bg-card" : "bg-foreground"
+          )}
+          style={{ left: `${at}%` }}
+        />
+        <span
+          className="absolute top-1/2 -translate-y-1/2 text-xs tabular-nums text-foreground"
+          style={figureStyle}
+        >
+          {figure}
+        </span>
+      </div>
+    </AriaMeter>
+  );
+}
+
+/**
+ * The axis a list of {@link DotMeter}s is read against, drawn once above the
+ * list: what each end means, and the scale.
+ *
+ * `aria-hidden`: each meter announces its own reading, and the note beside
+ * the column's heading says in a sentence what the two ends mean.
+ */
+export function DotMeterAxis({
+  lower,
+  higher,
+  maxMagnitude = 1,
+  className,
+}: {
+  /** What a reading to the left of zero means. */
+  lower: string;
+  /** What a reading to the right of zero means. */
+  higher: string;
+  maxMagnitude?: number;
+  className?: string;
+}) {
+  return (
+    <div aria-hidden className={cn("text-xs font-normal text-muted-foreground", className)}>
+      <div className="flex justify-between gap-3">
+        <span>← {lower}</span>
+        <span className="text-right">{higher} →</span>
+      </div>
+      <div className="relative mx-2 h-5 tabular-nums">
+        {DOT_TICKS.map((t) => (
+          <span
+            key={t}
+            className={cn(
+              "absolute top-0.5",
+              t === -1 ? "" : t === 1 ? "-translate-x-full" : "-translate-x-1/2"
+            )}
+            style={{ left: `${trackPercent(t * maxMagnitude, maxMagnitude)}%` }}
+          >
+            {t === 0 ? "0" : formatSigned(t * maxMagnitude, t % 1 === 0 ? 0 : 1)}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
