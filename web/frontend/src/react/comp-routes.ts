@@ -204,6 +204,13 @@ export const COMP_SSR_ROUTES = [
     why: "The comp analysis. Noindex per request while nothing is aggregated yet.",
   },
   {
+    name: "compAnalysisBehaviour",
+    path: "/comp/:compId/analysis/behaviour/:metric",
+    why:
+      "One behaviour across the comp's tasks: each task's figure, behind a row of the comp " +
+      "analysis ranking. Always noindex: a closer look at one row. An unknown behaviour is a 404.",
+  },
+  {
     name: "taskAnalysis",
     path: "/comp/:compId/task/:taskId/analysis",
     why: "The task analysis: a contents list of its sections. Noindex per request while pending.",

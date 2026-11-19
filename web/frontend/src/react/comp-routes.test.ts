@@ -155,6 +155,7 @@ describe("the path builders land where the tables say", () => {
     [slug.compScoresPath(...c), "ssr"],
     [slug.compWaypointsPath(...c), "ssr"],
     [slug.compAnalysisPath(...c), "ssr"],
+    [slug.compAnalysisBehaviourPath(...c, "glide.speed"), "ssr"],
     [slug.taskPath(...t), "ssr"],
     [slug.pilotPath(...p), "ssr"],
     [slug.taskAnalysisPath(...t), "ssr"],

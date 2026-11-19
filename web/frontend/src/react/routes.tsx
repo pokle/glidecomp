@@ -50,6 +50,7 @@ import { CompWaypoints } from "./pages/CompWaypoints";
 import { TaskDetail } from "./pages/TaskDetail";
 import { PilotScoreDetail } from "./pages/PilotScoreDetail";
 import { CompAnalysis } from "./pages/CompAnalysis";
+import { CompAnalysisBehaviour } from "./pages/CompAnalysisBehaviour";
 import { TaskAnalysis } from "./pages/TaskAnalysis";
 import { TaskAnalysisSection } from "./pages/TaskAnalysisSection";
 import { TaskAnalysisMetricChart } from "./pages/TaskAnalysisMetricChart";
@@ -342,6 +343,13 @@ export function AppRoutes() {
                 client polls.
                 A hidden `test` comp still 404s for non-admins. */}
             <Route path="/comp/:compId/analysis" element={<CompAnalysis />} />
+            {/* One behaviour across the comp's tasks: the page a row of the
+                comp analysis ranking opens. Public and SSR'd through the same
+                loader; always noindex. */}
+            <Route
+              path="/comp/:compId/analysis/behaviour/:metric"
+              element={<CompAnalysisBehaviour />}
+            />
             {/* Creating a task: a page, not a dialog over the comp (#819).
                 Admin-only, so a noindex shell in the SSR Function, listed
                 ahead of the public task route, whose URL shape it shares. The

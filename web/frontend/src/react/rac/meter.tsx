@@ -312,3 +312,89 @@ export function DotMeterAxis({
     </div>
   );
 }
+
+/** One of several readings on a shared track; see {@link MultiDotMeter}. */
+export interface TrackReading {
+  key: string;
+  /** What the badge says: a task's number. Two or three characters at most. */
+  badge: string;
+  value: number;
+  /** The reading did not clear its noise floor: drawn as an outline. */
+  hollow?: boolean;
+}
+
+/**
+ * Several signed readings of ONE thing on one track: a behaviour's
+ * coefficient on each task of a competition. Each reading is a badge that
+ * says which it is ("1", "2", "3"), on the same shared axis as
+ * {@link DotMeter}, and all of them are on one line.
+ *
+ * Badges that agree overlap, and they are see-through, so a pile goes darker
+ * and still reads as a pile. That is deliberate. Which task is which matters
+ * when the tasks DISAGREE, and then the badges are apart and legible; when
+ * they agree, "they agreed" is the reading, and the numbers inside the pile
+ * matter least. They are drawn in order, so the last is the one on top.
+ *
+ * There is no mark for the average. The spread of the badges already says
+ * whether the behaviour held from day to day, and an average of a strong pull
+ * one way and a strong pull the other is a mark at zero that says "no
+ * effect", which is the opposite of the finding.
+ *
+ * One meter to a screen reader, whose value text the caller writes: every
+ * reading in words.
+ */
+export function MultiDotMeter({
+  readings,
+  label,
+  valueLabel,
+  maxMagnitude = 1,
+  className,
+}: {
+  readings: readonly TrackReading[];
+  label: string;
+  /** Every reading, in words: what a screen reader announces. */
+  valueLabel: string;
+  maxMagnitude?: number;
+  className?: string;
+}) {
+  const clamp = (v: number) => Math.max(-maxMagnitude, Math.min(maxMagnitude, v));
+  // aria-valuenow has to be one number: the largest reading's size. The
+  // value text carries the readings themselves.
+  const largest = readings.reduce((m, r) => Math.max(m, Math.abs(clamp(r.value))), 0);
+  return (
+    <AriaMeter
+      value={largest / maxMagnitude}
+      minValue={0}
+      maxValue={1}
+      aria-label={label}
+      valueLabel={valueLabel}
+      className={cn("block w-full", className)}
+    >
+      <div aria-hidden className="relative mx-2 h-8 [print-color-adjust:exact]">
+        {DOT_TICKS.map((t) => (
+          <span
+            key={t}
+            className={cn(
+              "absolute inset-y-0 w-px",
+              t === 0 ? "bg-muted-foreground/60" : "bg-border"
+            )}
+            style={{ left: `${trackPercent(t * maxMagnitude, maxMagnitude)}%` }}
+          />
+        ))}
+        {readings.map((r) => (
+          <span
+            key={r.key}
+            data-reading={r.key}
+            className={cn(
+              "absolute top-1/2 flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[1.5px] border-foreground text-[0.6875rem] leading-none font-bold tabular-nums",
+              r.hollow ? "bg-card/60 text-foreground" : "bg-foreground/55 text-background"
+            )}
+            style={{ left: `${trackPercent(clamp(r.value), maxMagnitude)}%` }}
+          >
+            {r.badge}
+          </span>
+        ))}
+      </div>
+    </AriaMeter>
+  );
+}

@@ -626,3 +626,77 @@ test("Winning strategies: the ranking is one dot a row on a shared axis", async 
   );
   expect(new Set(zeros).size).toBe(1);
 });
+
+test("Comp analysis: the ranking is one track a row with a badge for each task, and a row opens the behaviour's page", async ({
+  page,
+}) => {
+  // Issue #804: the ranking was a table 793px wide in a phone's 319px window.
+  // Each row is now one track on the shared axis, with a badge for each task
+  // and no mark for an average; the row opens a page that lists each task's
+  // figure.
+  await page.goto(`/comp/${compId}/analysis`, { waitUntil: "domcontentloaded" });
+  const region = page.getByRole("region", { name: "Behaviour ranking across tasks" });
+  const ranking = page.getByRole("grid", { name: "Behaviour ranking across tasks" });
+  await ranking.waitFor({ timeout: 60_000 });
+  const rows = ranking.locator("tbody tr");
+  await expect(rows.first()).toBeVisible();
+
+  expect(await region.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+  await expectNoSidewaysScroll(page);
+  await expect(ranking.getByText("less of it did well")).toHaveCount(1);
+  await expect(ranking.getByText("more of it did well")).toHaveCount(1);
+
+  // One meter a row. Its badges are the tasks, on one line, and its value
+  // text gives every task's figure in words.
+  const row = rows.first();
+  const meter = row.getByRole("meter");
+  await expect(meter).toHaveCount(1);
+  await expect(meter).toHaveAttribute("aria-valuetext", /^T1 /);
+  const badges = await meter.locator("[data-reading]").evaluateAll((els) =>
+    els.map((el) => Math.round(el.getBoundingClientRect().top))
+  );
+  expect(badges.length).toBeGreaterThan(1);
+  expect(new Set(badges).size, "every badge is on one line").toBe(1);
+
+  // The row is one link, as big as the row, to the behaviour's own page.
+  const link = row.getByRole("link");
+  await expect(link).toHaveCount(1);
+  const name = (await link.innerText()).trim();
+  const rowBox = (await row.boundingBox())!;
+  const hit = await row.evaluate((tr) => {
+    const r = tr.getBoundingClientRect();
+    const a = tr.querySelector("a")!;
+    // A point in the track, well away from the name.
+    return a.contains(document.elementFromPoint(r.left + r.width * 0.25, r.bottom - 14));
+  });
+  expect(hit, "a tap on the track opens the row").toBe(true);
+  expect(rowBox.height).toBeGreaterThanOrEqual(44);
+  await link.click();
+
+  await expect(page).toHaveURL(/\/analysis\/behaviour\/[a-z0-9-]+/);
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  const tasks = page.getByRole("list", { name: "This behaviour on each task" }).getByRole("listitem");
+  expect(await tasks.count()).toBeGreaterThan(1);
+  // Each task's figure is signed, and a measured task links to its own chart.
+  await expect(tasks.first()).toContainText(/[+−]\d\.\d\d/);
+  await expect(tasks.first().getByRole("link")).toHaveAttribute(
+    "href",
+    /\/task\/[^/]+\/analysis\/metrics\//
+  );
+  await expectNoSidewaysScroll(page);
+
+  // A reload rebuilds the page from its URL, and Back returns to the ranking.
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  await page.goBack();
+  await expect(ranking).toBeVisible();
+});
+
+test("Comp analysis: a behaviour no report carries is a not-found", async ({ page }) => {
+  await page.goto(`/comp/${compId}/analysis/behaviour/no-such-behaviour`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(page.getByRole("heading", { name: "Behaviour not found" })).toBeVisible({
+    timeout: 60_000,
+  });
+});
