@@ -14,6 +14,7 @@
  * findings — a flip day is information about the day, not a warning.
  */
 import { MIN_CORRELATION_N, type CompAnalysisReport } from "./types";
+import { formatShownRho } from "./units";
 
 export interface DebriefFinding {
   metricId: string;
@@ -76,7 +77,7 @@ export function debriefSentence(f: DebriefFinding): string {
     ? "they went with worse ranks"
     : "they went with better ranks";
   return (
-    `${f.label}: ${today} (ρ = ${f.rho.toFixed(2)}, n = ${f.n}). ` +
+    `${f.label}: ${today} (ρ = ${formatShownRho(f.rho)}, n = ${f.n}). ` +
     `This is the opposite of the other tasks in this competition, where ` +
     `${usually} on all ${f.otherCount} informative days.`
   );

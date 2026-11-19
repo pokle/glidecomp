@@ -107,7 +107,10 @@ screenshots them. Paths below are relative to the repo root.
 
    Cross-check the rendered separation ranking against the engine directly:
    `bun run score-task -- --wing HG --analysis web/samples/comps/corryong-cup-2026-open-t1/task.xctsk web/samples/comps/corryong-cup-2026-open-t1/`
-   — the ρ values must match exactly.
+   — the ρ values must match in size. The page shows each with its SIGN
+   TURNED OVER (`shownRho` in `analysis/units.ts`): the command line prints
+   the correlation with rank number, where rank 1 is best, and the page
+   prints the correlation with doing well, so −0.79 here is +0.79 there.
 
 5. **Review a restyle across the whole app** — `shoot-contact-sheet.mjs` shoots
    every page (static + SPA + the SSR'd comp pages) at desktop and mobile

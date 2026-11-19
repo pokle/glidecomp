@@ -134,3 +134,30 @@ export function directionWords(direction: MetricDirection): string {
       return "no expected direction";
   }
 }
+
+/**
+ * A correlation as a reader is shown it: against DOING WELL, not against the
+ * rank number.
+ *
+ * The engine correlates a behaviour with rank, and rank 1 is the best rank.
+ * So flying faster, which went with better ranks, came out NEGATIVE, and a
+ * reader had to know how ranks are numbered to see that a bar on the left
+ * was good news. Every figure on screen is this coefficient with its sign
+ * turned over: positive means more of the behaviour went with doing well.
+ *
+ * It is turned over where it is SHOWN and nowhere else. Stored reports, the
+ * engine's own arithmetic (`rho < 0` meaning "more was better") and the
+ * command-line report, which says "vs GAP rank" in its heading, keep the
+ * engine's sign. So use this for a figure a reader sees, and the raw `rho`
+ * for a decision.
+ */
+export function shownRho(rho: number): number {
+  return rho === 0 ? 0 : -rho;
+}
+
+/** {@link shownRho} as a figure with its sign: "+0.79", "−0.55", "0.00". */
+export function formatShownRho(rho: number): string {
+  const shown = shownRho(rho);
+  const text = Math.abs(shown).toFixed(2);
+  return shown > 0 ? `+${text}` : shown < 0 ? `−${text}` : text;
+}

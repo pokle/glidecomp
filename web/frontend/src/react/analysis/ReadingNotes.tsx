@@ -57,13 +57,16 @@ export function VerdictLegend() {
   );
 }
 
-/** Why a coefficient is negative when the behaviour is a good one. Shared by
- * both pages, because rank 1 being the best rank surprises every reader once. */
+/** Which way the sign points. Shared by both pages. The figure shown is the
+ * correlation with DOING WELL: the engine's coefficient against rank, with its
+ * sign turned over (units.ts, shownRho), because rank 1 being the best rank
+ * made a good behaviour read as negative. */
 export function RankDirectionNote() {
   return (
     <p>
-      Rank 1 is the best rank, so a behaviour where more is better shows a{" "}
-      <strong>negative</strong> ρ, and its bar is left of centre.
+      A behaviour where more of it went with doing well shows a{" "}
+      <strong>positive</strong> ρ, to the right of centre. Where less of it
+      went with doing well, ρ is negative, to the left.
     </p>
   );
 }
@@ -119,8 +122,8 @@ export function StrengthNote() {
     <>
       <p>
         Spearman&rsquo;s rank correlation, ρ, between the behaviour and the
-        published ranks. A bigger bar means the behaviour tracked the
-        ranks more closely on this task.
+        published ranks. A dot further from the centre means the behaviour
+        tracked the ranks more closely on this task.
       </p>
       <RankDirectionNote />
     </>

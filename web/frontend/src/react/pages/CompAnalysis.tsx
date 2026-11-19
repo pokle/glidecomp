@@ -13,6 +13,7 @@
  * report, or a pending placeholder while the first compute runs.
  */
 import { compAnalysisRows, hasAnyCorrelation } from "../analysis/types";
+import { formatShownRho, shownRho } from "../analysis/units";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "../components/NotFound";
@@ -585,15 +586,17 @@ function SeparationTable({
                 <div className="flex items-center gap-2">
                   <DivergingMeter
                     className="min-w-20 flex-1"
-                    value={m.meanSignedRho}
+                    // Every figure here is the reader's sign: positive is
+                    // more of the behaviour going with doing well (units.ts).
+                    value={shownRho(m.meanSignedRho)}
                     label={`${m.label}: average coefficient across tasks`}
-                    valueLabel={m.meanSignedRho.toFixed(2)}
+                    valueLabel={formatShownRho(m.meanSignedRho)}
                   />
                   <span
                     aria-hidden
                     className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground"
                   >
-                    {m.meanSignedRho.toFixed(2)}
+                    {formatShownRho(m.meanSignedRho)}
                   </span>
                 </div>
               )}
@@ -606,7 +609,7 @@ function SeparationTable({
                 <div className="space-y-0.5">
                   <VerdictBadge correlation={m.compRho} />
                   <p className="text-xs tabular-nums text-muted-foreground">
-                    ρ {m.compRho.rho.toFixed(2)} · {m.compRho.n} of {fieldSize}{" "}
+                    ρ {formatShownRho(m.compRho.rho)} · {m.compRho.n} of {fieldSize}{" "}
                     pilots
                   </p>
                 </div>
@@ -632,16 +635,16 @@ function SeparationTable({
                           informative === false && "text-muted-foreground"
                         )}
                       >
-                        {rho.toFixed(2)}
+                        {formatShownRho(rho)}
                       </p>
                       <DivergingMeter
-                        value={rho}
+                        value={shownRho(rho)}
                         hollow={informative === false}
                         label={`${m.label}, ${label}`}
                         valueLabel={
                           informative === false
-                            ? `${rho.toFixed(2)}, could be chance`
-                            : rho.toFixed(2)
+                            ? `${formatShownRho(rho)}, could be chance`
+                            : formatShownRho(rho)
                         }
                       />
                     </div>
