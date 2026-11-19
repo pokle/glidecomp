@@ -991,8 +991,11 @@ test("the date field's parts are targets a finger can hit", { tag: PHONE_ONLY },
   await page.goto(`/comp/${compId}/task/${taskId}/settings`);
   await expect(page.getByRole("button", { name: "Delete task" })).toBeVisible({ timeout: 20_000 });
 
+  // The date picker is loaded after the page (rac/date-picker.tsx is lazy),
+  // so wait for it: a count taken as soon as the page is up finds nothing.
   const segments = page.getByRole("spinbutton");
-  expect(await segments.count()).toBeGreaterThanOrEqual(3);
+  await expect(segments.first()).toBeVisible();
+  await expect.poll(() => segments.count()).toBeGreaterThanOrEqual(3);
   for (const segment of await segments.all()) {
     const box = (await segment.boundingBox())!;
     const name = await segment.getAttribute("aria-label");
@@ -1000,7 +1003,9 @@ test("the date field's parts are targets a finger can hit", { tag: PHONE_ONLY },
     expect(box.height, `${name} is 44 px tall or more`).toBeGreaterThanOrEqual(43.5);
   }
   for (const name of ["Previous", "Next"]) {
-    const box = (await page.getByRole("button", { name, exact: true }).first().boundingBox())!;
+    const arrow = page.getByRole("button", { name, exact: true }).first();
+    await expect(arrow).toBeVisible();
+    const box = (await arrow.boundingBox())!;
     expect(box.width, `${name} is 44 px wide`).toBeGreaterThanOrEqual(43.5);
     expect(box.height, `${name} is 44 px tall`).toBeGreaterThanOrEqual(43.5);
   }
