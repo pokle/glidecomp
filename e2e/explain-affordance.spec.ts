@@ -108,7 +108,7 @@ test("comp analysis: the column notes are behind their headers' ⓘ", async ({
   await dayToDay.click();
   const popover = page.getByRole("dialog");
   await expect(popover).toContainText("A behaviour that keeps its sign and its size");
-  await expect(popover).toContainText("hollow bar");
+  await expect(popover).toContainText("hollow badge");
 
   // Esc dismisses, and focus comes back to the trigger rather than the top of
   // the document (WCAG 2.4.3).

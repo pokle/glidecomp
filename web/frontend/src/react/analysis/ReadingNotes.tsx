@@ -168,7 +168,7 @@ export function OutcomeChecksNote() {
  * On screen the ⓘ popovers are the way in, and they carry the same components.
  *
  * `page` picks the column set, because the two tables do not share columns:
- * the comp aggregate has Across tasks / Day to day / Against comp scores,
+ * the comp aggregate has Each task / Day to day / Against comp scores,
  * the per-task ranking has Strength / Pilots measured.
  */
 export function HowToReadFootnote({
