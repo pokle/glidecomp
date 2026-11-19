@@ -402,6 +402,14 @@ function RankingTable({
       aria-label={ariaLabel}
       scrollLabel={ariaLabel}
       viewportClassName={viewportClassName}
+      // On a phone the table is a LIST of stacked rows (issue #804): it was
+      // four columns 642px wide in a 359px window, so the name filled the
+      // screen and every figure was off to the right. Each row is now the
+      // name on its own line, the strength and what it means on the next,
+      // and the pilots measured under those. It is still one table, with the
+      // roles the kit gives it, so selection and the keyboard are unchanged;
+      // only its boxes are laid out differently below `sm`.
+      className={STACKED.table}
       {...(selection
         ? {
             selectionMode: "single" as const,
@@ -417,8 +425,10 @@ function RankingTable({
           }
         : {})}
     >
-      <TableHeader>
-        <Column isRowHeader className="min-w-56">
+      <TableHeader className={STACKED.header}>
+        {/* Stacked, a row's first line is plainly its name, so this heading
+            says nothing a reader needs to see; a screen reader keeps it. */}
+        <Column isRowHeader className="min-w-56 max-sm:sr-only">
           {subjectLabel}
         </Column>
         {/* No aria-labels on these headers any more: the columns they
@@ -427,17 +437,17 @@ function RankingTable({
             aria-label would override the visible name for no gain.
             Each carries the ⓘ holding the paragraph that used to explain it
             below the table; all three are printed in HowToReadFootnote. */}
-        <Column className="w-48">
+        <Column className={cn("w-48", STACKED.heading)}>
           <HeaderWithNote label="Strength">
             <StrengthNote />
           </HeaderWithNote>
         </Column>
-        <Column className="w-32">
+        <Column className={cn("w-32", STACKED.heading)}>
           <HeaderWithNote label="What it means">
             <VerdictLegend />
           </HeaderWithNote>
         </Column>
-        <Column className="w-36">
+        <Column className={cn("w-36", STACKED.heading)}>
           <HeaderWithNote label="Pilots measured">
             <PilotsMeasuredNote />
           </HeaderWithNote>
@@ -445,8 +455,8 @@ function RankingTable({
       </TableHeader>
       <TableBody>
         {ranked.map(({ metric, correlation }) => (
-          <Row key={metric.id} id={metric.id}>
-            <Cell className="whitespace-normal">
+          <Row key={metric.id} id={metric.id} className={STACKED.row}>
+            <Cell className={cn("whitespace-normal", STACKED.cell, "max-sm:col-span-2 max-sm:text-base")}>
               <span className="inline-flex items-center gap-1">
                 {metric.label}
                 <MetricExplanation
@@ -461,7 +471,7 @@ function RankingTable({
                 />
               </span>
             </Cell>
-            <Cell>
+            <Cell className={STACKED.cell}>
               {/* min-w-24 on the bar, not just a column width: a percentage
                   width contributes nothing to a table's min-content, so on a
                   narrow screen the column would squeeze the bar — the actual
@@ -484,10 +494,10 @@ function RankingTable({
                 </span>
               </div>
             </Cell>
-            <Cell>
+            <Cell className={STACKED.cell}>
               <VerdictBadge correlation={correlation} />
             </Cell>
-            <Cell>
+            <Cell className={cn(STACKED.cell, "max-sm:col-span-2")}>
               <div className="flex items-center gap-2">
                 <ProportionMeter
                   className="w-16 shrink-0"
@@ -501,6 +511,9 @@ function RankingTable({
                   className="text-xs tabular-nums text-muted-foreground"
                 >
                   {correlation.n} of {fieldSize}
+                  {/* With no column heading over it, the figure says what it
+                      counts: the meter's own words. */}
+                  <span className="sm:hidden"> pilots</span>
                 </span>
               </div>
             </Cell>
@@ -510,6 +523,26 @@ function RankingTable({
     </Table>
   );
 }
+
+/**
+ * The ranking table's boxes below `sm`, where it is a list of stacked rows.
+ *
+ * - The table, its head and its body are blocks, so a row can be a grid as
+ *   wide as the card.
+ * - The headings are one wrapping line above the list. They cannot sit over
+ *   columns that are no longer there, but each still carries its ⓘ, which is
+ *   the only way to those notes on a screen.
+ * - A row is a two-column grid: the name across both, then the strength
+ *   beside what it means, then the pilots measured across both.
+ */
+const STACKED = {
+  table: "max-sm:block [&_tbody]:max-sm:block [&_thead]:max-sm:block",
+  header:
+    "[&_tr]:max-sm:flex [&_tr]:max-sm:flex-wrap [&_tr]:max-sm:items-center [&_tr]:max-sm:gap-x-4 [&_tr]:max-sm:px-5 [&_tr]:max-sm:py-1",
+  heading: "max-sm:h-auto max-sm:w-auto max-sm:min-w-0 max-sm:p-0 max-sm:text-muted-foreground",
+  row: "max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-1.5 max-sm:px-5 max-sm:py-3",
+  cell: "max-sm:block max-sm:p-0",
+};
 
 /**
  * A column header with its ⓘ. `whitespace-normal` because the kit's Column is
