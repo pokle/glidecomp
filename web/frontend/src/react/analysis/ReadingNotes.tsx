@@ -77,10 +77,11 @@ export function AcrossTasksNote() {
   return (
     <>
       <p>
-        The average of the coefficients of each task, weighted by n, with the
-        signs kept. It is also the order of the table. A behaviour that pulled
-        the same way every day comes first, because days that pull opposite ways
-        cancel each other there.
+        Each badge is the coefficient of this behaviour on one task, and its
+        number is the number of the task. The table is in the order of their
+        average, weighted by n, with the signs kept. A behaviour that pulled
+        the same way every day comes first, because days that pull opposite
+        ways cancel each other there.
       </p>
       <RankDirectionNote />
     </>
@@ -92,8 +93,8 @@ export function DayToDayNote() {
     <>
       <p>
         Reads only the tasks whose coefficient cleared its own noise floor,
-        which are the solid bars. A <strong>hollow bar</strong> is a day whose
-        coefficient can be chance. A behaviour that depends on the day is a
+        which are the solid badges. A <strong>hollow badge</strong> is a day
+        whose coefficient can be chance. A behaviour that depends on the day is a
         finding, not a fault.
       </p>
       <p>
@@ -167,7 +168,7 @@ export function OutcomeChecksNote() {
  * On screen the ⓘ popovers are the way in, and they carry the same components.
  *
  * `page` picks the column set, because the two tables do not share columns:
- * the comp aggregate has Across tasks / Day to day / Against comp scores,
+ * the comp aggregate has Each task / Day to day / Against comp scores,
  * the per-task ranking has Strength / Pilots measured.
  */
 export function HowToReadFootnote({
@@ -196,7 +197,7 @@ export function HowToReadFootnote({
       <Footnote id={HOW_TO_READ_ID} level={level} title="How to read the table">
       {page === "comp" ? (
         <>
-          <NoteBlock title="Across tasks">
+          <NoteBlock title="Each task">
             <AcrossTasksNote />
           </NoteBlock>
           <NoteBlock title="Day to day">

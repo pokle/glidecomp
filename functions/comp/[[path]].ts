@@ -61,6 +61,7 @@ import {
   compPilotScoresPath,
   compWaypointsPath,
   compAnalysisPath,
+  compAnalysisBehaviourPath,
   taskPath,
   taskAnalysisPath,
   taskAnalysisSectionPath,
@@ -432,6 +433,56 @@ const ROUTE_RUNS: { [K in CompSsrRouteName]: { run: RouteRun } } = {
               ["Competitions", "/comp"],
               [name, compPath(compId, name)],
               ["Comp analysis", canonical],
+            ])
+          ),
+        },
+      };
+    },
+  },
+  compAnalysisBehaviour: {
+    // One behaviour across the comp's tasks: the page a row of the comp
+    // analysis ranking opens. Server-rendered through the comp analysis
+    // loader, so a shared link opens on the behaviour and a hidden comp's key
+    // is settled here like everywhere else. ALWAYS noindexed: it is a closer
+    // look at one row of a page the index already holds.
+    async run(f, m, origin) {
+      const urlCompId = idFromSegment(m[1]);
+      const segment = m[2];
+      const data = await loadCompAnalysis(f, urlCompId);
+      const compId = compUrlId(data.comp, urlCompId);
+      const a = data.analysis;
+      const name = data.comp?.name ?? a.comp_name;
+      // The behaviour the segment names, from whichever class carries it. An
+      // aggregate with classes but no such behaviour makes this a dead URL;
+      // one with nothing aggregated yet cannot say, so it renders as pending.
+      const metric = a.classes
+        .flatMap((c) => c.aggregate.metrics)
+        .find((x) => metricSegment(x.id) === segment);
+      if (a.classes.length > 0 && !metric) {
+        throw new NotFoundError(`behaviour ${segment}`);
+      }
+      const analysisPath = compAnalysisPath(compId, name);
+      const canonical = metric
+        ? compAnalysisBehaviourPath(compId, name, metric.id)
+        : undefined;
+      const label = metric?.label ?? "Comp analysis";
+      return {
+        data,
+        canonicalPath: canonical,
+        cache: {
+          computedAt: a.computed_at,
+          stale: a.stale || a.pending_task_count > 0,
+        },
+        head: {
+          title: `${label} — ${name} — GlideComp`,
+          description: `${label}, task by task: how strongly it went with doing well on each task of ${name}.`,
+          noindex: true,
+          extra: jsonLd(
+            breadcrumb(origin, [
+              ["Competitions", "/comp"],
+              [name, compPath(compId, name)],
+              ["Comp analysis", analysisPath],
+              ...(canonical ? [[label, canonical] as [string, string]] : []),
             ])
           ),
         },

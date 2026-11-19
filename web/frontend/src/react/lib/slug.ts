@@ -254,6 +254,20 @@ export function compAnalysisPath(id: string, name?: string | null): string {
 }
 
 /**
+ * One behaviour across a competition's tasks: the page a row of the comp
+ * analysis ranking opens, listing each task's figure. `search` carries the
+ * class being read (`?class=`).
+ */
+export function compAnalysisBehaviourPath(
+  id: string,
+  name: string | null | undefined,
+  metricId: string,
+  search = ""
+): string {
+  return `${compAnalysisPath(id, name)}/behaviour/${metricSegment(metricId)}${search}`;
+}
+
+/**
  * The submit-track page with the comp (and, from a task page, the task)
  * already chosen. `compId` as it goes in URLs — a hidden comp's share key
  * rides in `?comp=` like it does in a path. A link, not a dialog: see the

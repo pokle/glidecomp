@@ -156,8 +156,8 @@ export function ConsistencyMap({ metrics }: { metrics: CompMetricAggregate[] }) 
   const caption =
     "A dot on the diagonal separates the field the same way in every task. A dot " +
     "far below the diagonal is strong on each day, but changes direction, so the " +
-    "payoff depended on the day. The Across tasks column of the table gives the " +
-    "exact value of the up axis.";
+    "payoff depended on the day. The table above shows the figure of each task " +
+    "for every behaviour.";
 
   const pointer = nearestPointerProps({
     viewBoxWidth: W,

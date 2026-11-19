@@ -13,16 +13,21 @@
  * report, or a pending placeholder while the first compute runs.
  */
 import { compAnalysisRows, hasAnyCorrelation } from "../analysis/types";
-import { formatShownRho, shownRho } from "../analysis/units";
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { formatShownRho, verdictWords } from "../analysis/units";
+import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Link as AriaLink } from "react-aria-components";
+import { ChevronRightIcon } from "lucide-react";
+import { useCompAnalysis } from "../analysis/use-comp-analysis";
+import { taskReadings, taskReadingsWords } from "../analysis/comp-behaviour";
+import { openedHereFrom } from "../lib/leave";
 import { NotFound } from "../components/NotFound";
 import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
 import { ClassPicker } from "../analysis/ClassPicker";
 import { TaskAnalysisList, type TaskAnalysisLink } from "../analysis/TaskAnalysisList";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
-import { DivergingMeter } from "@/react/rac/meter";
+import { DotMeterAxis, MultiDotMeter } from "@/react/rac/meter";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { cn } from "@/react/lib/utils";
 import { Card } from "@/react/rac/card";
@@ -40,7 +45,12 @@ import { ConsistencyChip } from "../analysis/ConsistencyChip";
 import { ConsistencyMap } from "../analysis/charts/ConsistencyMap";
 import { MetricGlossary, type GlossaryEntry } from "../analysis/MetricGlossary";
 import { underComp, compPages, COMP_ANALYSIS_LABEL } from "../lib/crumbs";
-import { compUrlId, idFromSegment, compAnalysisPath, taskAnalysisPath } from "../lib/slug";
+import {
+  compUrlId,
+  compAnalysisBehaviourPath,
+  compAnalysisPath,
+  taskAnalysisPath,
+} from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { usePollWhile } from "../lib/use-poll-while";
 import { api } from "../../comp/api";
@@ -56,119 +66,14 @@ import { useAdminView } from "../lib/user";
 import { fetchWithRetry, type CompDetailData } from "../comp/types";
 
 export function CompAnalysis() {
-  const { compId: compParam } = useParams<{ compId: string }>();
-  const compId = idFromSegment(compParam ?? "");
+  const { compId, data, etag, comp, status, analysisUrl, canonicalName } = useCompAnalysis();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  // SSR seed: the server ran loadCompAnalysis for this URL and embedded
-  // the result. Null on client boot / SPA navigations, where the effect fetches.
-  const initial = useInitialData<CompAnalysisLoaderData>();
-  const [data, setData] = useState<CompAnalysisData | null>(
-    initial?.analysis ?? null
-  );
-  const [etag, setEtag] = useState<string | null>(initial?.analysisEtag ?? null);
-  const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
-  const [status, setStatus] = useState<"loading" | "ready" | "notFound" | "forbidden" | "error">(
-    initial ? "ready" : "loading"
-  );
 
   // Settle the address bar on the canonical `${slug}-${id}` once a name is
   // known (the analysis body carries comp_name even before the comp fetch).
-  const canonicalName = comp?.name ?? data?.comp_name;
   useCanonicalPath(
     canonicalName ? compAnalysisPath(compUrlId(comp, compId), canonicalName) : null
   );
-
-  const analysisUrl = compId
-    ? `/api/comp/${encodeURIComponent(compId)}/analysis`
-    : null;
-
-  // refetchTick > 0 re-runs the fetch without flashing the loading state —
-  // the pending-poll effect below bumps it while tasks compute in the
-  // background.
-  const [refetchTick, setRefetchTick] = useState(0);
-
-  useEffect(() => {
-    if (!compId || !analysisUrl) return;
-    // Seeded by SSR for the first render — don't refetch on mount, but the
-    // pending-poll effect below still drives refetches (refetchTick > 0).
-    if (initial && refetchTick === 0) {
-      document.title = `GlideComp - Comp analysis: ${initial.analysis.comp_name}`;
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      if (refetchTick === 0) setStatus("loading");
-      try {
-        // Through fetchWithRetry, not a bare fetch: this page is public and
-        // SSR'd, and its "error" branch is a dead end — nothing re-fetches it
-        // (the pending poll below only runs once status is "ready"). A dropped
-        // request would otherwise turn a millisecond blip into a page that
-        // stays broken until someone reloads by hand.
-        const res = await fetchWithRetry(() =>
-          fetch(analysisUrl, { credentials: "include" })
-        );
-        if (cancelled) return;
-        // 404 = missing (or a test comp hidden from this visitor); 400 = an id
-        // sqid that doesn't decode at all. Both mean "no such page", and both
-        // are a dead id rather than a permissions verdict — the API never 401s
-        // here (routes/analysis.ts). Worth telling apart, because the 404
-        // page can rebuild the URL from its own slugs and "may not be published
-        // yet" cannot. Same rule as loaders.ts and PilotScoreDetail.
-        if (res.status === 404 || res.status === 400) {
-          setStatus("notFound");
-          return;
-        }
-        if (res.status === 401) {
-          setStatus("forbidden");
-          return;
-        }
-        if (!res.ok) {
-          setStatus("error");
-          return;
-        }
-        setEtag(res.headers.get("ETag"));
-        const body = (await res.json()) as CompAnalysisData;
-        setData(body);
-        document.title = `GlideComp - Comp analysis: ${body.comp_name}`;
-        setStatus("ready");
-      } catch {
-        if (!cancelled) setStatus("error");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // `initial` is stable for the life of the SSR'd URL; compId is the real key.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compId, analysisUrl, refetchTick]);
-
-  // While any task's first analysis computes in the background, refetch so
-  // the aggregate fills in as reports land — same poll the task page runs.
-  const pendingTasks = status === "ready" && (data?.pending_task_count ?? 0) > 0;
-  usePollWhile(pendingTasks, () => setRefetchTick((t) => t + 1), refetchTick);
-
-  useEffect(() => {
-    if (!compId) return;
-    // SSR already seeded the comp (name + timezone); skip the cosmetic fetch.
-    if (initial?.comp) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await api.api.comp[":comp_id"].$get({ param: { comp_id: compId } });
-        if (!cancelled && res.ok) {
-          setComp((await res.json()) as unknown as CompDetailData);
-        }
-      } catch {
-        // Cosmetic only.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // `initial` is stable for the life of the SSR'd URL.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compId]);
 
   const classes = data?.classes ?? [];
   const selectedClass =
@@ -226,6 +131,15 @@ export function CompAnalysis() {
       href: taskAnalysisPath(compId, canonicalName, t.task_id, t.task_name),
     }));
   }, [data, active, compId, canonicalName]);
+
+  // The page one behaviour's row opens, for the class being read.
+  const behaviourHref = (metricId: string) =>
+    compAnalysisBehaviourPath(
+      compUrlId(comp, compId),
+      canonicalName,
+      metricId,
+      selectedClass ? `?class=${encodeURIComponent(selectedClass)}` : ""
+    );
 
   const crumbs = underComp(compId, comp?.name ?? data?.comp_name);
   const isAdmin = useAdminView(!!comp?.is_admin);
@@ -365,6 +279,7 @@ export function CompAnalysis() {
               ariaLabel="Behaviour ranking across tasks"
               subjectLabel="Behaviour"
               fieldSize={active.aggregate.pilots.length}
+              behaviourHref={behaviourHref}
             />
             {uncorrelated.length > 0 ? (
               <p className="text-xs text-muted-foreground">
@@ -414,6 +329,7 @@ export function CompAnalysis() {
                 ariaLabel="Outcome checks across tasks"
                 subjectLabel="Outcome"
                 fieldSize={active.aggregate.pilots.length}
+                behaviourHref={behaviourHref}
               />
             </Card>
           ) : null}
@@ -480,13 +396,6 @@ export function CompAnalysis() {
  * single task. The day-describing metrics (wind, climb strength) never do:
  * they have no per-pilot value. */
 
-/** Did this task's coefficient clear its own noise floor? Null when the task
- * produced no coefficient at all. */
-function taskInformative(m: CompMetricAggregate, i: number): boolean | null {
-  const c = m.perTaskCorrelation[i];
-  return c === null || c === undefined ? null : Math.abs(c.rho) >= c.noiseFloor;
-}
-
 /**
  * One separation table — rendered once for the behavioural ranking and once
  * for the outcome checks, so the two can never drift in layout.
@@ -521,6 +430,7 @@ function SeparationTable({
   ariaLabel,
   subjectLabel,
   fieldSize,
+  behaviourHref,
 }: {
   metrics: CompMetricAggregate[];
   taskLabels: string[];
@@ -530,134 +440,125 @@ function SeparationTable({
   subjectLabel: string;
   /** Pilots in the comp scores — the denominator for "39 of 44 pilots". */
   fieldSize: number;
+  /** The page of one behaviour: what a row opens. */
+  behaviourHref: (metricId: string) => string;
 }) {
   return (
-    <Table aria-label={ariaLabel} scrollLabel={ariaLabel}>
-      <TableHeader>
-        <Column isRowHeader className="min-w-56">
+    <Table
+      aria-label={ariaLabel}
+      scrollLabel={ariaLabel}
+      // A LIST of rows on one shared axis, at every width (issues #804,
+      // #860), the shape the task page's ranking has. It was a table 793px
+      // wide in a phone's 319px window: the name filled the screen and every
+      // figure was off to the right. A row is now the behaviour's name, how
+      // the days compared and how it stood against the comp scores, over one
+      // track with a badge for each task (rac/meter.tsx, MultiDotMeter).
+      className={LIST.table}
+      viewportClassName="-mx-5 w-auto border-y"
+    >
+      <TableHeader className={LIST.header}>
+        {/* A row's first line is plainly its name; a screen reader keeps
+            the heading. */}
+        <Column isRowHeader className="sr-only">
           {subjectLabel}
         </Column>
-        {/* Each header carries the paragraph that used to sit under the table
-            explaining it — the place the reader's question actually arises.
-            Every one is mirrored in HowToReadFootnote for print. */}
-        <Column className="w-44">
-          <HeaderWithNote label="Across tasks">
+        {/* Each heading carries the paragraph that explains it; every one is
+            mirrored in HowToReadFootnote for print. "Each task" is last and
+            takes the full width, because the axis hangs under it. */}
+        <Column className={cn(LIST.heading, "order-last w-full")}>
+          <HeaderWithNote label="Each task">
             <AcrossTasksNote />
           </HeaderWithNote>
+          <DotMeterAxis className="mt-1" lower="less of it did well" higher="more of it did well" />
         </Column>
-        <Column className="w-40">
+        <Column className={LIST.heading}>
           <HeaderWithNote label="Day to day">
             <DayToDayNote />
           </HeaderWithNote>
         </Column>
-        {/* The verdict chip lives in this cell, so the thresholds behind it
-            belong on this header — the comp table has no separate "What it
-            means" column for them the way the task ranking does. */}
-        <Column className="w-44">
+        {/* The verdict's words live in this line of a row, so the thresholds
+            behind them belong on this heading. */}
+        <Column className={LIST.heading}>
           <HeaderWithNote label="Against comp scores">
             <AgainstCompScoresNote />
             <VerdictLegend />
           </HeaderWithNote>
         </Column>
-        {taskLabels.map((label, i) => (
-          <Column
-            key={label}
-            // The border groups everything from here right as "one column per
-            // task", without a colspan header row the grid semantics would
-            // have to carry.
-            className={cn("w-20 text-right", i === 0 && "border-l")}
-            aria-label={`${label}, coefficient for that task`}
-          >
-            {label}
-          </Column>
-        ))}
       </TableHeader>
       <TableBody>
         {metrics.map((m) => (
-          <Row key={m.id}>
-            {/* No ⓘ here: the comp aggregate carries no method
-                descriptions (they live on the per-task reports and,
-                for this page, in the glossary at the bottom). */}
-            <Cell className="whitespace-normal">{m.label}</Cell>
-            <Cell>
-              {m.meanSignedRho === null ? (
-                <Dash />
-              ) : (
-                <div className="flex items-center gap-2">
-                  <DivergingMeter
-                    className="min-w-20 flex-1"
-                    // Every figure here is the reader's sign: positive is
-                    // more of the behaviour going with doing well (units.ts).
-                    value={shownRho(m.meanSignedRho)}
-                    label={`${m.label}: average coefficient across tasks`}
-                    valueLabel={formatShownRho(m.meanSignedRho)}
-                  />
-                  <span
-                    aria-hidden
-                    className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground"
-                  >
-                    {formatShownRho(m.meanSignedRho)}
-                  </span>
-                </div>
-              )}
+          <Row key={m.id} className={LIST.row}>
+            <Cell className={cn(LIST.cell, "[grid-area:name] whitespace-normal text-base")}>
+              {/* The row's one link, stretched over the whole row: a real
+                  anchor, so it works with JavaScript off (docs/ssr.md), and
+                  the row is the target, not the name. It opens the
+                  behaviour's own page, which lists each task's figure. */}
+              <AriaLink
+                href={behaviourHref(m.id)}
+                routerOptions={openedHereFrom(COMP_ANALYSIS_LABEL)}
+                // `after:z-10`: the track's own boxes are positioned and come later
+                // in the row, so without it they sit over the link and a tap
+                // on the track opened nothing.
+                className="outline-none after:absolute after:inset-0 after:z-10 data-focus-visible:after:ring-2 data-focus-visible:after:ring-ring/50 data-focus-visible:after:ring-inset"
+              >
+                {m.label}
+                {/* At the row's right-hand edge, centred on the row, where
+                    every other list's chevron is. It was set after the name,
+                    so it wrapped onto a line of its own under a long one. */}
+                <ChevronRightIcon
+                  aria-hidden="true"
+                  className="absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+              </AriaLink>
             </Cell>
-            <Cell>
+            <Cell className={cn(LIST.cell, "[grid-area:plot]")}>
+              <MultiDotMeter
+                readings={taskReadings(m, taskLabels)}
+                label={`${m.label}: Spearman correlation with doing well, on each task`}
+                valueLabel={taskReadingsWords(m, taskLabels)}
+              />
+            </Cell>
+            <Cell className={cn(LIST.cell, "[grid-area:days] justify-self-end")}>
               <ConsistencyChip metric={m} />
             </Cell>
-            <Cell>
+            <Cell
+              className={cn(
+                LIST.cell,
+                "[grid-area:comp] justify-self-end text-xs tabular-nums text-muted-foreground"
+              )}
+            >
               {m.compRho ? (
-                <div className="space-y-0.5">
-                  <VerdictBadge correlation={m.compRho} />
-                  <p className="text-xs tabular-nums text-muted-foreground">
-                    ρ {formatShownRho(m.compRho.rho)} · {m.compRho.n} of {fieldSize}{" "}
-                    pilots
-                  </p>
-                </div>
+                <>
+                  {verdictWords(m.compRho.verdict)} · {m.compRho.n} of {fieldSize}
+                  <span className="sr-only"> pilots, ρ {formatShownRho(m.compRho.rho)}</span>
+                </>
               ) : (
                 <Dash />
               )}
             </Cell>
-            {m.perTaskRho.map((rho, i) => {
-              const informative = taskInformative(m, i);
-              const label = taskLabels[i] ?? `task ${i + 1}`;
-              return (
-                <Cell key={i} className={i === 0 ? "border-l" : undefined}>
-                  {rho === null ? (
-                    <div className="text-right">
-                      <Dash label={`${label}: not applicable`} />
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <p
-                        aria-hidden
-                        className={cn(
-                          "text-right text-xs tabular-nums",
-                          informative === false && "text-muted-foreground"
-                        )}
-                      >
-                        {formatShownRho(rho)}
-                      </p>
-                      <DivergingMeter
-                        value={shownRho(rho)}
-                        hollow={informative === false}
-                        label={`${m.label}, ${label}`}
-                        valueLabel={
-                          informative === false
-                            ? `${formatShownRho(rho)}, could be chance`
-                            : formatShownRho(rho)
-                        }
-                      />
-                    </div>
-                  )}
-                </Cell>
-              );
-            })}
           </Row>
         ))}
       </TableBody>
     </Table>
   );
 }
+
+/**
+ * The comp ranking's boxes, laid out as a list. The same grid as the task
+ * page's ranking (analysis/SeparationRanking.tsx): the name beside how the
+ * days compared and how it stood against the comp scores, and the track under
+ * all three. A row is `relative`, for the link stretched over it and the
+ * chevron at its right-hand edge. The heading row keeps the same room on the
+ * right as a row keeps for its chevron, so the axis and the tracks line up.
+ */
+const LIST = {
+  table: "block [&_tbody]:block [&_thead]:block",
+  header:
+    "[&_tr]:flex [&_tr]:flex-wrap [&_tr]:items-center [&_tr]:gap-x-4 [&_tr]:py-2 [&_tr]:pr-11 [&_tr]:pl-5",
+  heading: "block h-auto p-0 text-muted-foreground",
+  row: "relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 py-3 pr-11 pl-5 [grid-template-areas:'name_days'_'name_comp'_'plot_plot']",
+  cell: "block p-0",
+};
 
 /**
  * A column header with its ⓘ. `whitespace-normal` because the kit's Column is

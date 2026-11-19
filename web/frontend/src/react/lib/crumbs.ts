@@ -69,6 +69,14 @@ export function underComp(compId: string | undefined, compName: string | null | 
   ];
 }
 
+/** Ancestors of one behaviour's page: the competition, then its analysis. */
+export function underCompAnalysis(compId: string | undefined, compName: string | null | undefined): Crumb[] {
+  return [
+    ...underComp(compId, compName),
+    { label: COMP_ANALYSIS_LABEL, to: compId ? compAnalysisPath(compId, compName) : "/comp" },
+  ];
+}
+
 /** Ancestors of one pilot's editor: the competition, then its roster. */
 export function underCompPilots(compId: string | undefined, compName: string | null | undefined): Crumb[] {
   return [
