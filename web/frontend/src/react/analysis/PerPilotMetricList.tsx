@@ -121,6 +121,9 @@ export function PerPilotMetricList({
             onChange={setMetricId}
             options={metrics.map((m) => ({ value: m.id, label: m.label }))}
             className="min-w-0 flex-1"
+            // A behaviour's name is a phrase, and two of a family differ
+            // only at their ends: never cut one short.
+            wrap
           />
         ) : (
           <p className="min-w-0 flex-1 font-medium">{metric.label}</p>

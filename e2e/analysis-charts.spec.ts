@@ -851,10 +851,29 @@ test("Metric details: a family is one behaviour at a time for every pilot, and a
   expect(low).toEqual([...low].sort((a, b) => a - b));
 
   // Another behaviour of the family: the list is the same pilots, read on it.
+  // A behaviour's name is never cut short, in the picker or in its list: a
+  // long one runs onto a second line.
   const before = await rows.first().innerText();
-  await section.getByRole("button", { name: /Behaviour/ }).click();
+  const picker = section.getByRole("button", { name: /Behaviour/ });
+  const cutShort = (el: Element) => {
+    const text = el.firstElementChild!;
+    return text.scrollWidth > text.clientWidth + 1;
+  };
+  expect(await picker.evaluate(cutShort), "the picked behaviour's name is whole").toBe(false);
+  await picker.click();
   const options = page.getByRole("option");
   expect(await options.count()).toBeGreaterThan(1);
+  expect(
+    (
+      await options.evaluateAll((els) =>
+        els.map((el) => {
+          const text = el.firstElementChild!;
+          return text.scrollWidth > text.clientWidth + 1;
+        })
+      )
+    ).some(Boolean),
+    "no option's name is cut short"
+  ).toBe(false);
   await options.nth(1).click();
   await expect(rows.first()).not.toHaveText(before);
   await expectNoSidewaysScroll(page);

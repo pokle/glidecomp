@@ -66,10 +66,19 @@ export function Select<T extends object>({
   errorMessage,
   className,
   triggerClassName,
+  wrap = false,
   children,
   items,
   ...props
 }: Omit<AriaSelectProps<T>, "className" | "children"> & {
+  /**
+   * Let a long value run onto a second line, where it is otherwise cut short
+   * with "…". For a select whose options are names a reader has to tell
+   * apart by their ends ("Climbing faster than the pilots sharing the
+   * thermal"). The trigger then grows with its text. Give its
+   * {@link SelectItem}s `wrap` too.
+   */
+  wrap?: boolean;
   label?: React.ReactNode;
   description?: React.ReactNode;
   errorMessage?: string;
@@ -86,10 +95,16 @@ export function Select<T extends object>({
         className={cn(
           "flex h-8 w-full min-w-40 items-center justify-between gap-1.5 rounded-lg border border-input bg-card py-2 pr-2 pl-2.5 text-sm pointer-coarse:h-11 pointer-coarse:text-base whitespace-nowrap transition-colors outline-none select-none",
           "data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50 data-disabled:cursor-not-allowed data-disabled:opacity-50 data-invalid:border-destructive dark:bg-input/30 dark:data-hovered:bg-input/50",
+          wrap && "h-auto min-h-8 whitespace-normal pointer-coarse:h-auto pointer-coarse:min-h-11",
           triggerClassName
         )}
       >
-        <SelectValue className="flex flex-1 truncate text-left data-placeholder:text-muted-foreground" />
+        <SelectValue
+          className={cn(
+            "flex flex-1 text-left data-placeholder:text-muted-foreground",
+            wrap ? "min-w-0" : "truncate"
+          )}
+        />
         <ChevronDownIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
       </AriaButton>
       {description ? <Description>{description}</Description> : null}
@@ -105,10 +120,13 @@ export function Select<T extends object>({
 
 export function SelectItem({
   className,
+  wrap = false,
   children,
   ...props
 }: Omit<ListBoxItemProps, "className"> & {
   className?: string;
+  /** Let a long option run onto a second line; see {@link Select}. */
+  wrap?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -124,7 +142,9 @@ export function SelectItem({
     >
       {({ isSelected }) => (
         <>
-          <span className="flex flex-1 gap-2 truncate">{children}</span>
+          <span className={cn("flex flex-1 gap-2", wrap ? "min-w-0 break-words" : "truncate")}>
+            {children}
+          </span>
           {isSelected ? (
             <span className="pointer-events-none absolute right-2 flex size-4 items-center justify-center">
               <CheckIcon className="size-4" />
@@ -151,7 +171,10 @@ export function SimpleSelect({
   ariaLabel,
   className,
   triggerClassName,
+  wrap,
 }: {
+  /** See {@link Select}. */
+  wrap?: boolean;
   value: string;
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
@@ -179,9 +202,10 @@ export function SimpleSelect({
       isDisabled={disabled}
       className={cn("w-fit", className)}
       triggerClassName={triggerClassName}
+      wrap={wrap}
     >
       {options.map((o) => (
-        <SelectItem key={o.value} id={toKey(o.value)}>
+        <SelectItem key={o.value} id={toKey(o.value)} wrap={wrap}>
           {o.label}
         </SelectItem>
       ))}
