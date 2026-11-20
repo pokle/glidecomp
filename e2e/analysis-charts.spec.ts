@@ -814,3 +814,61 @@ test("Who flew like me?: a pair the report does not hold says so, with the way b
     /\/analysis\/similar$/
   );
 });
+
+test("Metric details: a family is one behaviour at a time for every pilot, and a wide table is records", async ({
+  page,
+}) => {
+  // Issues #804 and #860: a family was a table of pilots by three to six
+  // behaviours, and "Wind by leg" was eight columns, 826px wide in a phone's
+  // 297px window. A family is now a list of one line a pilot for the
+  // behaviour picked, and a table of more than three columns is a box a row.
+  await page.goto(`/comp/${compId}/task/${taskId}/analysis/metrics`, {
+    waitUntil: "domcontentloaded",
+  });
+  const list = page.getByRole("list", { name: "Gliding metrics by pilot" });
+  await list.waitFor({ timeout: 60_000 });
+  const rows = list.getByRole("listitem");
+  expect(await rows.count()).toBeGreaterThan(5);
+  await expectNoSidewaysScroll(page);
+  // No family is a grid any more: nothing here scrolls sideways in a box.
+  await expect(page.getByRole("grid", { name: /metrics by pilot$/ })).toHaveCount(0);
+
+  // By rank first: the first row is the winner.
+  await expect(rows.first()).toContainText(/^1\. /);
+  const figures = async () =>
+    (await rows.evaluateAll((els) => els.map((el) => el.lastElementChild!.textContent ?? "")))
+      .map((t) => parseFloat(t))
+      .filter((n) => !Number.isNaN(n));
+
+  // "Highest" puts the largest value first, and "Lowest" the smallest.
+  const section = page.locator("#family-gliding");
+  const order = section.getByRole("radiogroup", { name: /^Order of Gliding/ });
+  await order.getByRole("radio", { name: "Highest" }).click();
+  const high = await figures();
+  expect(high).toEqual([...high].sort((a, b) => b - a));
+  await order.getByRole("radio", { name: "Lowest" }).click();
+  const low = await figures();
+  expect(low).toEqual([...low].sort((a, b) => a - b));
+
+  // Another behaviour of the family: the list is the same pilots, read on it.
+  const before = await rows.first().innerText();
+  await section.getByRole("button", { name: /Behaviour/ }).click();
+  const options = page.getByRole("option");
+  expect(await options.count()).toBeGreaterThan(1);
+  await options.nth(1).click();
+  await expect(rows.first()).not.toHaveText(before);
+  await expectNoSidewaysScroll(page);
+
+  // A wide engine table is a list of boxes: the leg is the box's name, and
+  // each other column is a label beside its value.
+  const wind = page.getByRole("list", { name: "Wind by leg" });
+  if ((await wind.count()) > 0) {
+    const leg = wind.getByRole("listitem").first();
+    await expect(leg.getByRole("term").filter({ hasText: /^Flown$/ })).toHaveCount(1);
+    await expect(leg.getByRole("term").filter({ hasText: /^From pilots$/ })).toHaveCount(1);
+    expect(
+      await wind.evaluate((el) => el.scrollWidth - el.clientWidth),
+      "the records are no wider than their window"
+    ).toBeLessThanOrEqual(1);
+  }
+});

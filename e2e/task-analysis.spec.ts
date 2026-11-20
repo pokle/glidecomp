@@ -183,7 +183,8 @@ function ranking() {
  * default when they hold a top-3 behaviour, so at least one is expanded.
  */
 function openFamilyTable() {
-  return page.getByRole("grid", { name: /metrics by pilot$/ }).first();
+  // A list since #860: one line a pilot for the behaviour picked.
+  return page.getByRole("list", { name: /metrics by pilot$/ }).first();
 }
 
 /** The card the ranking and its chart share. */
@@ -532,11 +533,13 @@ test("the pilot picker pins a highlight page-wide, through the URL", async () =>
   await openSection("metrics");
   await setViewport(1600, 1000);
 
-  // A real pilot from this report, read off the first open family's table.
-  // Second cell: the first is the rank.
-  const firstRow = openFamilyTable().locator("tbody tr").first();
+  // A real pilot from this report, read off the first open family's list.
+  // The row's first box is "1. Name": the rank, then the pilot.
+  const firstRow = openFamilyTable().getByRole("listitem").first();
   await firstRow.scrollIntoViewIfNeeded();
-  const name = (await firstRow.locator("th, td").nth(1).innerText()).trim();
+  const name = (await firstRow.locator(":scope > span").first().innerText())
+    .replace(/^\d+\.\s*/, "")
+    .trim();
   expect(name).toBeTruthy();
 
   // Pick them. The pin lands in the URL (a shareable reading of the task)
@@ -553,7 +556,7 @@ test("the pilot picker pins a highlight page-wide, through the URL", async () =>
   await page.reload({ waitUntil: "domcontentloaded" });
   await openFamilyTable().waitFor();
   await expect(page.getByRole("combobox", { name: "Highlight a pilot" })).toHaveValue(name);
-  const reloadedRow = openFamilyTable().locator("tbody tr").first();
+  const reloadedRow = openFamilyTable().getByRole("listitem").first();
   await reloadedRow.scrollIntoViewIfNeeded();
   await expect(reloadedRow).toHaveClass(/bg-accent/);
 

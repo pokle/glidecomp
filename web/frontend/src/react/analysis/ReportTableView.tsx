@@ -14,6 +14,9 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { formatTimeOfDay, formatTimeRange } from "../lib/time";
 import type { ReportTable, ReportCell } from "./types";
 
+/** A table of more columns than this is drawn as records, not as a table. */
+const RECORD_COLUMNS = 3;
+
 /** A report cell as a React node: text passes through; a `{ t }` instant renders
  * as a comp-zone time of day and a `{ from, to }` cell as a comp-zone range,
  * each inside a semantic <time>. */
@@ -38,6 +41,57 @@ export function ReportTableView({
 }) {
   const footnotesId = useId();
   const hasFootnotes = (table.footnotes?.length ?? 0) > 0;
+
+  const footnotes = hasFootnotes ? (
+    <div id={footnotesId} className="mt-1 space-y-0.5">
+      {table.footnotes!.map((note, i) => (
+        <p key={i} className="text-xs text-muted-foreground">
+          {note}
+        </p>
+      ))}
+    </div>
+  ) : null;
+
+  // A table of more than three columns is a list of RECORDS, at every width
+  // (issues #804, #860): each row is a box, with its first cell as its name
+  // and the rest as label and value. "Wind by leg" has eight columns and was
+  // 826px wide in a phone's 297px window. Three columns or fewer fit, and
+  // stay a table. The boxes are the page's ground colour, because they sit
+  // inside the family's card: white on white would show no edge.
+  if (table.columns.length > RECORD_COLUMNS) {
+    return (
+      <div className="mt-3">
+        <ul
+          aria-label={table.title}
+          aria-describedby={hasFootnotes ? footnotesId : undefined}
+          className="flex flex-col gap-2.5"
+        >
+          {table.rows.map((row, rowIndex) => (
+            <li
+              key={`${table.title}-${rowIndex}`}
+              className="rounded-lg border bg-background px-4 py-3"
+            >
+              <p className="font-semibold">
+                <span className="sr-only">{table.columns[0]?.header}: </span>
+                {renderCell(row[0], compTimezone)}
+              </p>
+              <dl className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+                {row.slice(1).map((value, i) => (
+                  // Index-qualified: concentric tasks repeat a waypoint name
+                  // across column headers.
+                  <div key={i} className="contents">
+                    <dt className="text-muted-foreground">{table.columns[i + 1]?.header}</dt>
+                    <dd className="text-right tabular-nums">{renderCell(value, compTimezone)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ul>
+        {footnotes}
+      </div>
+    );
+  }
 
   return (
     <div className="mt-3">
@@ -81,15 +135,7 @@ export function ReportTableView({
           ))}
         </TableBody>
       </Table>
-      {hasFootnotes ? (
-        <div id={footnotesId} className="mt-1 space-y-0.5">
-          {table.footnotes!.map((note, i) => (
-            <p key={i} className="text-xs text-muted-foreground">
-              {note}
-            </p>
-          ))}
-        </div>
-      ) : null}
+      {footnotes}
     </div>
   );
 }

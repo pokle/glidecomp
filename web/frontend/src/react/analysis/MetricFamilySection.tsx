@@ -11,7 +11,7 @@ import { useMemo } from "react";
 import { Disclosure } from "@/react/rac/disclosure";
 import { Badge } from "@/react/rac/badge";
 import { MetricMethod } from "./MetricExplanation";
-import { PerPilotMetricTable } from "./PerPilotMetricTable";
+import { PerPilotMetricList } from "./PerPilotMetricList";
 import { ReportTableView, ReportTableTitle } from "./ReportTableView";
 import { SeriesChart } from "./charts/SeriesChart";
 import { bestCorrelation } from "./SeparationRanking";
@@ -71,7 +71,7 @@ export function MetricFamilySection({
 }) {
   // Field-level metrics (wind, climb-by-hour) carry no per-pilot values at
   // all; a column of dashes for them is noise, so they only contribute their
-  // summaries and extra tables below. Memoized so PerPilotMetricTable's own
+  // summaries and extra tables below. Memoized so PerPilotMetricList's own
   // useMemos (keyed on this array's identity) survive parent re-renders.
   const perPilotMetrics = useMemo(
     () => metrics.filter((m) => m.perPilot.some((p) => p.value !== null)),
@@ -122,7 +122,7 @@ export function MetricFamilySection({
             is also why SeriesChart skips those kinds. This family keeps the
             exact tables. */}
         {perPilotMetrics.length > 0 ? (
-          <PerPilotMetricTable
+          <PerPilotMetricList
             report={report}
             metrics={perPilotMetrics}
             familyLabel={familyLabel}

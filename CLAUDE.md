@@ -592,6 +592,15 @@ These are the standing imperatives. Each links to the reference that explains it
     to say than fits, it opens a page. The three worked examples are the
     Winning strategies ranking, the comp analysis ranking and the
     "Who flew like me?" results.
+    - A row of ONE line keeps a hairline in its section's card, where the
+      eye has nothing to lose: a family on Metric details is one behaviour
+      at a time for every pilot (`analysis/PerPilotMetricList.tsx`), with a
+      picker for the behaviour and an order control where the table's
+      sortable headings were.
+    - An engine table of more than three columns is a list of records
+      (`analysis/ReportTableView.tsx`): a box a row, its first cell as its
+      name and the rest as label and value. Three columns or fewer stay a
+      table.
   - **There is no editable grid.** An editable collection is a list of rows
     (`rac/grid-list.tsx`) that each open a page of their own — the pilots
     page (`comp/PilotsSection.tsx` → `pages/CompPilotPage.tsx`) is the worked

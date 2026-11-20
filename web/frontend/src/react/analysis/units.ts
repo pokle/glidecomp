@@ -2,7 +2,7 @@
  * Unit names as words, for accessible names — "km/h" reads badly in a screen
  * reader; "kilometres per hour" doesn't.
  *
- * Its own module (rather than living in PerPilotMetricTable, where it
+ * Its own module (rather than living in PerPilotMetricList, where it
  * started) because both the table and the charts need it, and the charts are
  * also imported by MetricExplanation — which the table imports, so leaving
  * it in the table would close an import cycle.

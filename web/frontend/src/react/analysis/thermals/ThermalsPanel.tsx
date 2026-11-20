@@ -1033,7 +1033,7 @@ export function ThermalsPanel({
               <span className="flex items-center gap-2 tabular-nums">
                 {/* Bar first so every row's bar shares a left edge — aligned
                     lengths are what make forty rows scannable. Hidden narrow
-                    for the same reason as PerPilotMetricTable's bars: on a
+                    for the same reason as PerPilotMetricList's bars: on a
                     phone the census already scrolls sideways. */}
                 {maxMeanClimb > 0 ? (
                   <ValueBar
