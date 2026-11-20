@@ -66,6 +66,32 @@ import { useLocation, useNavigationType } from "react-router-dom";
  * enough: a full reload starts a fresh document at the top anyway. */
 const savedPositions = new Map<string, number>();
 
+/**
+ * The same offsets by the entry's PLACE in the history stack (react-router's
+ * `idx`), for the entry whose key the hook never saw.
+ *
+ * A REPLACE gives an entry a new key, and the hook copies the offset across
+ * when it renders that location. But a page's own correction of its address
+ * (the canonical slug, lib/use-canonical-path.ts) waits on a fetch, and can
+ * land in the same instant the reader follows a link away. React then renders
+ * only the page they went to: the entry they left has a key no offset was
+ * ever saved under, and Back restored nothing. A replace never changes an
+ * entry's place in the stack, so the place still finds it.
+ *
+ * The key stays the first answer. It is exact, and a place is reused: Back
+ * and then a link forward puts a NEW entry where an old one was, so arriving
+ * at a place by PUSH, or by a REPLACE to another page, forgets what was
+ * saved for it.
+ */
+const savedByIndex = new Map<number, number>();
+
+/** Where the current entry is in react-router's history stack, or null under
+ * a history react-router did not write. */
+function entryIndex(): number | null {
+  const state = window.history.state as { idx?: unknown } | null;
+  return typeof state?.idx === "number" ? state.idx : null;
+}
+
 /** How long a restore waits for async content to reach the target height. */
 export const RESTORE_GRACE_MS = 3000;
 /**
@@ -181,6 +207,7 @@ export function useScrollRestoration(): void {
   const location = useLocation();
   const navigationType = useNavigationType();
   const currentKey = useRef(location.key);
+  const currentIndex = useRef<number | null>(null);
   const prevPathname = useRef(location.pathname);
   // The Back/Forward restore in flight. A ref, not the layout effect's
   // cleanup: a same-page REPLACE straight after Back must not cancel it.
@@ -195,7 +222,10 @@ export function useScrollRestoration(): void {
     if ("scrollRestoration" in window.history) {
       window.history.scrollRestoration = "manual";
     }
-    const save = () => savedPositions.set(currentKey.current, window.scrollY);
+    const save = () => {
+      savedPositions.set(currentKey.current, window.scrollY);
+      if (currentIndex.current !== null) savedByIndex.set(currentIndex.current, window.scrollY);
+    };
     window.addEventListener("scroll", save, { passive: true });
     return () => {
       window.removeEventListener("scroll", save);
@@ -208,13 +238,19 @@ export function useScrollRestoration(): void {
     // any clamp-induced scroll event — so re-keying here keeps the old
     // entry's saved offset intact.
     currentKey.current = location.key;
+    const index = entryIndex();
+    currentIndex.current = index;
     const samePathname = location.pathname === prevPathname.current;
     prevPathname.current = location.pathname;
 
     if (navigationType === "POP") {
       restoring.current?.cancel();
       restoring.current = null;
-      const target = savedPositions.get(location.key) ?? 0;
+      // By key, or by place for an entry replaced without the hook seeing it.
+      const target =
+        savedPositions.get(location.key) ??
+        (index !== null ? savedByIndex.get(index) : undefined) ??
+        0;
       if (target > 0) restoring.current = restoreScroll(target);
       else window.scrollTo(0, 0);
       return;
@@ -239,8 +275,12 @@ export function useScrollRestoration(): void {
       // a restore is still in flight their offset is the one it is restoring.
       const pending = restoring.current?.active ? restoring.current.target : null;
       savedPositions.set(location.key, pending ?? window.scrollY);
+      if (index !== null) savedByIndex.set(index, pending ?? window.scrollY);
       return;
     }
+    // A new page at this place in the stack: what was saved for the place
+    // belonged to the entry it replaces.
+    if (index !== null) savedByIndex.delete(index);
     restoring.current?.cancel();
     restoring.current = null;
     window.scrollTo(0, 0);

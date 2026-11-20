@@ -891,3 +891,38 @@ test("Metric details: a family is one behaviour at a time for every pilot, and a
     ).toBeLessThanOrEqual(1);
   }
 });
+
+test("Thermals: the census is a card a thermal, with one bar for its mean climb", async ({ page }) => {
+  // Issues #804 and #860: the census was six columns, 538px wide in a phone's
+  // 359px window. Each thermal is now a card: its start and place, the pilots
+  // who shared it, one bar on a scale the list shares, and the rest in words.
+  await page.goto(`/comp/${compId}/task/${taskId}/analysis/thermals`, {
+    waitUntil: "domcontentloaded",
+  });
+  const census = page.getByRole("grid", { name: "Reconstructed thermals" });
+  await census.waitFor({ timeout: 60_000 });
+  const rows = census.locator("tbody tr");
+  await expect(rows.first()).toBeVisible();
+
+  expect(await census.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+  await expectNoSidewaysScroll(page);
+  await expectSeparateCards(rows);
+
+  // The scale is said once, above the list; a row says its pilots and its
+  // climb in words, and its height band under the bar.
+  await expect(census.getByText(/^Mean climb: 0$/)).toHaveCount(1);
+  const row = rows.first();
+  await expect(row).toContainText(/\d+ pilots?/);
+  await expect(row).toContainText(/\+\d+(\.\d+)? (m\/s|fpm|kt)/);
+  await expect(row).toContainText(/\d+\D\d+\s(m|ft)\b/);
+
+  // Every row's bar starts and ends at the same place, so they compare.
+  const bars = await rows.evaluateAll((trs) =>
+    trs.map((tr) => {
+      // The bar is the first drawn box of the row that is not its chevron.
+      const bar = tr.querySelector("span[aria-hidden]")!.getBoundingClientRect();
+      return `${Math.round(bar.left)}:${Math.round(bar.right)}`;
+    })
+  );
+  expect(new Set(bars).size, "one scale for every row").toBe(1);
+});
