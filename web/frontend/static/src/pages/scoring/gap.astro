@@ -59,7 +59,7 @@ const S7A_PDF =
       <section id="what-is-gap" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">What is GAP?</h2>
-          <SpecRef section="2" label="FAI S7F §2" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="2" label="FAI S7F §2" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
@@ -87,7 +87,7 @@ const S7A_PDF =
       <section id="how-a-task-works" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">How a Task Works</h2>
-          <SpecRef section="6" label="FAI S7F §6" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="6" label="FAI S7F §6" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
@@ -141,7 +141,7 @@ const S7A_PDF =
       <section id="task-validity" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Task Validity</h2>
-          <SpecRef section="10" label="FAI S7F §10" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="10" label="FAI S7F §10" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
@@ -203,7 +203,7 @@ const S7A_PDF =
       <section id="scoring-components" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">The Four Scoring Components</h2>
-          <SpecRef section="11" label="FAI S7F §11" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="11" label="FAI S7F §11" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
@@ -260,7 +260,7 @@ const S7A_PDF =
       <section id="distance-points" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Distance Points</h2>
-          <SpecRef section="12.1" label="FAI S7F §12.1" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="12.1" label="FAI S7F §12.1" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
@@ -366,7 +366,7 @@ const S7A_PDF =
       <section id="time-points" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Time Points</h2>
-          <SpecRef section="12.2" label="FAI S7F §12.2" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="12.2" label="FAI S7F §12.2" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
@@ -445,7 +445,7 @@ const S7A_PDF =
       <section id="leading-points" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Leading Points</h2>
-          <SpecRef section="12.3" label="FAI S7F §12.3" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="12.3" label="FAI S7F §12.3" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
@@ -494,7 +494,11 @@ const S7A_PDF =
                 reached and extends the curve to <em>maxTime</em>
                 (<SpecRef section="12.3.1" />):
               </p>
-              <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{maxTime} = \min\!\left(\max(\text{lastOutlandingTime},\; \text{lastESSTime}),\; \text{taskDeadline}\right)`)}></p>
+              {/* Two settings of one formula: on a phone the single line was 483px
+                  in a 337px box and scrolled sideways, so there it is broken
+                  after each argument. Only one is ever displayed. */}
+              <p class="bg-muted/50 rounded px-3 py-2 hidden max-w-full overflow-x-auto align-top sm:inline-block" set:html={km(String.raw`\text{maxTime} = \min\!\left(\max(\text{lastOutlandingTime},\; \text{lastESSTime}),\; \text{taskDeadline}\right)`)}></p>
+              <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top sm:hidden" set:html={km(String.raw`\begin{aligned}&\text{maxTime} = \min\!\big(\\ &\quad\max(\text{lastOutlandingTime},\\ &\quad\quad\text{lastESSTime}),\\ &\quad\text{taskDeadline}\big)\end{aligned}`)}></p>
               <p class="text-muted-foreground">
                 That is, whichever came later, the last pilot landing out or the last pilot
                 reaching ESS, but never after the task deadline. In a stopped task, the curve ends
@@ -562,7 +566,7 @@ const S7A_PDF =
       <section id="arrival-points" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Arrival Points</h2>
-          <SpecRef section="12.4" label="FAI S7F §12.4" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="12.4" label="FAI S7F §12.4" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
@@ -612,7 +616,7 @@ const S7A_PDF =
       <section id="total-score" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Your Total Score</h2>
-          <SpecRef section="12" label="FAI S7F §12" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="12" label="FAI S7F §12" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
@@ -621,7 +625,9 @@ const S7A_PDF =
             <em>before</em> rounding (<SpecRef section="13.5" />), so rounding is always the last
             step:
           </p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top" set:html={km(String.raw`\text{Total} = \text{round}_{0.1}\!\left(\text{Distance} + \text{Time} + \text{Leading} + \text{Arrival} - \text{Penalties}\right)`)}></p>
+          {/* Two settings of one formula, as for maxTime above. */}
+          <p class="bg-muted/50 rounded px-3 py-2 hidden max-w-full overflow-x-auto align-top sm:inline-block" set:html={km(String.raw`\text{Total} = \text{round}_{0.1}\!\left(\text{Distance} + \text{Time} + \text{Leading} + \text{Arrival} - \text{Penalties}\right)`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block max-w-full overflow-x-auto align-top sm:hidden" set:html={km(String.raw`\begin{aligned}\text{Total} = \text{round}_{0.1}\!\big(&\text{Distance} + \text{Time}\\ &+ \text{Leading} + \text{Arrival}\\ &- \text{Penalties}\big)\end{aligned}`)}></p>
           <p class="text-muted-foreground">
             A score never goes below zero, however large the penalty. Pilots are ranked by total,
             highest first, and a tie goes to the pilot who flew further. The scoreboard shows
@@ -652,7 +658,7 @@ const S7A_PDF =
       <section id="stopped-tasks" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Stopped Tasks</h2>
-          <SpecRef section="13.4" label="FAI S7F §13.4" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="13.4" label="FAI S7F §13.4" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
@@ -749,7 +755,7 @@ const S7A_PDF =
       <section id="ftv" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Series scoring &amp; Fixed Total Validity</h2>
-          <SpecRef section="15" label="FAI S7F §15–16" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="15" label="FAI S7F §15–16" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
@@ -799,7 +805,7 @@ const S7A_PDF =
       <section id="defaults" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Default Competition Settings</h2>
-          <SpecRef section="5" label="FAI S7F §5" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="5" label="FAI S7F §5" class="text-xs font-medium text-muted-foreground shrink-0 touch-target" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">

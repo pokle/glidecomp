@@ -48,7 +48,10 @@ export function TrackScrubber({
           const v = Number(e.currentTarget.value);
           onScrub(v >= max ? null : v);
         }}
-        className="h-6 min-w-0 flex-1 accent-primary"
+        // 44px tall under a finger: a range input cannot carry the
+        // `touch-target` pseudo-element, so the input itself grows. The track
+        // is drawn in its middle, so nothing looks different.
+        className="h-6 min-w-0 flex-1 accent-primary pointer-coarse:h-11"
       />
       <span className="w-28 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
         {scrubIndex == null ? "Whole flight" : `Until ${time}`}

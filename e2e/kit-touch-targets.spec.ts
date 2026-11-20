@@ -117,3 +117,94 @@ test("the time that switches time zone on the task page", { tag: PHONE_ONLY }, a
   });
   expect(hits).toEqual([true, true]);
 });
+
+test("the report card's map button, time slider and flight steps", { tag: PHONE_ONLY }, async ({
+  page,
+  request,
+}) => {
+  // Any pilot of the task will do: the first id the scores name.
+  const scores = await (await request.get(`/api/comp/${compId}/task/${taskId}/score`)).json();
+  const findPilot = (o: unknown): string | null => {
+    if (Array.isArray(o)) {
+      for (const v of o) {
+        const found = findPilot(v);
+        if (found) return found;
+      }
+    } else if (o && typeof o === "object") {
+      for (const [k, v] of Object.entries(o)) {
+        if ((k === "comp_pilot_id" || k === "pilot_id") && typeof v === "string") return v;
+        const found = findPilot(v);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  const pilotId = findPilot(scores);
+  expect(pilotId, "the scores name a pilot").toBeTruthy();
+
+  await page.goto(`/comp/${compId}/task/${taskId}/pilot/${pilotId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  const expand = page.getByRole("button", { name: "Expand map" });
+  await expand.waitFor({ timeout: 60_000 });
+  await expectTarget(expand, "the map's expand button");
+
+  // The slider arrives with the tracklog.
+  const slider = page.getByRole("slider", { name: "Flight time" });
+  await slider.waitFor({ timeout: 60_000 });
+  expect((await slider.boundingBox())!.height, "the time slider is 44 px tall").toBeGreaterThanOrEqual(
+    TARGET
+  );
+
+  // A step of the flight that shows on the map is a row a finger can hit.
+  const step = page.getByRole("button").and(page.locator('[title="Show on map"]')).first();
+  await step.scrollIntoViewIfNeeded();
+  await expectTarget(step, "a flight step");
+});
+
+test("the footer's links, and the single links of the content pages", { tag: PHONE_ONLY }, async ({
+  page,
+}) => {
+  // The app's footer.
+  await page.goto(`/comp/${compId}`, { waitUntil: "domcontentloaded" });
+  const about = page.getByRole("contentinfo").getByRole("link", { name: "About", exact: true });
+  await about.scrollIntoViewIfNeeded();
+  await expectTarget(about, "About in the app's footer");
+
+  // The content pages' footer, and the hero's link.
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expectTarget(
+    page.getByRole("link", { name: /See a real comp's scores/ }),
+    "the home page's link to a real competition"
+  );
+  const siteAbout = page.getByRole("contentinfo").getByRole("link", { name: "About", exact: true });
+  await siteAbout.scrollIntoViewIfNeeded();
+  await expectTarget(siteAbout, "About in the content pages' footer");
+
+  // Copy is shown by script, so it is there once the page has run.
+  await page.goto("/assistant", { waitUntil: "domcontentloaded" });
+  const copy = page.getByRole("button", { name: "Copy" }).first();
+  await copy.waitFor();
+  await expectTarget(copy, "Copy on the assistant page");
+
+  // A section's link to the specification paints 16 px tall and is widened
+  // by `touch-target`: a point 18 px above its centre still hits it.
+  await page.goto("/scoring/gap", { waitUntil: "domcontentloaded" });
+  const spec = page.getByRole("link", { name: "FAI S7F §2", exact: true });
+  await spec.scrollIntoViewIfNeeded();
+  const hit = await spec.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2 - 18));
+  });
+  expect(hit, "the specification link has a 44 px hit area").toBe(true);
+
+  // And the page's long formulas fit a phone: neither scrolls sideways.
+  const wide = await page
+    .locator("p:has(.katex)")
+    .evaluateAll((els) =>
+      els
+        .filter((el) => (el as HTMLElement).offsetParent !== null)
+        .filter((el) => el.scrollWidth > el.clientWidth + 1).length
+    );
+  expect(wide, "no formula is wider than its box").toBe(0);
+});
