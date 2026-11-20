@@ -148,6 +148,13 @@ export const COMP_SHELL_ROUTES: readonly CompShellRoute[] = [
       "from the report the page fetches anyway, and it is a tool rather than a document.",
   },
   {
+    path: "/comp/:compId/task/:taskId/analysis/similar/pair",
+    admin: false,
+    why:
+      "Two pilots compared behaviour by behaviour, opened from a row of the " +
+      "pilot-similarity page. PUBLIC and derived client-side, as that page is.",
+  },
+  {
     path: `/comp/:compId/task/:taskId/analysis/${section("thermals")}/map`,
     admin: false,
     why:
