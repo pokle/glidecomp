@@ -277,6 +277,40 @@ describe("useScrollRestoration", () => {
     expect(page.y).toBe(1200);
   });
 
+  it("Back restores an entry whose address was corrected in the instant the reader left", async () => {
+    // The page's own correction of its address (the canonical slug) waits on
+    // a fetch. Here it lands in the same batch as the link the reader
+    // follows, so the hook renders only the page they went to, and the entry
+    // they left has a key no offset was saved under.
+    page.height = 3000;
+    scrollBySomeoneElse(1200);
+    act(() => {
+      void navigate("/comp/c-1/task/t-2/analysis/strategies", {
+        replace: true,
+        state: { preserveScroll: true },
+      });
+      void navigate("/comp/c-1/task/t-2/analysis/metrics/glide-speed");
+    });
+    expect(page.y).toBe(0);
+    await back();
+    frames(32);
+    expect(page.y).toBe(1200);
+  });
+
+  it("a place in the stack forgets its offset when a new page arrives there", async () => {
+    // Back, then a link forward: the new entry is where the old one was, and
+    // must not inherit its offset when the reader comes Back to it later.
+    readThenLeave(1200); // entry 0 at 1200, now on entry 1
+    scrollBySomeoneElse(700); // entry 1 at 700
+    await back();
+    frames(32);
+    go("/comp/1/task/2/analysis/weather"); // a NEW entry 1, at the top
+    go("/comp/1/task/2/analysis/thermals"); // entry 2
+    await back();
+    frames(32);
+    expect(page.y).toBe(0);
+  });
+
   it("a same-page REPLACE straight after Back does not cancel the restore (#844)", async () => {
     readThenLeave(1200);
     // Back lands while the page is still loading, so the restore has to wait…
