@@ -142,7 +142,7 @@ export function ExplanationItem({
       type="button"
       onClick={onClick}
       title="Show on map"
-      className={`block w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60 ${
+      className={`block w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60 pointer-coarse:min-h-11 ${
         selected ? "bg-muted" : ""
       }`}
     >

@@ -776,6 +776,15 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
   .stage-link:hover {
     text-decoration: underline;
   }
+  /* 44px tall under a finger; the margin gives back what the height adds,
+     so the caption's spacing is unchanged. */
+  @media (pointer: coarse) {
+    .stage-link {
+      min-height: 44px;
+      margin-top: 12px;
+      margin-bottom: -10px;
+    }
+  }
   .stage-link span {
     transition: transform 0.2s ease;
   }

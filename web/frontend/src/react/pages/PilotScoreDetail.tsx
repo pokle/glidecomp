@@ -668,7 +668,7 @@ export function PilotScoreDetail() {
                   onClick={() => setMapExpanded((v) => !v)}
                   title={mapExpanded ? "Restore map (Esc)" : "Expand map"}
                   aria-label={mapExpanded ? "Restore map" : "Expand map"}
-                  className="absolute bottom-8 right-2 z-20 flex size-10 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
+                  className="absolute bottom-8 right-2 z-20 flex size-10 pointer-coarse:size-11 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
                 >
                   {mapExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
                 </button>

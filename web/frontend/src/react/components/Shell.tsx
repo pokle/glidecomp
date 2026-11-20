@@ -21,7 +21,7 @@ declare const __GIT_SHA__: string;
 
 /** A footer link: a 44 px row for a finger, and still a line of links to the eye. */
 const footerLink =
-  "inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground";
+  "inline-flex min-h-11 min-w-11 items-center underline underline-offset-4 hover:text-foreground";
 
 export function Shell() {
   const { user, loading } = useUser();
