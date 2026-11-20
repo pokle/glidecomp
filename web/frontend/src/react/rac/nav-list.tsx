@@ -14,7 +14,7 @@
  * (e.g. a destructive "Delete…" at the foot of an index). Focus rings are
  * inset because the list surface clips at its rounded corners.
  */
-import { Link as AriaLink, Button as AriaButton } from "react-aria-components";
+import { Link as AriaLink, Button as AriaButton, FileTrigger } from "react-aria-components";
 import { ChevronRightIcon } from "lucide-react";
 import { cn } from "@/react/lib/utils";
 import { cardSurface, CardTitle } from "./card";
@@ -154,9 +154,12 @@ export function NavActionRow({
   icon,
   destructive,
   isPending,
+  isDisabled,
   pendingLabel = "In progress",
   className,
 }: {
+  /** Unavailable for now, as while another of the page's actions runs. */
+  isDisabled?: boolean;
   onPress: () => void;
   label: string;
   description?: string;
@@ -178,10 +181,11 @@ export function NavActionRow({
       <AriaButton
         onPress={onPress}
         isPending={isPending}
+        isDisabled={isDisabled}
         className={cn(
           rowClass,
           destructive && "font-medium text-danger",
-          "data-pending:cursor-default data-pending:opacity-70",
+          "data-pending:cursor-default data-pending:opacity-70 data-disabled:opacity-50",
           className
         )}
       >
@@ -193,6 +197,52 @@ export function NavActionRow({
           chevron={false}
         />
       </AriaButton>
+    </li>
+  );
+}
+
+/**
+ * A row that asks for a file: pressing it opens the system's file picker.
+ * It is {@link NavActionRow} for an action whose first step is a file (an
+ * upload), so it sits in a list of a page's actions as one of them.
+ */
+export function NavFileRow({
+  onSelect,
+  acceptedFileTypes,
+  label,
+  description,
+  isPending,
+  isDisabled,
+  pendingLabel = "In progress",
+}: {
+  onSelect: (files: FileList | null) => void;
+  /** As the kit's FileTrigger takes them: [".igc"]. */
+  acceptedFileTypes?: string[];
+  label: string;
+  description?: string;
+  isPending?: boolean;
+  isDisabled?: boolean;
+  pendingLabel?: string;
+}) {
+  return (
+    <li>
+      <FileTrigger acceptedFileTypes={acceptedFileTypes} onSelect={onSelect}>
+        <AriaButton
+          isPending={isPending}
+          isDisabled={isDisabled}
+          className={cn(
+            rowClass,
+            "data-pending:cursor-default data-pending:opacity-70 data-disabled:opacity-50"
+          )}
+        >
+          <RowBody
+            label={label}
+            description={description}
+            value={isPending ? <Spinner label={pendingLabel} /> : undefined}
+            chevron={false}
+          />
+        </AriaButton>
+      </FileTrigger>
     </li>
   );
 }

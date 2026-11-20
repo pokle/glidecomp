@@ -136,6 +136,11 @@ export const COMP_SHELL_ROUTES: readonly CompShellRoute[] = [
       "the SSR'd task page already gives a crawler the same route as text.",
   },
   {
+    path: "/comp/:compId/task/:taskId/pilot/:pilotId/manage",
+    admin: true,
+    why: "One pilot on one task, for the organiser: status, track, manual flight (#860).",
+  },
+  {
     path: "/comp/:compId/task/:taskId/pilot/:pilotId/manual-flight",
     admin: true,
     why: "Recording a manual flight for one pilot (FAI S7F §9.2.2).",

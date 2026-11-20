@@ -463,11 +463,8 @@ export function TaskDetail() {
           compId={compId}
           taskId={taskId}
           taskName={task.name}
-          isAdmin={isAdmin}
-          isClosed={isClosed}
           scoringFormat={comp.scoring_format === "open_distance" ? "open_distance" : "gap"}
           timezone={comp.timezone ?? null}
-          taskXctsk={task.xctsk}
           submissionsClosed={task.submissions_closed}
           refresh={scoresRefresh}
           onMutated={() => setResultsRefresh((n) => n + 1)}

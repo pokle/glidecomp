@@ -267,8 +267,12 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     // the kit's SimpleSelect — a RAC Select, not a native <select>, so it is
     // driven by opening it and picking the option (gotcha #13: `selectOption`
     // and `check()` do nothing here).
+    // The status is on the pilot's own page for this task since #860: their
+    // row in the manage list opens it.
     const row = page.getByRole("row").filter({ hasText: STATUS_PILOT });
-    const status = row.getByRole("button", {
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await row.click();
+    const status = page.getByRole("button", {
       name: new RegExp(`Status for ${STATUS_PILOT}`),
     });
     await expect(status).toBeVisible({ timeout: 30_000 });
@@ -305,8 +309,11 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     // Every routed row offers it, so scope to this pilot's row. A link since
     // #637 — recording a manual flight is a page under the pilot's own score
     // card, not a dialog over the grid.
+    // On the pilot's own page for this task since #860: their row opens it.
     const row = page.getByRole("row").filter({ hasText: MANUAL_PILOT });
-    const addFlight = row.getByRole("link", { name: "Add manual flight" });
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await row.click();
+    const addFlight = page.getByRole("link", { name: "Add manual flight" });
     await expect(addFlight).toBeVisible({ timeout: 30_000 });
     await addFlight.click();
 

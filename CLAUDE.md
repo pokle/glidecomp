@@ -513,6 +513,15 @@ These are the standing imperatives. Each links to the reference that explains it
     task pages. An action stays on the page only when its place says
     something: "Add turnpoint" under the list. Pass the bar only the actions
     this reader may use.
+  - **A page whose content IS its actions keeps them on the page** (owner
+    decision, 2026-11-20). ⋯ is for what a reader may do on a page that is
+    about something else. One pilot on one task, for the organiser
+    (`pages/TaskPilotPage.tsx`, opened by a row of the task page's "Manage
+    pilots & tracks"), is nothing but its actions: the status, Upload track,
+    Add manual flight, Restore track and the way to the score card. They are
+    rows on the page (`rac/nav-list.tsx`), each with a line saying what it
+    is for, and the bar has no ⋯. Hiding them in a menu would leave the page
+    empty.
   - **Every ⋯ row carries a line icon** (`icon` on `BarAction`, from Lucide,
     the app's one icon set), and one icon means one thing everywhere:
     `MapIcon` for every row that opens tracks on a map, the 3D replay
@@ -604,7 +613,11 @@ These are the standing imperatives. Each links to the reference that explains it
   - **There is no editable grid.** An editable collection is a list of rows
     (`rac/grid-list.tsx`) that each open a page of their own — the pilots
     page (`comp/PilotsSection.tsx` → `pages/CompPilotPage.tsx`) is the worked
-    example, and the waypoints page is the same shape (#811). Tabulator went with its
+    example, and the waypoints page is the same shape (#811). So is the
+    organiser's list of a task's pilots (`comp/TaskScoresAdmin.tsx` →
+    `pages/TaskPilotPage.tsx`, #860): a row was a card of four or five
+    buttons, 180 px of a phone for each pilot, and is now the pilot's facts
+    alone, with the whole row as the target. Tabulator went with its
     last grid on 2026-11-01: the pilots roster, fourteen columns in a dialog,
     of which a phone showed about one and a half. Spreadsheet-shaped work goes
     to a real spreadsheet through CSV export and import instead, so that round
