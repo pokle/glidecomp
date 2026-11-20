@@ -37,7 +37,7 @@ import {
 } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Selection } from "react-aria-components";
-import { InfoIcon } from "lucide-react";
+import { ChevronRightIcon, InfoIcon } from "lucide-react";
 import { formatThermalPlace, windAtHeight } from "@glidecomp/engine";
 import type {
   TaskWeather,
@@ -54,12 +54,12 @@ import { cn } from "@/react/lib/utils";
 import { Popover, PopoverTrigger } from "@/react/rac/popover";
 import { Explain } from "@/react/rac/explain";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { READING_LINK_ROOM, READING_TABLE } from "@/react/rac/reading-list";
 import { formatTimeOfDay } from "../../lib/time";
 import { formatAltitude, useUnits } from "../../lib/units";
 import { useMounted } from "../../lib/use-mounted";
 import { formatMetricValue } from "../types";
 import { unitDisplay } from "../units";
-import { ValueBar } from "../ValueBar";
 import { degToCompass } from "../charts/day-profile/shared";
 import { useChartLabelSize } from "@/react/charts/use-chart-label-size";
 import { approxTextWidth } from "@/react/charts/text-width";
@@ -778,6 +778,28 @@ function RoseFigure({
 const PROFILE_W = 320;
 const PROFILE_ROW = 16;
 
+/**
+ * The census's boxes, laid out as the kit's reading list
+ * (rac/reading-list.tsx): a card for each thermal. Its start and place beside
+ * the pilots who shared it, the bar for its mean climb under both, and its
+ * height band and strongest side in words under that. The heading row keeps
+ * the same room on the right as a row keeps for its chevron, so the scale's
+ * ends sit over the bars' ends.
+ */
+const CENSUS = {
+  ...READING_TABLE,
+  header: cn(READING_TABLE.header, "[&_tr]:pr-11"),
+  row: cn(
+    READING_TABLE.row,
+    READING_LINK_ROOM,
+    "cursor-pointer [grid-template-areas:'name_count'_'climb_climb'_'words_words']"
+  ),
+};
+
+/** A row's bar beside its figure: one grid for the heading's scale and every
+ * row, so the two line up. */
+const CENSUS_CLIMB = "grid grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-x-2.5";
+
 /** Mean climb per altitude band, drawn as horizontal bars (highest band on
  * top). The band table below is the exact reading. */
 function ClimbProfile({
@@ -973,14 +995,16 @@ export function ThermalsPanel({
   const censusTable = (rows: FieldThermalShape[], interactive: boolean) => (
     <Table
       aria-label="Reconstructed thermals"
-      scrollLabel="Reconstructed thermals"
-      // The same edge-to-edge bleed as the separation ranking's master: the
-      // card's side padding is a tenth of a phone's width, and paying it here
-      // squeezes the columns into a sideways scroll they don't need.
-      viewportClassName={cn(
-        "-mx-5 w-auto border-y",
-        "@5xl:mx-0 @5xl:w-full @5xl:border-y-0"
-      )}
+      // A LIST of thermals on one shared scale, at every width (issues
+      // #804, #860). It was six columns, 538px wide in a phone's 359px
+      // window. A row is now the thermal's start and place, the pilots who
+      // shared it, one bar for its mean climb on a scale the list shares,
+      // and its height band and strongest side in words. Still one table
+      // with the kit's roles, so selection and the keyboard are unchanged;
+      // its boxes are laid out as the kit's reading list, a card a row
+      // (rac/reading-list.tsx).
+      className={CENSUS.table}
+      viewportClassName={CENSUS.viewport}
       {...(interactive
         ? {
             selectionMode: "single" as const,
@@ -1006,47 +1030,89 @@ export function ThermalsPanel({
           }
         : {})}
     >
-      <TableHeader>
-        <Column isRowHeader>Start</Column>
-        <Column>Where</Column>
-        <Column>Pilots</Column>
-        <Column>Height band</Column>
-        <Column>Mean climb</Column>
-        <Column>Strongest side</Column>
+      <TableHeader className={CENSUS.header}>
+        {/* A row's first line is plainly its start and place, and its count
+            says "pilots"; a screen reader keeps these headings. */}
+        <Column isRowHeader className="sr-only">
+          Thermal
+        </Column>
+        <Column className="sr-only">Pilots</Column>
+        {/* The scale every row's bar is read against, once: zero at the
+            bar's start and the strongest thermal's climb at its end. */}
+        <Column className={cn(CENSUS.heading, "w-full")}>
+          <span className={cn(CENSUS_CLIMB, "text-xs font-normal")}>
+            <span className="flex justify-between gap-2">
+              <span>Mean climb: 0</span>
+              <span className="tabular-nums">{climbText(maxMeanClimb)}</span>
+            </span>
+            <span />
+          </span>
+        </Column>
+        <Column className="sr-only">Height band and strongest side</Column>
       </TableHeader>
       <TableBody>
-        {rows.map((s) => (
-          <Row key={s.id} id={s.id}>
-            <Cell>
-              <time dateTime={new Date(s.startMs).toISOString()}>
-                {formatTimeOfDay(new Date(s.startMs).toISOString(), tz)}
-              </time>
-            </Cell>
-            {/* Wraps: "Between HALFWY and CUDGWE" on one line pushes every
-                measurement off a phone's screen. */}
-            <Cell className="min-w-[6rem] whitespace-normal sm:min-w-[9rem]">{placeText(s)}</Cell>
-            <Cell>{s.pilotCount}</Cell>
-            <Cell>
-              {altLabel(s.bands[0].altMin)}–{altWithUnit(s.bands[s.bands.length - 1].altMax)}
-            </Cell>
-            <Cell>
-              <span className="flex items-center gap-2 tabular-nums">
-                {/* Bar first so every row's bar shares a left edge — aligned
-                    lengths are what make forty rows scannable. Hidden narrow
-                    for the same reason as PerPilotMetricList's bars: on a
-                    phone the census already scrolls sideways. */}
-                {maxMeanClimb > 0 ? (
-                  <ValueBar
-                    className="hidden w-10 sm:inline-block"
-                    fraction={(climbByShape.get(s.id) ?? 0) / maxMeanClimb}
-                  />
-                ) : null}
-                <span>+{climbText(climbByShape.get(s.id) ?? 0)}</span>
-              </span>
-            </Cell>
-            <Cell>{s.strongestSide ? degToCompass(s.strongestSide.bearing) : "—"}</Cell>
-          </Row>
-        ))}
+        {rows.map((s) => {
+          const meanClimb = climbByShape.get(s.id) ?? 0;
+          return (
+            <Row key={s.id} id={s.id} className={CENSUS.row}>
+              <Cell className={cn(CENSUS.cell, "[grid-area:name] whitespace-normal text-base")}>
+                <time
+                  className="font-semibold tabular-nums"
+                  dateTime={new Date(s.startMs).toISOString()}
+                >
+                  {formatTimeOfDay(new Date(s.startMs).toISOString(), tz)}
+                </time>
+                {" · "}
+                {placeText(s)}
+                {/* A row opens the thermal's detail: stacked it replaces the
+                    list, side by side it fills the pane. */}
+                <ChevronRightIcon
+                  aria-hidden="true"
+                  className="absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+              </Cell>
+              <Cell
+                className={cn(
+                  CENSUS.cell,
+                  "[grid-area:count] justify-self-end text-sm tabular-nums text-muted-foreground"
+                )}
+              >
+                {s.pilotCount} {s.pilotCount === 1 ? "pilot" : "pilots"}
+              </Cell>
+              <Cell className={cn(CENSUS.cell, "[grid-area:climb]")}>
+                <span className={CENSUS_CLIMB}>
+                  {/* Length is the climb's share of the strongest thermal's:
+                      magnitude from zero, so the bars compare across rows. */}
+                  <span
+                    aria-hidden
+                    className="relative h-1.5 rounded-full bg-muted [print-color-adjust:exact]"
+                  >
+                    {maxMeanClimb > 0 ? (
+                      <span
+                        className="absolute inset-y-0 left-0 min-w-1 rounded-full bg-foreground"
+                        style={{ width: `${(meanClimb / maxMeanClimb) * 100}%` }}
+                      />
+                    ) : null}
+                  </span>
+                  <span className="text-right text-base tabular-nums">
+                    <span className="sr-only">Mean climb </span>+{climbText(meanClimb)}
+                  </span>
+                </span>
+              </Cell>
+              <Cell
+                className={cn(
+                  CENSUS.cell,
+                  "[grid-area:words] whitespace-normal text-sm text-muted-foreground"
+                )}
+              >
+                {altLabel(s.bands[0].altMin)}–{altWithUnit(s.bands[s.bands.length - 1].altMax)}
+                {s.strongestSide
+                  ? ` · strongest on the ${degToCompass(s.strongestSide.bearing)} side`
+                  : ""}
+              </Cell>
+            </Row>
+          );
+        })}
       </TableBody>
     </Table>
   );

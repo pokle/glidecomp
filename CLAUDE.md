@@ -589,9 +589,9 @@ These are the standing imperatives. Each links to the reference that explains it
     axis sit above the cards on the ground, so the section is a plain
     `<section>`, never a `Card`. One mark a row, and counts as words: a
     second bar under the first reads as the same unit. Where a row has more
-    to say than fits, it opens a page. The three worked examples are the
-    Winning strategies ranking, the comp analysis ranking and the
-    "Who flew like me?" results.
+    to say than fits, it opens a page. The worked examples are the Winning
+    strategies ranking, the comp analysis ranking, the "Who flew like me?"
+    results and the census of thermals.
     - A row of ONE line keeps a hairline in its section's card, where the
       eye has nothing to lose: a family on Metric details is one behaviour
       at a time for every pilot (`analysis/PerPilotMetricList.tsx`), with a

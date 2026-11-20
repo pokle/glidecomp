@@ -421,7 +421,8 @@ function thermalParam(): string | null {
 /** Choose the census's first thermal, from the census. */
 async function chooseFirstThermal(): Promise<string> {
   const first = census().locator("tbody tr").first();
-  const start = (await first.locator("th, td").first().innerText()).trim();
+  // The row's first box is "14:12 · place": the start is its <time>.
+  const start = (await first.locator("th, td").first().locator("time").innerText()).trim();
   await first.locator("th, td").first().click();
   return start;
 }
@@ -486,7 +487,7 @@ test("narrow: arrowing through the census does not navigate; Enter does", async 
   expect(thermalParam()).toBeNull();
 
   const focused = await page.evaluate(
-    () => (document.activeElement as HTMLElement)?.closest("tr")?.querySelector("th, td")?.textContent ?? ""
+    () => (document.activeElement as HTMLElement)?.closest("tr")?.querySelector("time")?.textContent ?? ""
   );
   expect(focused.trim()).toBeTruthy();
 
@@ -522,7 +523,7 @@ test("wide: the thermals census and its detail sit side by side", async () => {
   // pick may not cost the reader a Back press to leave the page.
   const rows = census().locator("tbody tr");
   const other = rows.nth((await rows.count()) - 1);
-  const start = (await other.locator("th, td").first().innerText()).trim();
+  const start = (await other.locator("th, td").first().locator("time").innerText()).trim();
   const entries = await page.evaluate(() => history.length);
   await other.locator("th, td").first().click();
   await expect(thermalPane().locator("h3").first()).toContainText(start);
@@ -607,7 +608,13 @@ test("side by side, a fresh load names its default selection in the URL and ligh
       const lit = list().locator("tbody tr[aria-selected='true']");
       await expect(lit).toHaveCount(1);
       // The lit row is the pane's subject.
-      const name = (await lit.locator("th, td").first().innerText()).split("\n")[0].trim();
+      // A behaviour's row is named by its first box; a thermal's by the
+      // start time in it, which is what its pane's heading repeats.
+      const first = lit.locator("th, td").first();
+      const time = first.locator("time");
+      const name = (
+        (await time.count()) > 0 ? await time.innerText() : (await first.innerText()).split("\n")[0]
+      ).trim();
       await expect(pane().locator("h3").first()).toContainText(name);
     }
   }

@@ -250,7 +250,9 @@ function ThermalsSection({
   }
 
   return (
-    <Card aria-labelledby="thermals-heading" className="gap-3">
+    // A plain section, not a Card: each thermal of the census is a card of
+    // its own (rac/reading-list.tsx).
+    <section aria-labelledby="thermals-heading" className="flex flex-col gap-3">
       <h2 id="thermals-heading" className="scroll-mt-32 text-lg font-semibold">
         The day's thermals
       </h2>
@@ -272,7 +274,7 @@ function ThermalsSection({
             : null
         }
       />
-    </Card>
+    </section>
   );
 }
 
