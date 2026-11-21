@@ -83,7 +83,7 @@ import {
 } from "@/react/rac/form";
 import { Page, PageBar, commitClass, type BarAction } from "@/react/rac/page-bar";
 import { api } from "../../comp/api";
-import { openedHere, useLeave } from "../lib/leave";
+import { useLeave } from "../lib/leave";
 import { fetchWithRetry } from "./types";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -162,7 +162,6 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
   }, []);
 
   // Into one of the editor's pages, marked so it can come back here by Back.
-  const fromHere = openedHere();
 
   const [fillingAlts, setFillingAlts] = useState(false);
 
@@ -218,7 +217,7 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
       id = added.id;
       return added.draft;
     });
-    void navigate(turnpointPath(id), openedHere({ [ADDING_TYPE]: type }));
+    void navigate(turnpointPath(id), { state: { [ADDING_TYPE]: type } });
   }
 
   /**
@@ -644,7 +643,7 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
               rowIds={derived.result.rowIds}
               reordering={reordering}
               moved={moved}
-              onOpen={(id) => void navigate(turnpointPath(id), fromHere)}
+              onOpen={(id) => void navigate(turnpointPath(id))}
               onMove={moveTurnpoint}
             />
           ) : (
@@ -732,7 +731,6 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
             {/* Here, not in ⋯: it is this map, made larger. */}
             <LinkButton
               href={taskRouteMapPath(urlId, compName, taskId, taskName)}
-              routerOptions={fromHere}
               variant="outline"
               className="h-11 gap-2 px-4"
             >

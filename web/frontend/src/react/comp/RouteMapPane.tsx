@@ -16,7 +16,6 @@ import { useNavigate } from "react-router-dom";
 import type { WaypointFileRecord, XCTask } from "@glidecomp/engine";
 import type { MapWaypoint } from "../../analysis/map-provider";
 import { Button } from "@/react/rac/button";
-import { openedHere } from "../lib/leave";
 import { taskRouteAddWaypointPath } from "../lib/slug";
 import { newWaypointSearch } from "./AddWaypointForm";
 import { appendTurnpoint } from "./route-draft";
@@ -163,9 +162,7 @@ export function RouteMapPane({
                   taskId,
                   taskName,
                   newWaypointSearch(lat, lon, details)
-                ),
-                openedHere()
-              );
+                ));
             }}
           />
         </Suspense>

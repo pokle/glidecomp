@@ -159,9 +159,11 @@ test("the full-size chart is a page: a link in, reload, and Back out", async ({ 
   await expect(scatter(page)).toBeVisible();
   // A page, not an overlay: nothing modal over it.
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  // The trail walks up to the section the page belongs to: the bar's Back
-  // goes there, and the trail is in the markup (visually hidden) as links.
-  await expect(page.getByRole("link", { name: "Back to Metric details" })).toBeVisible();
+  // The bar's Back is the browser's: the reader came from Winning
+  // strategies, so that is where it goes and what it is named for
+  // (lib/leave.ts). The page BELONGS to Metric details, which is the trail's
+  // business: it is in the markup (visually hidden) as links.
+  await expect(page.getByRole("link", { name: "Back to Winning strategies" })).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Metric details" })
   ).toHaveCount(1);

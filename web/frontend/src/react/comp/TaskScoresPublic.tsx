@@ -23,7 +23,6 @@ import { formatInstant } from "../lib/time";
 import { useMounted } from "../lib/use-mounted";
 import { formatDistance, useUnits } from "../lib/units";
 import { ordinal } from "../lib/format";
-import { openedHereFrom } from "../lib/leave";
 import { ChevronRightIcon } from "lucide-react";
 import { navRowClass } from "@/react/rac/nav-list";
 import { Points, ScoreLinkRow, ScoreList } from "./score-rows";
@@ -334,13 +333,12 @@ function ClassPodium({
   if (cls.pilots.length === 0) return null;
   const top = cls.pilots.slice(0, 3);
   const more = cls.pilots.length - top.length;
-  const page = taskName ?? "Task";
   const distance = (m: number) => formatDistance(m, { decimals: 1, prefs: units }).withUnit;
 
   return (
     <div className="mt-3 min-w-0">
       {showClassName ? <h3 className="mb-1.5 font-semibold">{cls.pilot_class}</h3> : null}
-      <ScoreList label={`Top 3 — ${cls.pilot_class}`} page={page}>
+      <ScoreList label={`Top 3 — ${cls.pilot_class}`}>
         {top.map((p) => (
           <ScoreLinkRow
             key={p.comp_pilot_id}
@@ -363,7 +361,7 @@ function ClassPodium({
         ))}
         {more > 0 ? (
           <li>
-            <AriaLink href={moreHref} routerOptions={openedHereFrom(page)} className={navRowClass}>
+            <AriaLink href={moreHref} className={navRowClass}>
               <span className="min-w-0 flex-1 pl-13 text-muted-foreground">
                 + {more} more pilot{more === 1 ? "" : "s"}
               </span>

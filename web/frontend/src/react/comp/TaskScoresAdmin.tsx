@@ -21,7 +21,6 @@ import { useNavigate } from "react-router-dom";
 import { ChevronRightIcon } from "lucide-react";
 import { Card } from "@/react/rac/card";
 import { GridList, GridListItem } from "@/react/rac/grid-list";
-import { openedHere } from "../lib/leave";
 import { taskPilotPath } from "../lib/slug";
 import { useCompName } from "./comp-name-context";
 import { ScoreFreshness } from "./ScoreFreshness";
@@ -155,9 +154,7 @@ function ClassList({
           // real Back and this list returns where it was left (lib/leave.ts).
           onAction={(key) =>
             navigate(
-              taskPilotPath(compId, compName, taskId, taskName, String(key), names.get(String(key))),
-              openedHere()
-            )
+              taskPilotPath(compId, compName, taskId, taskName, String(key), names.get(String(key))))
           }
         >
           {cls.rows.map((row) => (

@@ -142,3 +142,39 @@ test("on a desktop, the task analyses are tiles side by side", { tag: DESKTOP_ON
   expect(Math.abs(boxA.y - boxB.y), "the first two tiles share a row").toBeLessThan(1);
   expect(boxB.x).toBeGreaterThan(boxA.x + boxA.width);
 });
+
+test("the bar's back goes where the browser's Back goes: to the comp analysis, not up to the task", async ({
+  page,
+}) => {
+  // Found on a phone on 21 November 2026. From the comp analysis into a
+  // task's analysis, the browser's Back returned to the comp analysis and
+  // the bar's back went UP, to the task page. The bar's back was a real Back
+  // only where the link that opened the page had been marked for it in code,
+  // and this one had not. It asks the history now (lib/leave.ts).
+  await page.goto(`/comp/${compId}/analysis`);
+  await expect(taskList(page)).toBeVisible();
+  const from = new URL(page.url()).pathname;
+  await taskLinks(page).first().click();
+  await expect(page).toHaveURL(/\/task\/[^/]+\/analysis$/);
+
+  // Named for where it goes, and it goes there.
+  const back = page.locator("[data-bar-back]");
+  await expect(back).toHaveAccessibleName("Back to Comp analysis");
+  await back.click();
+  await expect(taskList(page)).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe(from);
+  // A real Back, so Forward returns to the task's analysis.
+  await page.goForward();
+  await expect(page).toHaveURL(/\/task\/[^/]+\/analysis$/);
+
+  // Arrived at directly, with nothing of ours behind it: the bar's back goes
+  // to the page above, the task, where the browser's Back would leave the
+  // site (and the installed app has no Back at all).
+  const direct = await page.context().newPage();
+  await direct.goto(page.url());
+  const up = direct.locator("[data-bar-back]");
+  await expect(up).toHaveAccessibleName(/^Back to (?!Comp analysis)/);
+  await up.click();
+  await expect(direct).toHaveURL(/\/task\/[^/]+$/);
+  await direct.close();
+});

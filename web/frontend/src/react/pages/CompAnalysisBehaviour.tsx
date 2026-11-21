@@ -31,7 +31,6 @@ import { taskInformative, taskReadings, taskReadingsWords } from "../analysis/co
 import { formatShownRho, verdictWords } from "../analysis/units";
 import { useCompAnalysis } from "../analysis/use-comp-analysis";
 import { COMP_ANALYSIS_LABEL, underCompAnalysis } from "../lib/crumbs";
-import { openedHereFrom } from "../lib/leave";
 import {
   compAnalysisBehaviourPath,
   compUrlId,
@@ -187,7 +186,6 @@ export function CompAnalysisBehaviour() {
                         task.task_name,
                         metric.id
                       )}
-                      routerOptions={openedHereFrom(metric.label)}
                       className={cn(navRowClass, "min-h-14")}
                     >
                       {content}

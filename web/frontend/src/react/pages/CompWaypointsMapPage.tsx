@@ -40,7 +40,6 @@ import {
   useWaypointsEditor,
   waypointCameras,
 } from "../comp/use-waypoints-editor";
-import { openedHere } from "../lib/leave";
 import { waypointsEditorGate } from "../comp/WaypointsEditorGate";
 import { MapPinPlusIcon, MapPinXIcon } from "lucide-react";
 
@@ -126,9 +125,7 @@ export function CompWaypointsMapPage() {
             onWaypointPick={() => {}}
             onMapPick={(lat, lon, details) =>
               navigate(
-                compWaypointsNewPath(urlId, compName, newWaypointSearch(lat, lon, details)),
-                openedHere()
-              )
+                compWaypointsNewPath(urlId, compName, newWaypointSearch(lat, lon, details)))
             }
           />
         </Suspense>

@@ -67,7 +67,6 @@ import {
   formatSimilarity,
   similarityOnTrack,
 } from "../analysis/similarity-rows";
-import { openedHereFrom } from "../lib/leave";
 import { COMP_ANALYSIS_LABEL, underTaskAnalysis } from "../lib/crumbs";
 import {
   compAnalysisPath,
@@ -574,7 +573,6 @@ export function TaskPilotSimilarity() {
                           <div className="flex items-baseline justify-between gap-3">
                             <ReadingRowLink
                               href={pairHref(n.pilotName)}
-                              routerOptions={openedHereFrom(SIMILARITY_LABEL)}
                               className={READING_NAME}
                             >
                               <PilotName

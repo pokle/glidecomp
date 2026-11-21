@@ -41,7 +41,6 @@ import {
   useWaypointsEditor,
   type WaypointsEditor,
 } from "../comp/use-waypoints-editor";
-import { openedHere } from "../lib/leave";
 import { waypointsEditorGate } from "../comp/WaypointsEditorGate";
 import {
   acceptMapAltitudes,
@@ -143,7 +142,7 @@ export function CompAltitudeReviewPage() {
         setSearchParams(all ? { all: "1" } : {}, { replace: true, state: location.state })
       }
       onOpen={(rowId) =>
-        navigate(compAltitudeReviewPath(urlId, compName, rowId), openedHere())
+        navigate(compAltitudeReviewPath(urlId, compName, rowId))
       }
       onAccept={(rowIds) => {
         let accepted = 0;
