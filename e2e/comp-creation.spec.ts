@@ -141,8 +141,8 @@ test("dev login, create competition and task", async ({ page, request }) => {
   await page.getByText("Hidden?").click();
   await expect(hidden).not.toBeChecked();
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("main").getByRole("link", { name: /^Access/ })).toBeVisible();
-  await page.getByRole("link", { name: `Back to ${COMP_NAME}` }).click();
+  // The save goes back to where the reader came from (lib/leave.ts): the
+  // comp page, whose guide opened Access, not the settings index.
   await expect(guide).toContainText("Completed: Make public");
   await expect(guide).toContainText("2 of 5 steps");
   await expect(page.getByText(/Anyone you send this page’s link to/)).toHaveCount(0);
