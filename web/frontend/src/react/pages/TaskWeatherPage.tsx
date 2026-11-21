@@ -7,7 +7,7 @@
  * are editors of one part of the task, each reached from the part of the task
  * page it edits. See comp/TaskWeatherNotes.tsx for the form.
  */
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { SettingsPage } from "@/react/components/SettingsPage";
@@ -16,6 +16,7 @@ import { underTask } from "../lib/crumbs";
 import { idFromSegment, taskPath, taskWeatherPath } from "../lib/slug";
 import { useTaskAdminPage } from "../lib/use-task-admin-page";
 import { TaskWeatherNotes } from "../comp/TaskWeatherNotes";
+import { useLeave } from "../lib/leave";
 
 export function TaskWeatherPage() {
   const { compId: compParam, taskId: taskParam } = useParams<{
@@ -24,7 +25,7 @@ export function TaskWeatherPage() {
   }>();
   const compId = idFromSegment(compParam ?? "");
   const taskId = idFromSegment(taskParam ?? "");
-  const navigate = useNavigate();
+  const leave = useLeave();
 
   const { comp, task, isAdmin, notFound, loading } = useTaskAdminPage({
     compId,
@@ -55,9 +56,10 @@ export function TaskWeatherPage() {
       taskId={taskId}
       comp={comp}
       task={task}
-      // Back to the task page, where the notes are read — and where the
-      // Weather section this was opened from is.
-      onSaved={() => navigate(taskPath(compId, comp.name, taskId, task.name))}
+      // Back to where the reader came from: the task page, where the notes
+      // are read and the Weather section this was opened from is. A real
+      // Back, so the saved form is not left behind it (lib/leave.ts).
+      onSaved={() => leave(taskPath(compId, comp.name, taskId, task.name))}
     />
   );
 }

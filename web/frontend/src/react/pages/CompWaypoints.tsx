@@ -118,6 +118,7 @@ import {
   validRecords,
   type WpRow,
 } from "../comp/waypoints-draft";
+import { useLeave } from "../lib/leave";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
 
@@ -166,6 +167,7 @@ export function CompWaypoints() {
   const editor = useWaypointsEditor();
   const { comp, compId, urlId, compName, isAdmin, draft, dirty } = editor;
   const navigate = useNavigate();
+  const leave = useLeave();
   const confirm = useConfirm();
   // The map's fold, owned here rather than by MasterDetail so its toggle can
   // ride the line above the list instead of taking a row of its own.
@@ -292,7 +294,7 @@ export function CompWaypoints() {
     });
     if (!ok) return;
     editor.discard();
-    navigate(compPath(urlId, compName));
+    leave(compPath(urlId, compName));
   }
 
   /** Arm the map for one tap, with the map on screen to take it. */

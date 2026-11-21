@@ -68,12 +68,34 @@ export function useLeave(): (fallback: string) => void {
 }
 
 /**
- * The name each page of this visit went by, by its place in the history
- * stack, so the back control can say where Back will go. Kept for the life
- * of the document: after a reload the pages behind are not named until they
- * are visited again, and the control then says "Back".
+ * The name each page of this document went by, by its place in the history
+ * stack. In memory, so it is never a name from another document's history.
  */
 const pageNames = new Map<number, string>();
+
+/** Where the name of the page behind an entry is kept across a reload. */
+const BEHIND_PREFIX = "glidecomp.back.";
+
+/**
+ * The name of the page behind the entry with this key, remembered in this
+ * tab so a reload does not lose it. Keyed by the ENTRY, not by its place:
+ * a place is reused by another document's history, and an entry's key is its
+ * own. Storage can be missing or full; the control then says "Back".
+ */
+function recallBehind(key: string): string | null {
+  try {
+    return window.sessionStorage.getItem(BEHIND_PREFIX + key);
+  } catch {
+    return null;
+  }
+}
+function rememberBehind(key: string, name: string): void {
+  try {
+    window.sessionStorage.setItem(BEHIND_PREFIX + key, name);
+  } catch {
+    // Not worth failing a page over.
+  }
+}
 
 /**
  * What the bar's back control is called, and the bar's own page remembered
@@ -97,7 +119,14 @@ export function useBackLabel(title: string, parentLabel: string | undefined): st
       setLabel(up);
       return;
     }
-    const behind = pageNames.get(index - 1);
+    // This document's own record first; after a reload, what this entry
+    // remembered. A page corrects its own address by a replace, which gives
+    // the entry a new key, so the name is written under each key it has.
+    const behind = pageNames.get(index - 1) ?? recallBehind(location.key);
+    if (behind) {
+      pageNames.set(index - 1, behind);
+      rememberBehind(location.key, behind);
+    }
     setLabel(behind ? `Back to ${behind}` : "Back");
     // `location.key` is the entry: a Back or a link is a new one to read.
   }, [location.key, title, up]);

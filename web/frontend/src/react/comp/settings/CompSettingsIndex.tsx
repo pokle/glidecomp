@@ -101,7 +101,9 @@ export function CompSettingsIndex({
       () => api.api.comp[":comp_id"].$delete({ param: { comp_id: compId } }),
       { fallback: "Failed to delete the competition." }
     );
-    if (res) navigate("/comp");
+    // A replace: the settings of a competition that no longer exists must
+    // not be the page behind the list.
+    if (res) navigate("/comp", { replace: true });
   }
 
   const groupPath = (group: SettingsGroup) =>
