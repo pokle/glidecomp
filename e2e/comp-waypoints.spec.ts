@@ -4,7 +4,7 @@
  *
  * - Admins get a LIST of waypoints at every width. The Tabulator grid this
  *   replaced on 2026-09-19 is gone rather than hidden behind a breakpoint (the
- *   mobile-first rule in CLAUDE.md), so the tests assert `.tabulator` is
+ *   mobile-first rule in docs/interaction-guide.md), so the tests assert `.tabulator` is
  *   absent and that the page never scrolls sideways.
  * - A row opens that waypoint's PAGE (/waypoints/:n), where it opened a
  *   full-screen sheet until #811. Add waypoint (/waypoints/new) and the map
@@ -620,7 +620,7 @@ test("leaving the editor by a link asks; going between its pages does not", asyn
  * Back is the browser's, and means "not now": it leaves the editor without a
  * question, and the draft is there when the reader comes back. (Until #811 a
  * history entry held by the page asked on Back instead; the overlays rule in
- * CLAUDE.md retired that machinery, and with the draft in storage there is
+ * docs/interaction-guide.md retired that machinery, and with the draft in storage there is
  * nothing for Back to lose.)
  */
 test("Back leaves the editor without asking, and the draft waits for Forward", async ({

@@ -12,7 +12,7 @@
  * Under FTV it is also where a pilot reads which of their tasks counted, in
  * full or in part, and which were discarded — the explanation that used to be
  * a dialog behind a "breakdown" link on the total. A screen of its own is a
- * page (CLAUDE.md, the overlays rule).
+ * page (docs/interaction-guide.md, the overlays rule).
  *
  * Server-rendered from the scores page's own data (`loadCompPilotScores` is
  * `loadCompScores` plus a 404 for a pilot the standings do not name), so the

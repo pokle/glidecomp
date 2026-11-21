@@ -13,7 +13,7 @@
  * waypoints page's Check altitudes, and for the same reason.
  *
  * **Each is a page under the list** (#810), where they were full-screen
- * sheets over it — the overlays rule in CLAUDE.md:
+ * sheets over it — the overlays rule in docs/interaction-guide.md:
  *
  *   - /pilots/import (pages/CompRosterImportPage.tsx): what a CSV must look
  *     like and the button that picks one, then — on the same page — the

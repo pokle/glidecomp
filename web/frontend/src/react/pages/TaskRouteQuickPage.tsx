@@ -9,7 +9,7 @@
  *
  * It is a page reached from a button, rather than a field sitting in the
  * editor mirroring the route (#661), and since #812 a page rather than a
- * full-screen sheet (the overlays rule in CLAUDE.md). The line is a LOSSY
+ * full-screen sheet (the overlays rule in docs/interaction-guide.md). The line is a LOSSY
  * view — it names waypoints, radii, types and the start, and can say nothing
  * about a turnpoint's coordinates, altitude or long name — so a live mirror
  * rebuilt the route from the text on every pause in your typing, quietly

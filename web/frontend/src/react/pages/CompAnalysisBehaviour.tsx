@@ -6,7 +6,7 @@
  * badges that agree overlap; this page is where each task's figure is read
  * exactly, and each links to that task's own chart of the behaviour.
  *
- * A PAGE with its own URL, never an overlay (CLAUDE.md, "No full-screen
+ * A PAGE with its own URL, never an overlay (docs/interaction-guide.md, "No full-screen
  * overlays"). Nothing is handed over from the page underneath: the report
  * comes from use-comp-analysis.ts like the comp analysis itself (seeded by
  * SSR on a hard load), the behaviour is named by the URL and the class rides

@@ -53,7 +53,7 @@ renders it. Every other way in is a **link** to that page, built by
   that question gets asked.
 
 Until #820 the task page opened the form in a dialog (`SubmitTrackDialog`) over
-itself. That is the overlay CLAUDE.md's "no full-screen overlays" rule retired:
+itself. That is the overlay the interaction guide's "no full-screen overlays" rule (2.1) retired:
 a dialog with text fields brings up the keyboard over a fixed layer, which is
 where the iPhone bugs were. As a page it gets the browser's Back (which returns
 to the task page), a reload that keeps the same task, and a URL that can be

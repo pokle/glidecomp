@@ -7,7 +7,7 @@
  * is too small to place a point in. Here the map gets the screen, and Add from
  * map comes with it: enough room to walk a valley dropping points one after
  * another. It was a full-screen sheet over the list until #811, and is a page
- * for the reason every overlay became one (the overlays rule in CLAUDE.md).
+ * for the reason every overlay became one (the overlays rule in docs/interaction-guide.md).
  * The browser Fullscreen API that Mapbox's own control rides on does not
  * exist on iPhones.
  *

@@ -1,7 +1,7 @@
 /**
  * Create a test IGC — a page under the task (issue #822), where it was a
  * dialog over the task page. Part of the "No full-screen overlays" rule in
- * CLAUDE.md: a screen with text fields is a page, with its own URL, left with
+ * docs/interaction-guide.md: a screen with text fields is a page, with its own URL, left with
  * the browser's Back.
  *
  * What this spec pins:

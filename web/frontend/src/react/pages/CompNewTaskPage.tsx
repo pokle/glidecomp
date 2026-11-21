@@ -5,7 +5,7 @@
  * sqid is at least four letters).
  *
  * **A page, not a dialog over the comp** (issue #819). The overlays rule in
- * CLAUDE.md: a dialog with a text field brings up the keyboard over a layer
+ * docs/interaction-guide.md: a dialog with a text field brings up the keyboard over a layer
  * fixed to a scrolled page, which is how the pilot sheet came to stop
  * answering taps on an iPhone. A page gets the keyboard, Back and focus from
  * the browser.

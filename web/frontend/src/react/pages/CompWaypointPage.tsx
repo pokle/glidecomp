@@ -4,7 +4,7 @@
  * (functions/comp/[[path]].ts serves it a noindex shell).
  *
  * It was a full-screen sheet over the list until #811, and is a page for the
- * reason every overlay became one (the overlays rule in CLAUDE.md): Back,
+ * reason every overlay became one (the overlays rule in docs/interaction-guide.md): Back,
  * scroll, the keyboard and focus come from the browser.
  *
  * `:n` is the editor's row id (comp/waypoints-draft.ts), not the code — the
@@ -22,7 +22,7 @@
  *
  * Metric throughout: this is the waypoint FILE edited in place, so altitude
  * and radius are both the file's own metres and the labels say so (see the
- * altitude rule in CLAUDE.md).
+ * altitude rule in docs/interaction-guide.md).
  */
 import { useState } from "react";
 import { useParams } from "react-router-dom";

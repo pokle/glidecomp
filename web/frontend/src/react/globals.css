@@ -476,7 +476,7 @@
   }
 }
 
-/* Reduced motion (WCAG 2.3.3, accessibility-standard §4.4). When the user has
+/* Reduced motion (WCAG 2.3.3, docs/interaction-guide.md 3.8). When the user has
    asked their OS to minimise motion, neutralise non-essential transitions and
    animations app-wide: collapse durations to a near-zero value (kept non-zero
    so `transitionend`/`animationend` listeners still fire), stop looping

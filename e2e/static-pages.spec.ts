@@ -269,7 +269,7 @@ test.describe("the page bar", () => {
     page,
   }) => {
     // 320px is the narrowest viewport the accessibility standard supports
-    // (docs/accessibility-standard.md §3.2).
+    // (docs/interaction-guide.md 3.3).
     await page.setViewportSize({ width: 320, height: 812 });
     await page.goto("/scoring/data-cleaning");
     const bar = page.locator("[data-page-bar]");

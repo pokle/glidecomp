@@ -18,7 +18,7 @@
  * the draft is simply there on the other side. Leaving the editor by a link
  * with unsaved edits asks first — "Discard changes" then forgets the draft,
  * "Keep editing" stays. Back is left to the browser (the overlays rule in
- * CLAUDE.md retired the machinery that intercepted it), and Back means "not
+ * docs/interaction-guide.md retired the machinery that intercepted it), and Back means "not
  * now": the draft stays, and coming back to the waypoints finds it. A reload
  * finds it too.
  */

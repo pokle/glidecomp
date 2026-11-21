@@ -278,7 +278,7 @@ Each phase ships independently. **All three have shipped.**
 3. ✅ **Role-aware empty states** — the Tasks section renders the visitor
    sentence plus, for admins, the New Task CTA in the body.
 
-## 6. Accessibility (per docs/accessibility-standard.md)
+## 6. Accessibility (per docs/interaction-guide.md, Part 3)
 
 - The guide is a `<section aria-labelledby>` containing an `<ol>`; each
   completed step carries a visually-hidden "Completed:" prefix (the check

@@ -3,7 +3,7 @@
  * and #863 for the pages).
  *
  * It took two dialogs: one with a Label field, then one showing the new key.
- * A dialog with a text field is the overlay CLAUDE.md rules out (the iPhone
+ * A dialog with a text field is the overlay docs/interaction-guide.md rules out (the iPhone
  * keyboard), so both are gone. The keys are a list (/settings/api-keys) with
  * + in its bar; + opens a form page (/settings/api-keys/new) with Create in
  * the bar, and the new key takes the form's place on that page. These tests

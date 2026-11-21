@@ -164,7 +164,7 @@ export function compPath(id: string, name?: string | null): string {
 
 /**
  * Starting a new competition — signed-in only, a page of its own (see the
- * overlays rule in CLAUDE.md). A static segment beside `/comp/:compId`: `new`
+ * overlays rule in docs/interaction-guide.md). A static segment beside `/comp/:compId`: `new`
  * can never be a comp's id (a sqid is at least four letters), so it cannot
  * shadow a real one.
  */
@@ -221,7 +221,7 @@ export function compWaypointsPath(id: string, name?: string | null): string {
 
 /**
  * The waypoints editor's other pages (#811), each a page of its own rather
- * than a sheet over the list: see the overlays rule in CLAUDE.md. A waypoint
+ * than a sheet over the list: see the overlays rule in docs/interaction-guide.md. A waypoint
  * is addressed by the editor's row id, not its code — see
  * comp/waypoints-draft.ts for why.
  */
@@ -271,7 +271,7 @@ export function compAnalysisBehaviourPath(
  * The submit-track page with the comp (and, from a task page, the task)
  * already chosen. `compId` as it goes in URLs — a hidden comp's share key
  * rides in `?comp=` like it does in a path. A link, not a dialog: see the
- * overlays rule in CLAUDE.md.
+ * overlays rule in docs/interaction-guide.md.
  */
 export function submitTrackPath(compId: string, taskId?: string | null): string {
   const comp = `comp=${encodeURIComponent(compId)}`;
@@ -285,7 +285,7 @@ export function compPilotsPath(id: string, name?: string | null): string {
 
 /**
  * One pilot's editor on the roster, or `"new"` for the blank one. A page and
- * not a sheet over the list: see the overlays rule in CLAUDE.md.
+ * not a sheet over the list: see the overlays rule in docs/interaction-guide.md.
  */
 export function compPilotPath(
   id: string,
@@ -353,7 +353,7 @@ export function taskPath(
 
 /**
  * The admin-only page that creates a task. A page and not a dialog over the
- * comp: see the overlays rule in CLAUDE.md. `new` can never be a task's id
+ * comp: see the overlays rule in docs/interaction-guide.md. `new` can never be a task's id
  * (a sqid is at least four letters), so it cannot shadow a real task.
  */
 export function compNewTaskPath(id: string, name?: string | null): string {
@@ -388,7 +388,7 @@ export function taskRoutePath(
 
 /**
  * The route editor's other pages (#812), each a page of its own rather than
- * a sheet or a dialog over the route: see the overlays rule in CLAUDE.md. A
+ * a sheet or a dialog over the route: see the overlays rule in docs/interaction-guide.md. A
  * turnpoint is addressed by the editor's row id, not its code or position —
  * see comp/route-draft.ts for why.
  */

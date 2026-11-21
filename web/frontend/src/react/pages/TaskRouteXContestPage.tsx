@@ -4,7 +4,7 @@
  * functions/comp/[[path]].ts).
  *
  * It was a small dialog with one text field over the route editor until #812;
- * the overlays rule in CLAUDE.md makes anything with a text field a page. A
+ * the overlays rule in docs/interaction-guide.md makes anything with a text field a page. A
  * kit form (rac/form.tsx): a code XContest does not know, or a task it cannot
  * read, is refused under the Task code field, with what is typed kept.
  *

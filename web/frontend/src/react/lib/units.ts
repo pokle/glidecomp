@@ -70,7 +70,7 @@ export function setUnit<K extends keyof UnitPreferences>(
  * rather than as NaN. Metric whatever the reader prefers, like
  * {@link formatCylinderRadius} it wraps and for the same reason: a cylinder
  * radius is the task's own number, stated in metres by the FAI, the `.xctsk`
- * and the briefing alike (see the altitude rule in CLAUDE.md).
+ * and the briefing alike (see the altitude rule in docs/interaction-guide.md).
  */
 export function radiusLabel(radius: string): string {
   const n = Number(radius);

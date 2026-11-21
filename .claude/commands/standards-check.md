@@ -121,7 +121,10 @@ always:
   owner and the dependency routine together.
 - **Anything in OAuth or the MCP authorisation spec.**
 - **A new WCAG version, or one that moves from draft to Recommendation.**
-  Adopting it is a policy change to `docs/accessibility-standard.md`.
+  Adopting it is a policy change to Part 3 of `docs/interaction-guide.md`.
+- **A change to the Apple Human Interface Guidelines** on a page the
+  interaction guide cites. What we take from the HIG, and where we diverge, is
+  the owner's.
 - **A major change to anything**, a change you couldn't fully read, and
   anything you're unsure about.
 

@@ -7,7 +7,7 @@
  * from map armed — in which case the tap and what the map said about it ride
  * in the URL (`?at=…&pick=…`, comp/AddWaypointForm.tsx), so a reload comes
  * back to the same point. It was a dialog with three text fields over the
- * list until #811; the overlays rule in CLAUDE.md makes anything with fields
+ * list until #811; the overlays rule in docs/interaction-guide.md makes anything with fields
  * a page.
  *
  * A kit form (rac/form.tsx): coordinates that do not parse are refused under

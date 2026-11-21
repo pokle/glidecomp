@@ -4,7 +4,7 @@
  * (functions/comp/[[path]].ts serves it a noindex shell).
  *
  * It was a full-screen sheet over the route editor until #812, and is a page
- * for the reason every overlay became one (the overlays rule in CLAUDE.md):
+ * for the reason every overlay became one (the overlays rule in docs/interaction-guide.md):
  * Back, scroll, the keyboard and focus come from the browser. "Add turnpoint"
  * opens this page too, for the empty turnpoint it has just added.
  *
@@ -269,7 +269,7 @@ function TurnpointForm({
             placeholder="Bordano Landing"
           />
           {/* Always metres: a cylinder's radius is the task's own number (the
-              altitude rule in CLAUDE.md). */}
+              altitude rule in docs/interaction-guide.md). */}
           <div className="flex flex-col gap-2">
             <span className="text-sm font-medium">Radius (m)</span>
             <div

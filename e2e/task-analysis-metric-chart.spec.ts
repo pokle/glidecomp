@@ -1,7 +1,7 @@
 /**
  * A metric's chart at full size is a PAGE (#815), where it was a full-screen
  * overlay over the Winning strategies page. Part of the "No full-screen
- * overlays" rule in CLAUDE.md: a figure at full size has its own URL and is
+ * overlays" rule in docs/interaction-guide.md: a figure at full size has its own URL and is
  * left with the browser's Back.
  *
  * What this spec pins:

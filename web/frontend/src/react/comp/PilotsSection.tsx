@@ -4,7 +4,7 @@
  * and ⋯, and the search box and the sort that stick with it as the list
  * scrolls (rac/page-bar.tsx, issue #863).
  *
- * Mobile first (see the rule in CLAUDE.md). It replaced a read-only RAC table
+ * Mobile first (see the rule in docs/interaction-guide.md). It replaced a read-only RAC table
  * and, behind an Edit button, a fourteen-column Tabulator grid in a dialog —
  * at every width, not below a breakpoint, for the reason the waypoints page
  * gives (comp/WaypointList.tsx): two editors are two code paths. What each

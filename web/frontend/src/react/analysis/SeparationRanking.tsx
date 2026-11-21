@@ -260,7 +260,7 @@ export function SeparationRanking({
                 // The inline plot is still a few hundred pixels on a phone;
                 // this is the way to the whole screen. Useful at every
                 // width, so it is not narrow-only. A LINK to a page of its
-                // own, left with Back — never an overlay (CLAUDE.md, "No
+                // own, left with Back — never an overlay (docs/interaction-guide.md, "No
                 // full-screen overlays").
                 headerAction={
                   chartHref ? (

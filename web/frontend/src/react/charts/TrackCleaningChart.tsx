@@ -35,7 +35,7 @@
  * repair's whole point is how far off the fix was, and clipping it off-frame
  * would hide exactly what the reader came to see.
  *
- * Accessibility (docs/accessibility-standard.md): series identity is carried
+ * Accessibility (docs/interaction-guide.md 3.13): series identity is carried
  * by line style as well as hue (solid / dotted / dashed, echoed in the
  * legend swatches), the figcaption states the reading in words and doubles
  * as the accessible name, and the section's own list remains the exact,

@@ -181,7 +181,7 @@ export function TaskDetail() {
   }, [location.hash, isAdmin, task, comp, compId, taskId, navigate]);
 
   // Submitting is a page of its own (/submit), not a dialog over this one:
-  // see the overlays rule in CLAUDE.md. The comp and task go in the URL — a
+  // see the overlays rule in docs/interaction-guide.md. The comp and task go in the URL — a
   // hidden comp's share key with the comp — so a reload or a shared link
   // lands on the same form, and Back comes back here.
   const submitHref = submitTrackPath(compUrlId(comp, compId), taskId);
