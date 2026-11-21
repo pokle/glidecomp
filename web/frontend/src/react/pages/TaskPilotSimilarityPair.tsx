@@ -9,7 +9,7 @@
  * Until this page the breakdown existed for one pair only, the closest, as a
  * table under the results.
  *
- * A PAGE with its own URL, never an overlay (CLAUDE.md, "No full-screen
+ * A PAGE with its own URL, never an overlay (docs/interaction-guide.md, "No full-screen
  * overlays"). The pair and what they are compared on are in the query
  * (`?pilot=`, `?with=`, `?class=`, `?metrics=`), and the report is fetched
  * here through use-similarity.ts, so a reload and a shared link open the

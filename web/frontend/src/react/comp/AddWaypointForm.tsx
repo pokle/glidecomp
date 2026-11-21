@@ -5,7 +5,7 @@
  * The waypoints editor shows them on a page of its own
  * (pages/CompWaypointNewPage.tsx, /comp/:id/waypoints/new), on the kit
  * `Form`; it was a dialog with three text fields over the list until #811,
- * which the overlays rule in CLAUDE.md retired. The task route editor shows
+ * which the overlays rule in docs/interaction-guide.md retired. The task route editor shows
  * the same fields on its own Add waypoint page (pages/TaskRouteAddWaypointPage.tsx,
  * /comp/:c/task/:t/route/add-waypoint; a dialog until #812), so the fields,
  * their seeding and the record they build live here, once.

@@ -4,7 +4,7 @@
  * Until 2026-11 it was one, iOS system blue, and it did both jobs badly. As a
  * fill it carried a white label at 4.02:1 in light and 3.65:1 in dark. As text
  * it was 3.60:1 on the grey ground and 3.04:1 on its own 20% wash. The
- * accessibility standard (docs/accessibility-standard.md §3.1) asks 4.5:1 of
+ * interaction guide (docs/interaction-guide.md 3.2) asks 4.5:1 of
  * text, and every Save, Create and Sign in button in the app was under it.
  *
  * One colour cannot do both: a blue light enough to fill a button is too light
@@ -294,7 +294,7 @@ describe("no colour arrives unmeasured", () => {
     "red|rose|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink";
   const PALETTE = new RegExp(`\\b(?:text|bg|border|ring)-(?:${HUES})-\\d{2,3}\\b|\\btext-chart-\\d`, "g");
   // The 3D replay (/replay) is its own surface with its own theme, in
-  // replay.css and inline; accessibility-standard.md §2 says so.
+  // replay.css and inline; docs/interaction-guide.md 3.2 says so.
   const OWN_THEME = /^src\/replay[./]/;
   // The "Last used" pill on the sign-in page is near-black on a solid
   // highlighter yellow, the same in both themes, and well past 4.5:1.

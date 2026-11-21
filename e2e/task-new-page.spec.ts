@@ -1,6 +1,6 @@
 /**
  * Creating a task is a PAGE, not a dialog over the comp (issue #819): the
- * overlays rule in CLAUDE.md, for the same reason the pilot editor became one.
+ * overlays rule in docs/interaction-guide.md, for the same reason the pilot editor became one.
  *
  * What this spec pins:
  * - the page has its own URL (/comp/:id/task/new), and a reload stands on it;

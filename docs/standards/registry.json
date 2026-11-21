@@ -254,7 +254,7 @@
       "name": "Web Content Accessibility Guidelines",
       "follows": "2.2",
       "statedIn": [
-        "docs/accessibility-standard.md",
+        "docs/interaction-guide.md",
         "CLAUDE.md"
       ],
       "searchFor": [
@@ -265,11 +265,50 @@
         "url": "https://www.w3.org/TR/wcag/",
         "pattern": "Web Content Accessibility Guidelines \\(WCAG\\) (\\d+(?:\\.\\d+)?)"
       },
-      "onChange": "Owner. A new WCAG Recommendation is a policy decision for docs/accessibility-standard.md and CLAUDE.md, not a code change. Raise an issue summarising the new success criteria and which surfaces they'd touch.",
+      "onChange": "Owner. A new WCAG Recommendation is a policy decision for Part 3 of docs/interaction-guide.md, not a code change. Raise an issue summarising the new success criteria and which surfaces they'd touch.",
       "seen": {
         "value": "2.2",
         "checkedAt": "2026-10-25"
       }
+    },
+    {
+      "id": "wai-aria-apg",
+      "name": "WAI-ARIA Authoring Practices Guide (APG)",
+      "follows": "the APG patterns as published by the W3C; it has no editions",
+      "statedIn": [
+        "docs/interaction-guide.md"
+      ],
+      "searchFor": [
+        "WAI-ARIA Authoring Practices",
+        "APG pattern"
+      ],
+      "check": {
+        "kind": "research",
+        "queries": [
+          "WAI-ARIA Authoring Practices Guide changes {year}",
+          "ARIA APG pattern updated {year} breadcrumb menu tabs combobox dialog"
+        ]
+      },
+      "onChange": "The kit (react-aria-components) follows the APG for us, so a changed pattern usually arrives as a kit upgrade. Log it. Raise an issue for the owner only where a pattern we write by hand changed: the breadcrumb nav in rac/page-bar.tsx, and the account menu, FAQ accordion and tablist on the content pages."
+    },
+    {
+      "id": "apple-hig",
+      "name": "Apple Human Interface Guidelines",
+      "follows": "the pages as read on 2026-11-21; the HIG has no editions, and each page ends with its own change log",
+      "statedIn": [
+        "docs/interaction-guide.md"
+      ],
+      "searchFor": [
+        "developer.apple.com/design/human-interface-guidelines"
+      ],
+      "check": {
+        "kind": "research",
+        "queries": [
+          "Apple Human Interface Guidelines changes {year}",
+          "Apple HIG updated guidance toolbars sheets menus lists accessibility {year}"
+        ]
+      },
+      "onChange": "Owner, when a page that Part 4 of docs/interaction-guide.md cites changes what we take from it, or when a 'HIG' line in Part 5 no longer says what the HIG says. Read the change log at the foot of each cited page (its text is also at developer.apple.com/tutorials/data/design/human-interface-guidelines/<page>.json). The HIG is the third authority, after the web platform and WCAG, so a change there is a design decision and never a safe PR. Update the date in Part 4 when the pages have been read again."
     },
     {
       "id": "oauth-2-1",

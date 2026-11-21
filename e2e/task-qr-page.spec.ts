@@ -1,7 +1,7 @@
 /**
  * The task's QR code — a page under the task (issue #813), where it was a
  * full-screen, tap-to-dismiss overlay over the task page. Part of the "No
- * full-screen overlays" rule in CLAUDE.md: a figure at full size is a page,
+ * full-screen overlays" rule in docs/interaction-guide.md: a figure at full size is a page,
  * with its own URL, left with the browser's Back.
  *
  * What this spec pins, on a phone and on a desktop:

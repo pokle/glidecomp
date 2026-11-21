@@ -5,8 +5,8 @@
  * Kept out of sections.ts on purpose: that list is imported by the SSR Pages
  * Function to build its route pattern, which has no use for an icon set.
  *
- * One icon means one thing across the app (CLAUDE.md, "Every ⋯ row carries a
- * line icon"), so none of these is used anywhere else. `ChartColumnIcon` is
+ * One icon means one thing across the app (docs/interaction-guide.md 5.5), so
+ * none of these is used anywhere else. `ChartColumnIcon` is
  * not among them: it stands for an analysis as a whole, and every one of these
  * is a part of one.
  */

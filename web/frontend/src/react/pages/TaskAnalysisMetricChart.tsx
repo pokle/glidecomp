@@ -4,7 +4,7 @@
  * /comp/:compId/task/:taskId/analysis/metrics/:metric — reached by the Expand
  * link beside the chart on the Winning strategies page, and left with the
  * bar's Back (or the browser's). It was a full-screen overlay (MetricChartOverlay) until the
- * "No full-screen overlays" rule in CLAUDE.md: a fixed layer over a scrolled
+ * "No full-screen overlays" rule in docs/interaction-guide.md: a fixed layer over a scrolled
  * page, with its own Escape, Close button and focus return, all of which a
  * page gets from the browser.
  *

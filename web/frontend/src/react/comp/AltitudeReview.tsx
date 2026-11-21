@@ -14,7 +14,7 @@
  *
  * So every row states BOTH altitudes and says which unit they are in, and
  * nothing here scrolls sideways. It was a full-screen sheet with its two views
- * swapped inside it until #811, when the overlays rule in CLAUDE.md made each
+ * swapped inside it until #811, when the overlays rule in docs/interaction-guide.md made each
  * view a page: Back walks from one waypoint to the list and from the list to
  * the waypoints, as a browser's Back does.
  *

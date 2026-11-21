@@ -15,7 +15,7 @@ route editor (`comp/route-draft.ts` + `comp/use-route-editor.ts`, #812 — see
 
 ## The problem
 
-The overlays rule in CLAUDE.md makes every editor a page with its own URL. A
+The pages rule in [interaction-guide.md](interaction-guide.md) (2.1) makes every editor a page with its own URL. A
 page must not be handed state in memory by the page underneath it, because a
 reload or a link opened in another tab does not have that page underneath.
 Most pages fetch what they need from the server.

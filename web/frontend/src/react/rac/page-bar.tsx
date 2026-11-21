@@ -14,9 +14,8 @@
  *   trailing  what you can do  a form's commit button · or ⋯ for the page's
  *                              actions, with + and a status beside it
  *
- * It is `sticky`, never `fixed` (CLAUDE.md, "No bars fixed to the screen's
- * edges"): the keyboard comes up from the bottom, so a bar at the top is never
- * under it. On an iPhone the screen pans when the keyboard opens, and the bar
+ * It is `sticky`, never `fixed` (docs/interaction-guide.md 2.8): the keyboard
+ * comes up from the bottom, so a bar at the top is never under it. On an iPhone the screen pans when the keyboard opens, and the bar
  * follows it (`useKeepOnScreen`, below). Every control in it, and every row of its menus, is
  * 44 px at every pointer.
  *
@@ -105,8 +104,8 @@ export interface BarAction {
   children?: BarAction[];
   /**
    * A line icon at the start of the row (Lucide). Every ⋯ row has one, and
-   * one icon means one thing across the app (CLAUDE.md, "Every ⋯ row carries
-   * a line icon"): `MapIcon` for a page that shows tracks on a map (the 3D
+   * one icon means one thing across the app (docs/interaction-guide.md 5.5):
+   * `MapIcon` for a page that shows tracks on a map (the 3D
    * replay included), `ChartColumnIcon` for an analysis and nothing else,
    * `MountainIcon` for anything about altitudes, `Trash2Icon` for clearing,
    * and so on. In a menu where any row has one, a row without keeps an empty

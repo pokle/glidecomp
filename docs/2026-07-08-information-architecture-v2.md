@@ -364,163 +364,22 @@ typing. Cheap, offline-generatable, purely presentational.
    confirm nothing links to it externally that needs preserving beyond the
    redirect. *(Implemented as a client redirect to `/comp/:id#scores`.)*
 
-## 10. Design language settled during the polish round (implemented)
+## 10. Design language
 
-Conventions that emerged while implementing this IA, now encoded as
-components so future work stays consistent:
+Moved on 2026-11-21. The conventions that were settled here, and the section
+that followed it (§11, "Admin editors are routed pages"), are now in
+[interaction-guide.md](interaction-guide.md), which is the one place that
+says how the interface behaves:
 
-- **One bar on every page (2026-11-15, #863). This supersedes the header
-  tabs of §3, the breadcrumb row, the title row with its buttons, the
-  competition's strip of section links and every bar stuck to the bottom.**
-  The owner's principle: *the page is for information, and every action goes
-  in the bar.* `src/react/rac/page-bar.tsx` (`PageBar`, with `Page` for the
-  column under it) has three slots that always mean the same thing:
-  - **Left, the way out**: back to the page above; Cancel on a form; the main
-    menu on a top-level page (Competitions, My Flights, Submit track,
-    Settings). The main menu holds the account and, for a site super admin,
-    "Preview as".
-  - **Centre, where you are**: the page's title, one line, which is its
-    `<h1>`, over a menu drawn as one tree — up to the pages above, across or
-    down to the pages beside or under this one (a competition's Scores,
-    Waypoints, Pilots, Comp analysis and Settings; a task's sibling tasks),
-    and out to the other top-level places. A page whose name is a sentence is
-    an action: the sentence is the ⋯ row that opens it, and the page has a
-    short title.
-  - **Right, what you can do**: a form's commit button; or ⋯ for the page's
-    actions, grouped by rules, with + and a status beside it. "Submit your
-    track" is the first row of ⋯ on the competition and task pages.
-  - A second layer may stick with the bar: a search field, tabs or a class
-    select. Nothing else sticks, and nothing sticks to the bottom.
-  - An action stays on the page only where its place says something: "Add
-    turnpoint" under the list, the one destructive action at the foot of a
-    form.
-  - The same bar at every width, and on the content pages in plain markup
-    (`static/src/components/SiteHeader.astro`). The analysis page and the 3D
-    replay keep their own chrome for now.
-- **Where a form's button goes, and what it says (2026-11-15, #863).** One
-  prominent commit button in the bar's right slot, Cancel in the left. It is
-  live only when there is something to commit. **Save** writes to the server
-  and no other word does; **Create** or **Add** makes something new (Create:
-  a competition, a task, a key; Add: a member of a list); **Done** only
-  closes, or finishes one part of a draft that its page will save later, is
-  always live, and in the bar is drawn as Save is. A page with no bar
-  (Onboarding, the OAuth consent page) has its buttons under the fields, the
-  primary last; so does a dialog's footer.
-- **Section actions sit right-aligned on the section header row** —
-  *(narrowed by the bar, above: `SectionHeader` is an `<h2>` row now, and a
-  page-level action is a ⋯ row, not a button on a section's header.)*
-  `SectionHeader` (`src/react/components/SectionHeader.tsx`): title owns the
-  left edge (scan column), the section's manage action sits top right.
-  Applied to comp/task Settings, Tasks → New Task, Turnpoints → Edit route,
-  Pilots → Edit, Tracks → Submit track, and My Flights' add-file buttons
-  (which ride the tab-switcher row, as that page has no section headers).
-  Inline CTA clusters (the hero's action row) are content, not section
-  management — they stay left-aligned.
-- **Breadcrumbs** — *(superseded 2026-11-15, #863: the trail a reader sees
-  is the tree in the bar's title menu, and `rac/breadcrumbs.tsx` is gone. The
-  labels still come from `lib/crumbs.ts`, and the bar keeps a visually hidden
-  `<nav aria-label="Breadcrumb">` in the markup. What follows is the
-  history.)* Same label for the same destination everywhere
-  ("Competitions"). The pilot score page carries the full
-  `Competitions › comp › task` trail; the full-screen tools carry the
-  top-center bar described in §3. One component app-wide (see the RAC
-  adoption guide, gotcha #11): **ARIA-native** —
-  `src/react/rac/breadcrumbs.tsx`, ancestor links followed by the current
-  page as a final `aria-current="page"` crumb, per the WAI-ARIA breadcrumb
-  pattern. The H1 below still names the page; the crumb duplicates it
-  deliberately, as the "you are here" anchor. Ancestors come from
-  `src/react/lib/crumbs.ts` — never hand-rolled — so the same destination
-  always gets the same label and the same fallback while data loads. A
-  parents-only variant (`components/Breadcrumbs.tsx`, GOV.UK "up links"
-  style, current page omitted) coexisted through the RAC migration; it was
-  removed once every page converted, because two conventions made trail
-  depth inconsistent between sibling pages.
-- **The trail is the information architecture, not the history** — and where
-  a page has two plausible parents, the URL and the trail must pick the same
-  one. The per-task analysis was briefly the counter-example: it lived
-  at `/comp/:compId/analysis/task/:taskId` as a chapter of the comp's field
-  analysis, while everyone in fact arrived from the task page, and a trail
-  that swapped the task out for a report they had never opened read as a jump
-  into another branch of the site. Both now parent on the task
-  (`/comp/:compId/task/:taskId/analysis`), and the whole-comp report — the
-  other genuine parent — is an explicit sibling link on the destination
-  ("Comp analysis") rather than a second bent breadcrumb.
-- **One Submit track *form* everywhere** — superseded wording, 2026-08-02
-  (#535). It used to be one dialog (`comp/SubmitTrackDialog.tsx`) behind every
-  Submit track button. It is now one form, `comp/SubmitTrackForm.tsx`, with two
-  presentations: as the whole of the public `/submit` page, or wrapped in
-  `SubmitTrackDialog` on the task page, where comp and task are already known
-  and those steps collapse to a line with a **Change** button. The comp page
-  links to `/submit?comp=` rather than opening either — from there the task is
-  still an open question, and the page is where it gets asked. The rest holds,
-  with one amendment: the "Submitting for" row is shown to **signed-in**
-  submitters (locked to "Myself (name)" for plain pilots, registered-pilot
-  dropdown for admins/open-upload comps) — a signed-out one names a registered
-  identifier instead — and choosing an IGC surfaces the pilot name from the
-  file header as a visible line, `Pilot named in the file: …`, rather than
-  auto-selecting from it. Full account: [track-submission.md](./track-submission.md).
-- **Print**: every major comp-page section (`#tasks #scores #pilots
-  #activity #admins`) starts a fresh page (`break-before-page`) so a printed
-  comp page works as briefing handouts.
-- **Chrome details**: the app's bar and the content pages' bar are the same
-  60px (no jump crossing between them); the static footer clears the viewport-fixed
-  hills background; `#edit-route` on a task page URL opens the route editor
-  and clears the hash on close (`pages/TaskDetail.tsx`). The mechanism
-  outlived its first caller: the hero's "Edit route" is gone with the hero,
-  and the deep link is now issued by the admin setup checklist,
-  `comp/CompSetupProgress.tsx` — which uses the same pattern for the roster
-  (`/comp/:id/pilots#edit-pilots`). *(2026-08-19, #637: the route editor is a
-  routed page, so `#edit-route` is now a REDIRECT to it rather than a flag
-  that opens a dialog — which also makes the hash leave the address bar on
-  arrival, instead of being cleared on close.)*
-
-## 11. Admin editors are routed pages (2026-08-19, #636/#637/#638)
-
-Every admin editor of a thing that already exists has a URL. What used to be a
-centred modal over the page it edited is now a page in the hierarchy:
-
-| Editor | URL |
+| What was here | Now in the guide |
 |---|---|
-| Competition settings | `/comp/:c/settings[/:group]` |
-| Task settings | `/comp/:c/task/:t/settings` |
-| Task route | `/comp/:c/task/:t/route` |
-| Weather notes | `/comp/:c/task/:t/weather` |
-| Manual flight | `/comp/:c/task/:t/pilot/:p/manual-flight` |
+| One bar on every page, and its three slots | 5.3 |
+| Where actions go, and `SectionHeader` | 5.4 |
+| Where a form's button goes, and what it says | 5.6 |
+| The trail is the information architecture, not the history | 5.3 |
+| One Submit track form | 5.4, and [track-submission.md](track-submission.md) |
+| Editors are pages, not dialogs | 2.1 |
+| A list in flow for a form's value, a select for a view | 5.6 |
+| Print | 3.3 |
 
-The reason is the same one throughout this document, applied to a viewport it
-had not been: the app is used on phones on the hill, and a form taller than the
-viewport inside a centred modal is the desktop-most thing an app can do. Real
-routes also hand back the browser's back button, a shareable URL, and scroll
-position, none of which a modal has.
-
-Two exceptions, and both are about what the surface IS rather than how tall it
-is:
-
-- **Create flows stay dialogs** (New Task, Start a new competition). There is
-  no entity yet, so there is nothing for a URL to name — a `/new` route would
-  be a page identified by the absence of its subject.
-- **Short single-purpose forms over an editor stay dialogs** (the turnpoint
-  editor and the add-waypoint form, over the route page). They are not the
-  tall-scrolling-form shape this removes, and the waypoint form is shared with
-  the competition waypoints page, so routing it would fork it.
-
-The competition's settings are an INDEX of grouped sub-pages because there are
-21 controls; the task's are one flat form because there are five. The shape
-follows the content, not the precedent — an index of two rows is a tap that
-buys nothing.
-
-**The task's three editors are siblings, and the settings page does not list
-them.** Each is reached from the part of the task page it edits — the Route
-section's button, the Weather section's button, the header's Settings — which
-is what §10's first rule already says about section-scoped manage actions.
-Listing route and weather on the settings page as well (which the first cut of
-this did) duplicates those entry points and, worse, frames content as
-configuration: the notes are prose the organiser publishes and the route is
-the task itself, neither of which is a setting. It also put nav rows below the
-Save button, where they read as leftovers.
-
-Controls follow the same split. A value in a form the admin will Save is a list
-in flow (`rac/choice-list.tsx`); a control that chooses what to LOOK at stays a
-popover Select, because a filter rendered as a card of rows pushes the thing
-being filtered off the screen. The RAC adoption guide's Conventions section
-carries the rule.
+The text that was here is in this file's git history.

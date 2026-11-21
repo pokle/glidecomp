@@ -2,7 +2,7 @@
  * Drafts that survive navigation: work an organiser has started and not yet
  * saved, kept where a reload, Back and Forward can find it again.
  *
- * The overlays rule in CLAUDE.md made every editor a page, and a page cannot
+ * The overlays rule in docs/interaction-guide.md made every editor a page, and a page cannot
  * be handed state in memory by the page underneath it — a reload, or a link
  * opened elsewhere, would not have it. Most pages simply fetch what they need.
  * A draft is the exception: a CSV file read in the browser (the roster import,

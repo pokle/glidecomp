@@ -3,7 +3,7 @@
  * it. A PAGE of its own (/comp/:compId/task/:taskId/test-igc, in
  * pages/TaskTestIgcPage.tsx); this is its form. It was a dialog over the task
  * page until 2026-11 (issue #822): five fields and a slider are exactly
- * what the overlays rule in CLAUDE.md moves onto a page, where the keyboard,
+ * what the overlays rule in docs/interaction-guide.md moves onto a page, where the keyboard,
  * the scroll and Back are the browser's own.
  *
  * An organiser's tool, and deliberately not a hidden one: testing track

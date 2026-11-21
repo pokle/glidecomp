@@ -30,7 +30,7 @@ import type { FlightScene, MarkerSample } from './flight-scene';
 
 /**
  * Camera-ease duration honouring `prefers-reduced-motion` (WCAG 2.3.3,
- * accessibility-standard §4.4): returns 0 (a jump-cut, no fly-through) when the
+ * docs/interaction-guide.md 3.8): returns 0 (a jump-cut, no fly-through) when the
  * user has asked their OS to minimise motion, otherwise the requested `ms`.
  */
 function easeMs(ms: number): number {

@@ -68,7 +68,7 @@ tables, which are Tabulator's job.
 
 **Tabulator policy — superseded (2026-11-01, owner decision).** From
 2026-07-21 editable tables were Tabulator "full stop", and the pilots editor's
-grid was the model for it. The mobile-first stance (CLAUDE.md, 2026-09-19)
+grid was the model for it. The mobile-first stance (interaction guide 5.1, 2026-09-19)
 undid that one grid at a time: the waypoints grid became a list of rows that
 open sheets, and on 2026-11-01 the pilots grid followed, at every width — on a
 phone its frozen ✕ and name columns left room for about one and a half of the
@@ -83,7 +83,7 @@ PAGE with its own URL, not a `FullScreenSheet`: the pilot editor
 a scrolled page was hit-tested in the wrong place by iOS Safari once a
 keyboard had come and gone, and everything that kept sheets usable (React
 Aria's iOS scroll lock, a history entry per sheet so Back could close it, a
-scroll reset) imitated what a page does natively. The rule is in CLAUDE.md;
+scroll reset) imitated what a page does natively. The rule is in the interaction guide (2.1);
 every sheet became a page in pokle/glidecomp#810–#822, and #817 deleted the
 machinery (`FullScreenSheet`, `FormSheet`, `use-back-dismiss`,
 `use-sheet-scroll-reset`; `src/react/no-overlays.test.ts` keeps them out).
@@ -281,8 +281,9 @@ describe code that no longer exists.
 
 ## Loading and in-flight states (2026-07-27)
 
-Anything waiting on an API response gets visible feedback, and the shape of
-the wait picks the component — all three live in `rac/progress.tsx`:
+The rule is in the [interaction guide](interaction-guide.md) (5.8): anything
+waiting on an API response says so. This section is how to build it. The
+shape of the wait picks the component — all three live in `rac/progress.tsx`:
 
 | The wait | Use | What it renders |
 | --- | --- | --- |
@@ -349,9 +350,9 @@ import { Page, PageBar, commitClass } from "@/react/rac/page-bar";
 </Page>
 ```
 
-The owner's principle: **the page is for information, and every action goes in
-the bar.** The header comment of `rac/page-bar.tsx` is the specification. What
-to know before using it:
+What goes in the bar, and why, is in the [interaction guide](interaction-guide.md)
+(5.3 to 5.6). This section is how to use the component; the header comment of
+`rac/page-bar.tsx` is its specification. What to know before using it:
 
 - **Three slots.** Left: back to the page above (from `trail`), the word
   Cancel on a form (`cancel`), or the main menu on a top-level page (no
@@ -410,33 +411,23 @@ to know before using it:
   are exempt).
 - Keep page visuals identical to the shadcn kit unless intentionally changing
   design — the exploration compares behavior/DX, not looks.
-- **Picking a "choose one of these" control: is it a form field, or a view
-  control?** A **form field** — a value in a form the user will Save — belongs
-  in `rac/choice-list.tsx`: `ChoiceList` (one of N), `CheckList` (any of N),
-  `SearchableChoiceList` (one of N, collapsed to a row, with a search box past
-  `searchThreshold`), plus `SwitchList` in `rac/switch.tsx` for booleans. They
-  are lists **in flow**: no overlay to open over what you were reading, nothing
-  a phone keyboard can cover, and the whole 44px row is the target.
-  A **view or filter control** — choosing what to look at, sitting above the
-  content it acts on — stays a `Select`/`SimpleSelect`. Converting those makes
-  the app worse: a filter rendered as a card of rows pushes the thing you are
-  filtering off the screen. `rac/select.tsx` carries the rule and names the
-  surviving call sites. `rac/checkbox.tsx` and `rac/radio-group.tsx` remain the
-  compact forms for dense dialogs.
-- **Admin editors are routed pages, not centred modals** (#636, #637). Comp
-  settings, task settings, the weather notes, the route editor and the
-  manual-flight recorder each have a URL, built from `components/SettingsPage`
-  + `components/SettingsForm` + `rac/nav-list`, guarded by
-  `lib/use-unsaved-changes-guard`. A form taller than the viewport inside a
-  centred modal is the desktop-most thing an app can do, and this app is used
-  on phones on the hill. What stays a dialog: **create** flows (there is no
-  entity yet, so nothing for a URL to name), short single-purpose forms over an
-  editor (the turnpoint and waypoint editors), and dialogs that are an action
-  or a notice rather than an editor.
-- **44px on a coarse pointer.** A control below 44px on a phone gets there via
-  a `pointer-coarse:` size utility, or — where growing it would re-flow its
-  neighbours — the `touch-target` utility in `react/globals.css`, which widens
-  the hit area without painting anything. See the accessibility standard §4.5;
+- **Picking a "choose one of these" control.** The rule is in the interaction
+  guide (5.6): a value in a form the user will Save is a list in flow, and a
+  control that chooses what to look at stays a popover select. The components:
+  `ChoiceList` (one of N), `CheckList` (any of N) and `SearchableChoiceList`
+  (one of N, collapsed to a row, with a search box past `searchThreshold`) in
+  `rac/choice-list.tsx`, plus `SwitchList` in `rac/switch.tsx` for booleans;
+  `Select`/`SimpleSelect` for a view or filter control (`rac/select.tsx` names
+  the surviving call sites). `rac/checkbox.tsx` and `rac/radio-group.tsx`
+  remain the compact forms for a small dialog.
+- **An editor is a page, never a sheet or a centred modal** (interaction guide
+  2.1). Build one from `components/SettingsPage` + `components/SettingsForm` +
+  `rac/nav-list`, guarded by `lib/use-unsaved-changes-guard`. Create flows are
+  pages too (`/comp/new`, `/comp/:id/task/new`).
+- **44px on a coarse pointer** (interaction guide 3.9). A control below 44px
+  on a phone gets there via a `pointer-coarse:` size utility, or — where
+  growing it would re-flow its neighbours — the `touch-target` utility in
+  `react/globals.css`, which widens the hit area without painting anything.
   `rac/nav-list.tsx` rows are the precedent.
 - **The app runs edge to edge** (`viewport-fit=cover`, issue #642), so any kit
   surface that touches a viewport edge holds its CONTENT clear of the notch and
@@ -878,7 +869,7 @@ The route editor is **`comp/RouteEditor.tsx`**, a routed page
 without typing the quick-task syntax at all.
 
 **Since #812 (2026-11) the sheets and dialogs below are pages** (the overlays
-rule in CLAUDE.md): one turnpoint is `pages/TaskRouteTurnpointPage.tsx` at
+rule in the interaction guide, 2.1): one turnpoint is `pages/TaskRouteTurnpointPage.tsx` at
 `/route/:n`, Quick entry `pages/TaskRouteQuickPage.tsx` at `/route/quick`,
 and Load from XContest and Add waypoint are `/route/xcontest` and
 `/route/add-waypoint`. They all edit one stored draft of the route
@@ -1085,7 +1076,7 @@ rather than "how to convert one".
    a real AriaLink in the name cell (keeps a crawlable anchor).
 4. **There is no editable grid.** An editable collection is a `GridList` of
    rows each opening a PAGE (never a `FullScreenSheet` any more — the
-   overlays rule in CLAUDE.md) — `comp/PilotList.tsx` and
+   overlays rule in the interaction guide) — `comp/PilotList.tsx` and
    `comp/WaypointList.tsx` are the worked examples (see the superseded Tabulator
    policy at the top of this doc).
 5. Measurement vs completion: `rac/meter` for a reading within a range,

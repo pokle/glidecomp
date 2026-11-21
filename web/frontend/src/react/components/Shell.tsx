@@ -46,7 +46,7 @@ export function Shell() {
     // SSR-safe: it only uses useNavigate/useHref, which work under StaticRouter.
     <RacRouterProvider>
       <div className="flex min-h-dvh flex-col">
-        {/* Skip link (WCAG 2.4.1, accessibility-standard §4.3): the first
+        {/* Skip link (WCAG 2.4.1, docs/interaction-guide.md 3.7): the first
             focusable element, visually hidden until focused, jumping keyboard/AT
             users straight to <main>. Keep in sync with the static Base.astro
             skip link. */}

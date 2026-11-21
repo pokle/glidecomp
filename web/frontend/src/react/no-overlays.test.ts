@@ -1,7 +1,7 @@
 /**
  * No full-screen overlays, and no imitation of the browser's Back.
  *
- * CLAUDE.md's rule (owner decision, 2026-11-02, tracked in #823): a screen of
+ * docs/interaction-guide.md's rule (owner decision, 2026-11-02, tracked in #823): a screen of
  * its own is a PAGE with its own URL, left with the browser's Back. Browser
  * navigation must simply work; we do not imitate it. The machinery that made
  * full-screen sheets usable was deleted in #817 once the last of them had

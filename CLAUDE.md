@@ -344,244 +344,27 @@ These are the standing imperatives. Each links to the reference that explains it
 
 ### Frontend
 
-- **Mobile first, and that is a change of stance (2026-09-19).** A competition
-  is run from a hill, and nobody wants to carry a laptop up it: less and less
-  of this app's work happens on a laptop, so a phone is the shape a surface is
-  designed FOR, not a width it has to survive. Where the two conflict, the
-  phone wins.
-  - The worked example is `/comp/:id/waypoints`. It was a 145-row,
-    eight-column Tabulator grid, which is the better tool on a desktop and
-    unusable on a phone: it scrolled sideways inside a page that scrolled down,
-    under a map pane that stuck, and its frozen Code column hid whichever
-    column sat beside it — which is how a reader came to see a waypoint's map
-    altitude without its file altitude. It is now a LIST whose rows open a
-    page each (`comp/WaypointList.tsx` → `pages/CompWaypointPage.tsx`, at
-    `/comp/:id/waypoints/:n`), at every width; until #811 they opened
-    full-screen sheets, which the overlays rule below retired. The grid is
-    gone, not hidden behind a breakpoint: two editors meant two code paths and a reviewer on a desktop seeing something the
-    author never tested on a phone.
-  - **And the read-only view is the same list.** It was a six-column RAC
-    `Table` in an `overflow-x-auto` scroll region, so the shape the editor had
-    just stopped using survived for the anonymous PILOT — the one actually
-    standing on the hill — while the organiser more likely to be at a desk got
-    the list. `WaypointList` with no `onOpen` IS the read-only mode: no
-    chevron, because nothing opens — and the editor's pages under
-    `/waypoints/` send a visitor back to it. When a surface has an admin view and a
-    visitor view, fixing one is half the job.
-  - **A tap target is the whole area doing nothing beside it.** The waypoints
-    list's locate pin was a 28x28 px icon with 300 px of inert row next to
-    it. It is now the row's entire left-hand strip (48x44 px, flush to the
-    card's edge), and read-only — where no page opens — the WHOLE ROW flies
-    the map. The pin stays there because it is what NAMES the action for a
-    reader who cannot see the map move; one action with a big target is not
-    two ways to do a thing. Measure a target in the e2e rather than asserting
-    about classes: tailwind-merge does NOT resolve `size-*` against
-    `h-*`/`w-*`, so a `size="icon-sm"` added later leaves two competing rules
-    and a 28 px box with every class-level check still green.
-  - **One way to do a thing.** The same pass deleted a "Fill altitudes from
-    map" button that duplicated what `Check altitudes` does better, a
-    "Show on the map" button in the waypoint's editor that duplicated the list
-    row's pin, and a status line that pre-judged a set nobody had asked about.
-    A second way to do something is a thing to keep working, explain and test.
-- **No full-screen overlays: a screen of its own is a PAGE, with its own URL**
-  (owner decision, 2026-11-02). Anything that takes over the screen — an
-  editor, a review, a picker with fields, a figure at full size — is a route
-  the reader reaches by a link or `navigate()` and leaves with the browser's
-  Back. Browser navigation must simply work; we do not imitate it.
-  - **Why.** A full-screen sheet is a `position: fixed` layer over a scrolled
-    page, and on an iPhone, after a keyboard had come and gone, Safari drew
-    the pilot sheet in one place and hit-tested it in another: taps on Name
-    fell through to the inert page behind it, with no error anywhere. Every
-    piece of machinery that made sheets usable — React Aria's iOS scroll lock
-    (which patches `HTMLElement.prototype.focus`), a history entry pushed for
-    every open sheet and dialog so Back could close it, a scroll reset, a
-    bottom bar lifted over the keyboard by hand — re-implemented something a
-    page does natively, and each grew its own iOS bug. A page gets Back,
-    scroll restoration, the keyboard and focus from the browser, which is the
-    most tested path there is.
-  - **The worked example is the pilot editor**: `/comp/:id/pilots/:pilotId`
-    and `/pilots/new` (`pages/CompPilotPage.tsx`, form in
-    `comp/PilotForm.tsx`). The list keeps its search and sort in the URL
-    (`?q=`, `?sort=`), so Back returns it exactly as it was left, and
-    `lib/scroll-restoration.ts` restores its scroll. State a page needs goes
-    in the URL or is fetched by the page — never handed over in memory from
-    the page underneath, which a reload or a shared link would not have.
-  - **Small overlays are fine**: a confirmation ("Discard changes?"), a menu,
-    a combo box's list, a date picker. Nothing that fills the screen, and
-    nothing with text fields that bring up the keyboard.
-  - **No bars fixed to the screen's edges.** The page bar (below) is the one
-    thing that stays in reach, and it is `sticky` at the top of the page's
-    flow, never `fixed`: a fixed bar has to be moved around the keyboard by
-    hand, and on an iPhone the pilots page's bottom bar once stuck halfway up
-    the screen doing that. A bar at the top is never under the keyboard. On an iPhone the
-    screen pans when the keyboard opens, which took a sticky bar off the top
-    with Save in it; the page bar follows that pan by one transform
-    (`useKeepOnScreen` in `rac/page-bar.tsx`), the one place the app
-    positions anything from script. Do not add a second.
-    Nothing sticks to the bottom: the route editor, the waypoints page and
-    the altitude review each had a bar there until #863, and each is now the
-    page bar's commit button and ⋯.
-  - **A draft goes in `lib/draft-store.ts`** — work not yet saved that
-    another page, a reload or Back must find again (a CSV read in the
-    browser, a waypoint file or a route edited as a set): this tab's
-    sessionStorage, keyed by what it edits, owned by the signed-in user,
-    versioned, and always allowed to come back empty. The roster import is
-    the small worked example (#810); the waypoints editor (#811) is the one
-    for an editor of several pages over one draft — a waypoint's page, Add
-    waypoint, the map at full size and the altitude review all read and
-    write the same stored file (`comp/use-waypoints-editor.ts`), its items
-    addressed by the draft's own ids, its review's snapshot kept in it. The
-    route editor (#812) is the same shape over a task's route
-    (`comp/use-route-editor.ts`), and both are built on one
-    `useDraftEditor()` (`lib/draft-editor.ts`) — which draft to edit, the
-    write-through, dirty, and the guard — rather than a copy each. See
-    [docs/drafts.md](docs/drafts.md).
-  - **Back is the browser's, with unsaved edits or a dialog open too.**
-    Nothing holds a history entry to catch it. The unsaved-changes guard
-    (`lib/use-unsaved-changes-guard.ts`) asks before a reload, a tab close or
-    an in-app link — never on Back. An editor with a draft loses nothing to
-    Back (it means "not now"); a page without one (the settings pages, the
-    pilot page) leaves the edits behind, as any web form does. A small
-    dialog holds no entry either: Back navigates, and the dialog closes with
-    the page it was over (`rac/dialog.tsx`), so a page can go Back the
-    moment a confirmation closes.
-  - **The bar's back is the browser's Back** (`lib/leave.ts`, owner decision
-    2026-11-21). When the reader came from a page of this app, the bar's back
-    control, a form's Cancel and a page that closes itself after a save all
-    do a real Back, so the page underneath returns as it was left and the
-    two back buttons never disagree. Only on a direct arrival (a shared
-    link, a bookmark, the installed app's first screen) does it go to the
-    page above, by a replace: there Back would leave the site. The page asks
-    the history which it is (react-router numbers its entries), so **no
-    link marks anything**. Until then the opener had to mark the entry it
-    pushed (`openedHere()`); about sixteen links did and the rest did not,
-    so from the comp analysis into a task's analysis the bar went up to the
-    task page while the browser went back. The control is named for where it
-    goes: "Back to <the page behind>", or "Back to <the page above>".
-    `useLeave()` is the only `navigate(-1)` for a page (`no-overlays.test.ts`).
-  - **An organiser's page sends anyone else on** (`components/OrganisersOnly.tsx`,
-    owner decision 2026-11-03) to the public page it belongs to, signed in or
-    not, with a line saying why (and, signed out, to sign in if they are an
-    organiser) — never a page that only says they cannot be there.
-  - **Focus follows the page** (`lib/route-focus.ts`, in the Shell): arriving
-    on a page focuses its `<h1>` unless the page focused something itself,
-    and Back returns focus to the control it was left from — what a dialog
-    did for its trigger, which a page does not do by itself.
-  - **The conversion is complete** ([#823](https://github.com/pokle/glidecomp/issues/823)):
-    every full-screen overlay is a page, and #817 deleted what only overlays
-    needed — `FullScreenSheet`, `FormSheet`, the history-entry machinery for
-    Back and the sheet scroll reset. `src/react/no-overlays.test.ts` fails
-    if any of it comes back, or if SPA code pushes or walks history entries
-    by hand rather than through the router.
-- **The page is for information, and every action goes in the bar** (owner
-  decision, 2026-11-15, [#863](https://github.com/pokle/glidecomp/issues/863)).
-  Every page has one bar, `PageBar` in `src/react/rac/page-bar.tsx`, and
-  people learn to look there for what they can do. It replaced the app
-  header, the breadcrumb row, the title row with its buttons, the
-  competition's strip of section links and every bar stuck to the bottom.
-  - **Three slots, always the same.** Left, the way out: back, which is
-    the browser's Back (or the page above on a direct arrival; see
-    `lib/leave.ts` above); Cancel on a form; the main menu on a top-level
-    page. Centre, where
-    you are: the page's title, which is its `<h1>`, over a menu drawn as one
-    tree — up to the pages above, across or down to the pages beside or under
-    this one, and out to the other top-level places. Right, what you can do:
-    a form's commit button; or ⋯ for the page's actions, with + and a status
-    beside it.
-  - **The title is one line.** It may be cut short; the menu prints every
-    level in full. A page whose name is a sentence is an action: the sentence
-    is the ⋯ row that opens it, and the page has a short `title` with the
-    sentence as `fullTitle`. The trail is built by the helpers in
-    `src/react/lib/crumbs.ts`, never inline: the page above is where a page
-    *belongs* in the IA, not where the reader came from.
-  - **A form's commit button is in the bar's right slot**, whatever the form
-    does, with Cancel on the left, which asks before it throws a change away
-    (`components/SettingsForm.tsx` is the form page). A top-level form
-    (Submit track) keeps the main menu there. The one destructive action for
-    the thing being edited stays at the foot of the form. Where the commit
-    produces a result (Submit track, Test IGC, a new API key), the result
-    appears on the page.
-  - **The commit button is live only when there is something to commit**: a
-    change on a form that edits, the required fields on a form that makes
-    something new. The settings pages kept Save live with nothing changed
-    until #863.
-  - **Button wording.** **Save** writes to the server; no other word does.
-    **Create** or **Add** makes something new: Create for a competition, a
-    task or a key; Add for a member of a list. **Done** only closes, or
-    finishes one part of a draft that its page will save later; it is always
-    live, and where it is the bar's commit button it is drawn as Save is. No
-    Done where Back does the same thing. On a page with no bar (Onboarding,
-    the OAuth consent page) and in a dialog's footer, the primary button is
-    last.
-  - **A draft edited over several pages** (route, waypoints) has Save on its
-    list page, live only while the draft differs. "Discard changes" is in ⋯,
-    shown only while there are changes. Back keeps the draft. A mode
-    (Reorder) changes the bar: the title names the mode and the right slot
-    holds Done.
-  - **A page's actions go in ⋯**, grouped by rules, with rare ones behind one
-    row. "Submit your track" is the first row of ⋯ on the competition and
-    task pages. An action stays on the page only when its place says
-    something: "Add turnpoint" under the list. Pass the bar only the actions
-    this reader may use.
-  - **A page whose content IS its actions keeps them on the page** (owner
-    decision, 2026-11-20). ⋯ is for what a reader may do on a page that is
-    about something else. One pilot on one task, for the organiser
-    (`pages/TaskPilotPage.tsx`, opened by a row of the task page's "Manage
-    pilots & tracks"), is nothing but its actions: the status, Upload track,
-    Add manual flight, Restore track and the way to the score card. They are
-    rows on the page (`rac/nav-list.tsx`), each with a line saying what it
-    is for, and the bar has no ⋯. Hiding them in a menu would leave the page
-    empty.
-  - **Every ⋯ row carries a line icon** (`icon` on `BarAction`, from Lucide,
-    the app's one icon set), and one icon means one thing everywhere:
-    `MapIcon` for every row that opens tracks on a map, the 3D replay
-    included; `ChartColumnIcon` for task and comp analysis, and for nothing
-    else, so the bar chart always means analysis; `ShareIcon` and
-    `QrCodeIcon` for sharing; `CloudUploadIcon` for Submit your track;
-    `PlusIcon` to make a new one; `CopyIcon` to copy between competitions;
-    `SettingsIcon` for settings; `ImportIcon` to bring a file in;
-    `DownloadIcon` to take a file out, or the file's own kind where that is
-    the point (`FileSpreadsheetIcon` for any CSV, `FileTextIcon` for the
-    results record, `FileArchiveIcon`, `SheetIcon`); `MountainIcon` for
-    anything about altitudes; `MapPinPlusIcon` / `MapPinXIcon` to start and
-    stop placing on the map; `FlaskConicalIcon` for test data;
-    `RefreshCwIcon` to recompute or rebuild; `Trash2Icon` to clear;
-    `Undo2Icon` to discard changes; `RotateCcwIcon` to reset to defaults. A
-    destructive row's icon is red with its label. A list of formats behind
-    one row (the waypoint files) keeps empty slots rather than one icon
-    repeated. In a menu where any row has one, the rest keep an empty slot
-    so the labels line up.
-  - **A second layer may stick with the bar** (`below`): a search field,
-    tabs, a class picker. Nothing else sticks. A class picker filters the
-    whole page, so it stays there rather than inside one section; on the
-    analysis pages it is a segmented control up to five classes
-    (`analysis/ClassPicker.tsx`, `rac/segmented-control.tsx`).
-  - **Every control in the bar and its menus is 44 px**, at every pointer;
-    the kit's own controls are 44 px on a coarse pointer
-    ([docs/accessibility-standard.md](docs/accessibility-standard.md) §4.5).
-  - **A closed menu puts no link in the markup**, so the bar renders the
-    trail and every ⋯ row that opens a page as real links in two visually
-    hidden navs, and its back control is a link. The server-rendered pages
-    and a reader without JavaScript depend on that
-    ([docs/ssr.md](docs/ssr.md)). Build every link with the path helpers, so
-    a hidden competition's share key rides along.
-  - **Every page that is not top-level has a way back.** The installed app
-    has no browser Back, so the bar's is the only one.
-  - **The content pages have the same bar** in plain markup
-    (`static/src/components/SiteHeader.astro`). Sign in, Onboarding and the
-    OAuth consent page stand outside the Shell and have none. The 3D replay
-    and the analysis page have the same bar in plain markup too (#869), as
-    pills floating over the scene or the map: the replay's ⋯ opens its control
-    drawer (`replay.html`); the analysis page is named for what it shows, in its title and in the ⋯
-    rows that open it: "Climbs and glides" for one pilot's track (the report
-    card's row), "All tracks" for a task's whole field (the task page's row),
-    so "analysis" stays the task's and the comp's word; the button beside ⋯
-    ("Lists" / "Scores") opens its side panel, and ⋯ is a plain menu that replaced the
-    searchable command list (`analysis.html`, `analysis/page-bar.ts`). On a
-    wide screen the analysis page's bar ends at the open panel's edge.
-  - Coverage: `e2e/page-bar.spec.ts`, on a desktop and a phone, and
-    `e2e/replay-bar.spec.ts` and `e2e/analysis-bar.spec.ts` for the two
-    vanilla pages.
+- **How the interface behaves is in ONE document:
+  [docs/interaction-guide.md](docs/interaction-guide.md). Read it before you
+  design or change anything a person sees or touches.** It sets the order of
+  authority: the web platform first, then WCAG 2.2 AA and the WAI-ARIA
+  Authoring Practices, then the Apple Human Interface Guidelines, then our own
+  divergences from the HIG. It holds every rule about pages and Back, the
+  page bar, forms, lists, touch targets, units, charts and accessibility, and
+  names the component or test that owns each one.
+  - **Do not write an interaction rule here, or in any other doc.** A new
+    rule, or an owner's decision about behaviour, goes in the guide in the
+    same PR. A feature's doc cites a pattern; it does not state it again.
+    Three places held these rules until 2026-11-21, and they drifted apart.
+  - **A pattern needs one owner in code, or a test.** A rule that every page
+    must remember is forgotten: until #901 the bar's back was a real Back
+    only where a link had marked its history entry, and about half the links
+    had not. When you add a pattern, add its row to the guide's Part 6.
+  - **Meeting the guide is part of "done"**, its accessibility part (WCAG 2.2
+    AA across the SPA, static pages, analysis map and 3D replay) included.
+    Put its checklist (Part 7) in any PR that touches UI.
+  - The rules below are about how the frontend is BUILT. How it behaves is
+    the guide's.
 - **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
   dialog and piece of shared chrome uses it. Read
   [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)
@@ -593,70 +376,29 @@ These are the standing imperatives. Each links to the reference that explains it
   instead (a static styled element is fine: see `rac/badge.tsx`, `rac/alert.tsx`).
   - Thin wrappers over non-RAC third-party widgets live in `src/react/vendor/` —
     today the `input-otp` sign-in field and the `sonner` toaster.
-  - **A list row's body is a kit component, not something each surface
-    writes out.** `rac/grid-list.tsx` carries `RowContent`. Three lists had
-    each grown their own, in vocabularies that disagreed about the gutter,
-    the title's weight and the chevron — none of it decided, all of it
-    copied. `variant="rows"` already makes a row `flex items-center gap-3`,
-    so restating that says nothing.
-  - **A list of readings is a card for each row** (`rac/reading-list.tsx`,
-    owner decision 2026-11-19). Where every row has a name, a figure and a
-    mark on an axis the list shares (`rac/meter.tsx`), each row is a card of
-    its own with a gap before the next, and its name is bold. Rows divided by
-    a hairline in one card left a reader who was scrolling unsure whether a
-    track belonged to the name above it or the one below. The heading and the
-    axis sit above the cards on the ground, so the section is a plain
-    `<section>`, never a `Card`. One mark a row, and counts as words: a
-    second bar under the first reads as the same unit. Where a row has more
-    to say than fits, it opens a page. The worked examples are the Winning
-    strategies ranking, the comp analysis ranking, the "Who flew like me?"
-    results and the census of thermals.
-    - A row of ONE line keeps a hairline in its section's card, where the
-      eye has nothing to lose: a family on Metric details is one behaviour
-      at a time for every pilot (`analysis/PerPilotMetricList.tsx`), with a
-      picker for the behaviour and an order control where the table's
-      sortable headings were.
-    - An engine table of more than three columns is a list of records
-      (`analysis/ReportTableView.tsx`): a box a row, its first cell as its
-      name and the rest as label and value. Three columns or fewer stay a
-      table.
-  - **There is no editable grid.** An editable collection is a list of rows
-    (`rac/grid-list.tsx`) that each open a page of their own — the pilots
-    page (`comp/PilotsSection.tsx` → `pages/CompPilotPage.tsx`) is the worked
-    example, and the waypoints page is the same shape (#811). So is the
-    organiser's list of a task's pilots (`comp/TaskScoresAdmin.tsx` →
-    `pages/TaskPilotPage.tsx`, #860): a row was a card of four or five
-    buttons, 180 px of a phone for each pilot, and is now the pilot's facts
-    alone, with the whole row as the target. Tabulator went with its
-    last grid on 2026-11-01: the pilots roster, fourteen columns in a dialog,
-    of which a phone showed about one and a half. Spreadsheet-shaped work goes
-    to a real spreadsheet through CSV export and import instead, so that round
-    trip must be lossless (the export's `glidecomp_id` column). Don't bring a
-    grid back for the desktop alone — that is two editors.
+  - **A pattern the guide names has ONE component, and a page uses it rather
+    than writing it again**: the page bar (`rac/page-bar.tsx`), leaving a
+    page (`useLeave()` in `lib/leave.ts`), a list row's body (`RowContent` in
+    `rac/grid-list.tsx`), a list of readings (`rac/reading-list.tsx`), a wait
+    (`rac/progress.tsx`), a draft (`lib/draft-store.ts`,
+    [docs/drafts.md](docs/drafts.md)), a typed altitude (`AltitudeField` in
+    `comp/fields.tsx`). There is no sheet component and no grid library;
+    `src/react/no-overlays.test.ts` fails if the sheets come back, and
+    nothing yet fails on a grid.
   - **Every form submits through the kit form, `rac/form.tsx`** (`Form`, on
-    a page), and a failed save is never a toast. It owns what
-    happens when Save does not work, so no page writes that again: an error
-    about a field goes UNDER that field, which is focused and scrolled into
-    view; one about no field goes in the form's one banner, the first thing
-    under the bar that holds its submit button, focused and scrolled into
-    view the same way; one submit at a
-    time; a dropped connection keeps what was typed. The server's half is `{ error, field }` on every refusal —
-    `validated()` does it for schema failures, and a route that knows which
-    input it is refusing says so (`fieldNames` maps it onto the form's field
-    `name`s). Every form did this by hand until 2026-11, two ways, and both
-    lost the reader: on an iPhone the pilot sheet's Done spun and stopped,
-    with the reason at the top of a body scrolled past it.
-    `e2e/forms.spec.ts` holds the rules on a phone and a desktop against a
-    bench built only in development and in the e2e suite's `e2e`-mode build
-    (`/__kit/form`), so a form built on the kit tests only its own fields.
-    A one-control action that is not a form (a grid row's status menu or
-    Upload track, a ⋯ menu item) keeps the same rules through `useAction` +
-    `ActionErrorBanner` in the same file: its refusal sits beside the
-    control, focused — `comp/TaskScoresAdmin.tsx` is the worked example. An
-    action INSIDE a form that is not its submit (the pilot page's Remove) is
-    `useFormAction`, whose refusal goes in the form's banner, focused. A
-    refusal the page decides itself is `refusal()`, never a hand-built
-    `Response`; the submit stays busy until `onSuccess` has settled.
+    a page). What the reader sees when a save is refused is the guide's
+    (5.6); how to build on it is here. The server's half is
+    `{ error, field }` on every refusal: `validated()` does it for schema
+    failures, and a route that knows which input it is refusing says so
+    (`fieldNames` maps it onto the form's field `name`s). A one-control
+    action that is not a form is `useAction` + `ActionErrorBanner`
+    (`comp/TaskScoresAdmin.tsx` is the worked example); an action INSIDE a
+    form that is not its submit is `useFormAction`. A refusal the page
+    decides itself is `refusal()`, never a hand-built `Response`; the submit
+    stays busy until `onSuccess` has settled. `e2e/forms.spec.ts` holds the
+    rules on a phone and a desktop against a bench built only in development
+    and in the e2e suite's `e2e`-mode build (`/__kit/form`), so a form built
+    on the kit tests only its own fields.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
     `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI
@@ -671,42 +413,6 @@ These are the standing imperatives. Each links to the reference that explains it
     came from the escape-at-every-site pattern this replaced (security review
     A4).
 - **Use Tailwind utilities** — avoid custom CSS where Tailwind has an equivalent.
-- **UI conventions** (see the design-language section of
-  [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md)):
-  the page's own actions are in the bar (above); `SectionHeader` is a
-  section's `<h2>` row, and an action sits right-aligned on it only where it
-  belongs to that section and its place says something; every Submit-track
-  entry point goes through the one `SubmitTrackForm`
-  ([docs/track-submission.md](docs/track-submission.md)), which only the
-  `/submit` page renders — it is a top-level place in the bar's menus, and
-  the task and comp pages LINK there from the first row of ⋯ with
-  `submitTrackPath()` (`?comp=&task=` / `?comp=`), never open it in a dialog
-  (#820);
-  **anything waiting on an API response says
-  so** via `src/react/rac/progress.tsx` — `<Loading>` for a fetching section (a
-  `role="status"` live region), `<Button isPending pendingLabel="Saving">` for an
-  action in flight (never `isDisabled={saving}` + a label swap — that drops focus
-  mid-action), `<ProgressBar isIndeterminate>` for a known background job.
-- **An altitude a reader TYPES is in the reader's own unit, and the label says
-  which** (issue #662). Every place the app prints an altitude honours the unit
-  preference, so an input hard-labelled "(m)" made the two disagree in front of
-  the reader — what they typed reappeared multiplied in the list beside it.
-  Altitude inputs go through `AltitudeField` in `src/react/comp/fields.tsx`,
-  which converts at the field's edge (`toAltitudeInput` / `fromAltitudeInput` in
-  `lib/units.ts`); metres remain what is stored, exported and scored.
-  - Cylinder **radii** go the other way and are **always metric**, read and
-    typed: the FAI states a cylinder radius in metres, so does the `.xctsk`,
-    the briefing and the editor's `400m` / `5k` chips — it is the task's own
-    number, not a length to convert for the reader. Print one with
-    `formatCylinderRadius()`, which takes no preferences at all;
-    `formatRadius(m, { prefs })` is only for a radius that IS a measured length
-    (the track HUD's 1000 m averaging window).
-  - The waypoints editor on `/comp/:id/waypoints` stays metric throughout — it
-    is the waypoint FILE edited in place. Its fields say "Altitude (m)" /
-    "Radius (m)" rather than leave anyone guessing, and the altitude review
-    prints both altitudes with the unit on each. A READ-ONLY waypoint row on
-    the same page is the other way round: nobody is editing the file there, it
-    is simply an altitude printed to a reader, so it honours the preference.
 - **A zero altitude is never "missing", in any UI**
   ([docs/waypoint-altitudes.md](docs/waypoint-altitudes.md)). An altitude is
   either KNOWN — any number, 0 included — or ABSENT, which is why
@@ -724,33 +430,11 @@ These are the standing imperatives. Each links to the reference that explains it
     publishes the same points in four formats and proves it. The cross-format
     altitude agreement test in `web/engine/tests/waypoint-files.test.ts` is
     what keeps a new format honest.
-  - **`Check altitudes` is the ONLY altitude action on the waypoints page**,
-    and it reports nothing until it is pressed. A "Fill altitudes from map"
-    that answered blanks without asking, and a status line that pre-judged the
-    set, were both deleted: the check does the fill's job better because it
-    shows what it would write before writing it. (The route editor keeps a
-    fill for its turnpoint blanks, where there is no list to review.) It
-    changes nothing on its own and reviews on a PAGE of its own
-    (`/comp/:id/waypoints/altitudes`, `comp/AltitudeReview.tsx`; a sheet
-    until #811) whose every row states BOTH altitudes —
-    the grid columns it replaced put the file's altitude behind the frozen Code
-    column, so a disagreement was reported with half of itself off screen.
-    Under 50 m is not a finding (a ~10 m DEM grid against a file rounded to
-    10 m), past 300 m a wrong COORDINATE is the likelier fault, and a
-    whole-file ratio or offset is one bulk fix rather than 187 decisions. The
-    review's list is a snapshot in BOTH membership and order: sorting by the
-    size of the disagreement live sends each row to the bottom the moment it is
-    accepted. The snapshot is kept in the waypoints draft, so it holds across
-    a visit to one waypoint (`/altitudes/:n`) and a reload. A difference of
-    exactly zero prints nothing — the absence of a finding is not a finding —
-    and inside a waypoint the bar's Back (and the browser's Back) returns to
-    the review's LIST, never out of the review. The page has no Done: Back
-    does the same thing.
-  - **The waypoints page is a list of pages, at every width** (sheets until
-    #811) — see the
-    mobile-first rule above for what it replaced. `comp-waypoints.spec.ts`
-    and `waypoint-altitude-review.spec.ts` run in both Playwright projects,
-    and assert that the pages never scroll sideways.
+  - **`Check altitudes` is the only altitude action on the waypoints page**,
+    it reports nothing until it is pressed, and it changes nothing on its
+    own. What its review shows, its thresholds (under 50 m is not a finding;
+    past 300 m, doubt the coordinates first) and why its list holds still
+    are in [docs/waypoint-altitudes.md](docs/waypoint-altitudes.md).
   - **Never read a Terrain-RGB pixel through a canvas.** The tiles are RGBA and
     Mapbox marks no-data — the sea past a coastline included — with partial
     alpha; a canvas stores premultiplied bytes, so the 24-bit elevation those
@@ -818,10 +502,6 @@ These are the standing imperatives. Each links to the reference that explains it
     `src/react/loaders.ts` and seeding via `initial-data`.
   - Dev serves the SPA shell with no SSR, so verifying is part of "done":
     `bun run test:e2e:ssr`, or `curl` the built output under `wrangler pages dev`.
-- **Accessibility**: all UI work is measured against
-  [docs/accessibility-standard.md](docs/accessibility-standard.md) (WCAG 2.2 AA
-  across the SPA, static pages, analysis map and 3D replay). Use its per-PR
-  checklist; meeting the standard is part of "done".
 
 ### Engine
 
@@ -978,13 +658,13 @@ These are the standing imperatives. Each links to the reference that explains it
 | Thermal shapes (reconstruction + surfaces) | [docs/thermal-shapes.md](docs/thermal-shapes.md) |
 | CIVL world rankings | [docs/civl-rankings.md](docs/civl-rankings.md) |
 | Standards register + monthly check | [docs/standards/review-log.md](docs/standards/review-log.md), `/standards-check` |
+| How the interface behaves (interaction + accessibility) | [docs/interaction-guide.md](docs/interaction-guide.md) |
 | RAC component kit conventions | [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md) |
-| Accessibility standard | [docs/accessibility-standard.md](docs/accessibility-standard.md) |
 | Map interaction spec | [docs/mapbox-interactions-spec.md](docs/mapbox-interactions-spec.md) |
 | Score caching (stale-first) | [docs/score-caching-stale-first-plan.md](docs/score-caching-stale-first-plan.md) |
 | Engine generation + scoring changelog | [docs/scoring-version.md](docs/scoring-version.md) |
 | Comp & task analysis internals | [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md) |
-| Information architecture + design language | [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md) |
+| Information architecture | [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md) |
 | 3D replay | [docs/3d-flight-replay-notes.md](docs/3d-flight-replay-notes.md) |
 | Database | [docs/database.md](docs/database.md) |
 | MCP endpoint for organisers' own assistants | [docs/mcp.md](docs/mcp.md) |

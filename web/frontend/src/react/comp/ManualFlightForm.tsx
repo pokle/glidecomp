@@ -31,7 +31,7 @@
  * - Open distance: just the landing point — the score is the straight-line
  *   distance from the take-off cylinder exit, with no turnpoints or finish time.
  *
- * This is the accessible, non-map path required by docs/accessibility-standard.md
+ * This is the accessible, non-map path required by docs/interaction-guide.md 3.13
  * (a "lat, lon" field). A map picker is a planned follow-up.
  */
 import { useMemo, useState } from "react";

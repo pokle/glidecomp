@@ -1,7 +1,7 @@
 /**
  * Starting a new competition (/comp/new, pages/NewCompPage.tsx): a page of
  * its own rather than a dialog over the list, by the overlays rule in
- * CLAUDE.md (issue #818).
+ * docs/interaction-guide.md (issue #818).
  *
  * Runs in BOTH Playwright projects (fixtures/mobile.ts): a dialog with a text
  * field is what the rule retires because of the phone, so the phone is where

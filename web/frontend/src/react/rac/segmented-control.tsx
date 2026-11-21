@@ -9,7 +9,7 @@
  * screen reader hears a radio group and arrow keys move between options.
  * Drawn as the kit's tab strip is (rac/tabs.tsx), so the two read as one
  * family; each segment is 44 px or more at every pointer, because it lives in
- * the page bar's second layer and every control there is 44 px (CLAUDE.md,
+ * the page bar's second layer and every control there is 44 px (docs/interaction-guide.md,
  * the page bar).
  *
  * Full width by default — on a phone each segment is then as wide as it can

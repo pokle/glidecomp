@@ -2,7 +2,7 @@
  * Leaving a page: the bar's back control, a form's Cancel, a page that
  * closes itself after a save (#823).
  *
- * The overlays rule in CLAUDE.md made every editor, figure and form a page of
+ * The overlays rule in docs/interaction-guide.md made every editor, figure and form a page of
  * its own, so "close" became "leave this page". There are two ways to have
  * arrived on one, and they leave differently:
  *

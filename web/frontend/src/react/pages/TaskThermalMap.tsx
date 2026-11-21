@@ -3,7 +3,7 @@
  * /comp/:compId/task/:taskId/analysis/thermals/map?thermal=<id> (#816).
  *
  * It was a FullScreenSheet over the thermals section until 2026-11, and is a
- * page for the reason every overlay became one (CLAUDE.md, "No full-screen
+ * page for the reason every overlay became one (docs/interaction-guide.md, "No full-screen
  * overlays"): Back, reload, scroll and focus come from the browser. So what the
  * sheet was handed in memory comes from the URL instead — which thermal
  * (`?thermal=`), whether the satellite backdrop is on (`?map=0` turns it off),

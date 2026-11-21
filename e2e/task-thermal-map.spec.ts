@@ -2,7 +2,7 @@
  * The thermal map — one thermal's rose over the terrain it worked, at the size
  * of the screen — is a page under the thermals section (issue #816), where it
  * was a full-screen sheet over it. Part of the "No full-screen overlays" rule
- * in CLAUDE.md: a figure at full size is a page, with its own URL, left with
+ * in docs/interaction-guide.md: a figure at full size is a page, with its own URL, left with
  * the browser's Back.
  *
  * What this spec pins:

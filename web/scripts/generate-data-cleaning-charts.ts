@@ -23,7 +23,7 @@
  * expected outcome, so if the algorithm's behaviour ever drifts from the
  * caption, regeneration fails loudly instead of shipping a stale story.
  *
- * Chart conventions (docs/accessibility-standard.md + the site tokens):
+ * Chart conventions (docs/interaction-guide.md 3.13 + the site tokens):
  * series identity carried by hue AND line style (raw GPS is solid, the
  * barometer is dotted, cleaned is dashed — never colour alone), a legend
  * under the plot that draws each line in its own style, exact numbers in the

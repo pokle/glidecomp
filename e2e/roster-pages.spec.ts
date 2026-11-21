@@ -2,7 +2,7 @@
  * The roster's CSV import and CIVL fill — pages under the pilots list
  * (/comp/:id/pilots/import, /comp/:id/pilots/civl-fill), where they were
  * full-screen sheets over it until #810. Part of the "No full-screen
- * overlays" rule in CLAUDE.md: a screen of its own is a page, with its own
+ * overlays" rule in docs/interaction-guide.md: a screen of its own is a page, with its own
  * URL, left with the browser's Back.
  *
  * What this spec pins:

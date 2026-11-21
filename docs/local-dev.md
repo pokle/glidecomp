@@ -194,8 +194,8 @@ desktop-UA test could ever have seen.
 
 Two things to know when adding to it:
 
-- **It is a Pixel 7, not 320px.** 320 is the floor the accessibility standard
-  commits to (`docs/accessibility-standard.md` §3.2), not a device anyone
+- **It is a Pixel 7, not 320px.** 320 is the floor the interaction guide
+  commits to (`docs/interaction-guide.md` 3.3), not a device anyone
   holds. Tests whose subject IS the floor set 320 themselves *inside* the
   project, so they get the narrow viewport and the touch/UA emulation both.
 - **The descriptor must be chromium.** `web/scripts/ensure-playwright-browsers.sh`

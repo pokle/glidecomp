@@ -298,7 +298,8 @@ export function AppRoutes() {
             ) : null}
             <Route path="/comp" element={<Competitions />} />
             {/* A page rather than a dialog over the list (the overlays rule in
-                CLAUDE.md). The static segment outranks /comp/:compId below. */}
+                docs/interaction-guide.md). The static segment outranks
+                /comp/:compId below. */}
             <Route path="/comp/new" element={<NewCompPage />} />
             <Route path="/comp/:compId" element={<CompDetail />} />
             <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
@@ -307,7 +308,8 @@ export function AppRoutes() {
             {/* Admin-only roster editor — noindex shell in the SSR Function. */}
             <Route path="/comp/:compId/pilots" element={<CompPilotsPage />} />
             {/* One pilot's editor, and a blank one — pages rather than sheets
-                over the list (the overlays rule in CLAUDE.md). Noindex shells. */}
+                over the list (the overlays rule in docs/interaction-guide.md).
+                Noindex shells. */}
             <Route path="/comp/:compId/pilots/new" element={<CompPilotPage />} />
             {/* The roster's CSV import and CIVL fill, pages where they were
                 sheets over the list (#810). Static segments, so they outrank

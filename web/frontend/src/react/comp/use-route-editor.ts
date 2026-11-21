@@ -16,7 +16,7 @@
  * the draft is simply there on the other side. Leaving the editor by a link
  * with unsaved edits asks "Discard route changes?" — "Discard changes" then
  * forgets the draft, "Keep editing" stays. Back is left to the browser (the
- * overlays rule in CLAUDE.md) and means "not now": the draft stays, and
+ * overlays rule in docs/interaction-guide.md) and means "not now": the draft stays, and
  * opening the route again finds it. A reload finds it too.
  */
 import { useEffect, useMemo, useState } from "react";
