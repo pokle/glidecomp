@@ -170,6 +170,9 @@ const TaskQrPage = lazy(() =>
 );
 // Client-only (a noindex shell in the SSR Function), and lazy so it costs
 // nothing on the pages that do not open it.
+const TaskPilotPage = lazy(() =>
+  import("./pages/TaskPilotPage").then((m) => ({ default: m.TaskPilotPage }))
+);
 const TaskPilotSimilarityPair = lazy(() =>
   import("./pages/TaskPilotSimilarityPair").then((m) => ({
     default: m.TaskPilotSimilarityPair,
@@ -488,6 +491,12 @@ export function AppRoutes() {
             <Route
               path="/comp/:compId/task/:taskId/pilot/:pilotId"
               element={<PilotScoreDetail />}
+            />
+            {/* One pilot on one task, for the organiser: what a row of the
+                task page's "Manage pilots & tracks" opens (#860). */}
+            <Route
+              path="/comp/:compId/task/:taskId/pilot/:pilotId/manage"
+              element={<TaskPilotPage />}
             />
             {/* Recording a flight for a pilot with no tracklog (S7F §9.2.2) —
                 admin-only, and a child of the report card because that is the

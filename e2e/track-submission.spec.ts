@@ -740,8 +740,15 @@ test.describe("submitting a track without an account", () => {
     async function openGrid(page: Page): Promise<void> {
       await devLogin(page);
       await page.goto(`${BASE_URL}/comp/${fixture.compId}/task/${gridTaskId}`);
-      // The grid mounts only after the admin check resolves, so sync on the
-      // row's own control rather than on the page.
+      // The list mounts only after the admin check resolves. The upload is
+      // on the pilot's own page for this task since #860, which their row
+      // opens, so sync on that page's own control.
+      const row = page
+        .getByRole("grid", { name: /^Manage pilots & tracks/ })
+        .getByRole("row")
+        .first();
+      await expect(row).toBeVisible({ timeout: 20_000 });
+      await row.click();
       await expect(page.getByRole("button", { name: /Upload track/ })).toBeVisible({
         timeout: 20_000,
       });

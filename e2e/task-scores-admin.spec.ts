@@ -8,9 +8,10 @@
  *  - The manual-flight page is a kit form (rac/form.tsx): a missing landing
  *    point lands under its Latitude and Longitude, and a server refusal naming
  *    `landing_lat` under Latitude, which is focused.
- *  - A row action (the status select, Upload track, Restore track) has no
- *    field to put a refusal under, so it goes in the kit's fixed place beside
- *    the control — under that pilot's row of buttons — and takes focus.
+ *  - An action on the pilot's page (the status select, Upload track, Restore
+ *    track) has no field to put a refusal under, so it goes in the kit's
+ *    fixed place beside the controls, and takes focus. The actions were
+ *    buttons in every row of the list until #860; a row now opens that page.
  *
  * What the kit itself does (one submit at a time, an edit clearing its error,
  * the words for a dropped connection) is e2e/forms.spec.ts's. This file only
@@ -66,15 +67,29 @@ test.beforeEach(async ({ page }) => {
   await devLogin(page);
 });
 
-/** The pilot's row in the manage grid, once the admin check has mounted it. */
+/** The pilot's row in the manage list, once the admin check has mounted it. */
 async function managedRow(page: Page) {
   await page.goto(`${BASE_URL}/comp/${fixture.compId}/task/${fixture.taskId}`);
   const grid = page.getByRole("grid", { name: /^Manage pilots & tracks/ });
   const row = grid.getByRole("row").filter({ hasText: PILOT });
-  await expect(row.getByRole("button", { name: `Status for ${PILOT}` })).toBeVisible({
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  return row;
+}
+
+/**
+ * The pilot's own page for this task, opened from their row (#860): every
+ * action on the pilot is here, and none is in the list. Returns the page's
+ * content, where the tests used to hold the row.
+ */
+async function managedPilot(page: Page) {
+  const row = await managedRow(page);
+  await row.click();
+  await expect(page).toHaveURL(/\/pilot\/[^/]+\/manage$/, { timeout: 20_000 });
+  const main = page.getByRole("main");
+  await expect(main.getByRole("button", { name: `Status for ${PILOT}` })).toBeVisible({
     timeout: 30_000,
   });
-  return row;
+  return main;
 }
 
 const pilotId = () => fixture.pilotIds.get(PILOT)!;
@@ -109,9 +124,22 @@ test("the manage list never scrolls sideways, and Add manual flight is in reach"
   );
   expect(scrollers, "nothing in the section may scroll sideways").toEqual([]);
 
+  // The row is the pilot's facts and nothing else: no button, no link, and
+  // the whole row is the target. It opens the pilot's page for this task.
+  await expect(row.getByRole("button")).toHaveCount(0);
+  await expect(row.getByRole("link")).toHaveCount(0);
+  const rowBox = await row.boundingBox();
+  expect(rowBox!.height, "the row's height").toBeGreaterThanOrEqual(44);
+  expect(rowBox!.height, "the row is two lines, not a card of buttons").toBeLessThan(110);
+  await row.click();
+  await expect(page).toHaveURL(/\/pilot\/[^/]+\/manage$/, { timeout: 20_000 });
+  await expect(page.getByRole("heading", { level: 1, name: PILOT })).toBeVisible();
+  await expectNoSidewaysScroll(page);
+  const pilot = page.getByRole("main");
+
   // In reach: inside the screen's width before anything is scrolled, then on
   // screen once scrolled to (down only), and a thumb-sized target.
-  const add = row.getByRole("link", { name: "Add manual flight" });
+  const add = pilot.getByRole("link", { name: "Add manual flight" });
   const before = await add.boundingBox();
   expect(before!.x).toBeGreaterThanOrEqual(0);
   expect(before!.x + before!.width).toBeLessThanOrEqual(
@@ -123,7 +151,7 @@ test("the manage list never scrolls sideways, and Add manual flight is in reach"
   const box = await add.boundingBox();
   expect(box!.height, "Add manual flight height").toBeGreaterThanOrEqual(44);
   for (const name of [`Status for ${PILOT}`, "Upload track"]) {
-    const b = await row.getByRole("button", { name }).boundingBox();
+    const b = await pilot.getByRole("button", { name }).boundingBox();
     expect(b!.height, `${name} height`).toBeGreaterThanOrEqual(44);
   }
 
@@ -133,10 +161,10 @@ test("the manage list never scrolls sideways, and Add manual flight is in reach"
   });
 });
 
-test("a row action's refusal shows under that pilot's row, never in a toast", async ({
+test("an action's refusal shows on the pilot's page, never in a toast", async ({
   page,
 }) => {
-  const row = await managedRow(page);
+  const row = await managedPilot(page);
 
   // Refused before anything is sent: the file is not a tracklog. The picker
   // only offers .igc, but a file can still be dropped or renamed past it.
@@ -181,7 +209,7 @@ test("a row action's refusal shows under that pilot's row, never in a toast", as
 test("manual flight: a missing or refused landing point is said under the field", async ({
   page,
 }) => {
-  const row = await managedRow(page);
+  const row = await managedPilot(page);
   await row.getByRole("link", { name: "Add manual flight" }).click();
   await expect(page.getByRole("heading", { name: "Manual flight" })).toBeVisible({
     timeout: 20_000,

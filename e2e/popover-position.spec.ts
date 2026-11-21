@@ -89,7 +89,7 @@ test.describe("select popover on a scrolled task page", () => {
     await admin.dispose();
   });
 
-  test("a row select opens inside the viewport", async ({ page }) => {
+  test("the status select opens inside the viewport", async ({ page }) => {
     // Same cookie plumbing as settings-save-ux.spec.ts: dev-login through the
     // page's own request context so the browser holds the session.
     const login = await page.request.post("/api/auth/dev-login", { data: SUPER_ADMIN });
@@ -97,8 +97,17 @@ test.describe("select popover on a scrolled task page", () => {
 
     await page.goto(`${BASE_URL}/comp/${compId}/task/${taskId}`);
 
+    // The status select is on the pilot's own page for this task since
+    // #860, which their row in the manage list opens.
+    const row = page.getByRole("row").filter({ hasText: "Popova E2E" });
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await row.click();
     const status = page.getByRole("button", { name: "Status for Popova E2E" });
+    await expect(status).toBeVisible({ timeout: 30_000 });
     await status.scrollIntoViewIfNeeded();
+    // That page is short, so scroll it a little by hand: the select stays on
+    // screen, and the page is no longer at the top.
+    await page.evaluate(() => window.scrollBy(0, 60));
     // The precondition that makes this test mean anything: the page is
     // scrolled. At scrollY 0 both historical bugs are invisible.
     expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);

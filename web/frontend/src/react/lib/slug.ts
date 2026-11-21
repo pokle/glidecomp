@@ -604,6 +604,23 @@ export function pilotPath(
 }
 
 /**
+ * One pilot on one task, as an organiser manages them: their status, their
+ * track, a manual flight. What a row of the task page's "Manage pilots &
+ * tracks" opens. Beside the report card, which is the public page about the
+ * same pilot and task.
+ */
+export function taskPilotPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  pilotId: string,
+  pilotName?: string | null
+): string {
+  return `${pilotPath(compId, compName, taskId, taskName, pilotId, pilotName)}/manage`;
+}
+
+/**
  * Recording a flight for a pilot who has no track (FAI S7F §9.2.2). A child of
  * the pilot's report card because that is the page it is about — and the page
  * the recorded flight then explains.
