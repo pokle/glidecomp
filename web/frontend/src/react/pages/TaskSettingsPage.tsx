@@ -10,7 +10,7 @@
  * sub-pages at all, which is why there is no `:group` param here.
  */
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { SettingsPage } from "@/react/components/SettingsPage";
@@ -19,6 +19,7 @@ import { underTask } from "../lib/crumbs";
 import { idFromSegment, taskPath, taskSettingsPath } from "../lib/slug";
 import { useTaskAdminPage } from "../lib/use-task-admin-page";
 import { TaskSettings } from "../comp/settings/TaskSettings";
+import { useLeave } from "../lib/leave";
 
 export function TaskSettingsPage() {
   const { compId: compParam, taskId: taskParam } = useParams<{
@@ -27,7 +28,7 @@ export function TaskSettingsPage() {
   }>();
   const compId = idFromSegment(compParam ?? "");
   const taskId = idFromSegment(taskParam ?? "");
-  const navigate = useNavigate();
+  const leave = useLeave();
   // Bumped after a save so the page re-reads the stored values rather than
   // showing what it loaded before the edit.
   const [refresh, setRefresh] = useState(0);
@@ -62,8 +63,9 @@ export function TaskSettingsPage() {
       task={task}
       onSaved={() => {
         setRefresh((r) => r + 1);
-        // Back to the task, which is what the admin was looking at.
-        navigate(taskPath(compId, comp.name, taskId, task.name));
+        // Back to the task, which is what the admin was looking at: a real
+        // Back, so the saved form is not left behind it (lib/leave.ts).
+        leave(taskPath(compId, comp.name, taskId, task.name));
       }}
     />
   );

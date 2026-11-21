@@ -9,7 +9,7 @@
  * by the list's + when a search found nobody.
  *
  * Leaving goes back the way the reader came. Opened from the list (the row or
- * the + marks it with `openedHere()`, lib/leave.ts), that is a real Back, so the list
+ * the +, or any other page of the app: lib/leave.ts), that is a real Back, so the list
  * returns with its search, its sort and its scroll exactly as they were.
  * Opened any other way (a bookmark, a reload), it replaces this entry with
  * the list instead, so Back from there does not land on a saved form.

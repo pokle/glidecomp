@@ -41,7 +41,6 @@ import { SimpleSelect } from "@/react/rac/select";
 import { compPages, underComp } from "../lib/crumbs";
 import { api } from "../../comp/api";
 import { downloadFile } from "../lib/format";
-import { openedHere } from "../lib/leave";
 import { ActionErrorBanner, useAction } from "@/react/rac/form";
 import { fetchWithRetry } from "./types";
 import { exportCsvContent, pilotToRow, slugify, type CompPilot } from "./csv";
@@ -254,7 +253,7 @@ export function PilotsSection({
             // "Import CSV…" always starts at choosing a file: a file chosen
             // earlier and left unapplied is not what was asked for.
             rosterImportDraft.clear([bareCompId(compId)]);
-            navigate(compPilotsImportPath(compId, compName), openedHere());
+            navigate(compPilotsImportPath(compId, compName));
           },
         },
         { id: "export", icon: FileSpreadsheetIcon, label: "Export CSV", onAction: exportCsv },
@@ -361,9 +360,7 @@ export function PilotsSection({
               const pilot = pilots.find((p) => p.comp_pilot_id === id);
               if (pilot) {
                 navigate(
-                  compPilotPath(compId, compName, pilot.comp_pilot_id, pilot.name),
-                  openedHere()
-                );
+                  compPilotPath(compId, compName, pilot.comp_pilot_id, pilot.name));
               }
             }}
           />

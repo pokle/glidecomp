@@ -445,12 +445,20 @@ These are the standing imperatives. Each links to the reference that explains it
     dialog holds no entry either: Back navigates, and the dialog closes with
     the page it was over (`rac/dialog.tsx`), so a page can go Back the
     moment a confirmation closes.
-  - **Leaving a page another page opened is `lib/leave.ts`.** The opener
-    marks the entry it pushes (`openedHere()`), and the page leaves with
-    `useLeave()(fallback)`: a real Back when one of ours opened it, so the
-    page underneath returns as it was left, else a replace with `fallback`
-    (a reload, a bookmark). It is the only `navigate(-1)` for a page
-    (`no-overlays.test.ts`); the pages had grown six names for that marker.
+  - **The bar's back is the browser's Back** (`lib/leave.ts`, owner decision
+    2026-11-21). When the reader came from a page of this app, the bar's back
+    control, a form's Cancel and a page that closes itself after a save all
+    do a real Back, so the page underneath returns as it was left and the
+    two back buttons never disagree. Only on a direct arrival (a shared
+    link, a bookmark, the installed app's first screen) does it go to the
+    page above, by a replace: there Back would leave the site. The page asks
+    the history which it is (react-router numbers its entries), so **no
+    link marks anything**. Until then the opener had to mark the entry it
+    pushed (`openedHere()`); about sixteen links did and the rest did not,
+    so from the comp analysis into a task's analysis the bar went up to the
+    task page while the browser went back. The control is named for where it
+    goes: "Back to <the page behind>", or "Back to <the page above>".
+    `useLeave()` is the only `navigate(-1)` for a page (`no-overlays.test.ts`).
   - **An organiser's page sends anyone else on** (`components/OrganisersOnly.tsx`,
     owner decision 2026-11-03) to the public page it belongs to, signed in or
     not, with a line saying why (and, signed out, to sign in if they are an
@@ -471,8 +479,10 @@ These are the standing imperatives. Each links to the reference that explains it
   people learn to look there for what they can do. It replaced the app
   header, the breadcrumb row, the title row with its buttons, the
   competition's strip of section links and every bar stuck to the bottom.
-  - **Three slots, always the same.** Left, the way out: back to the page
-    above; Cancel on a form; the main menu on a top-level page. Centre, where
+  - **Three slots, always the same.** Left, the way out: back, which is
+    the browser's Back (or the page above on a direct arrival; see
+    `lib/leave.ts` above); Cancel on a form; the main menu on a top-level
+    page. Centre, where
     you are: the page's title, which is its `<h1>`, over a menu drawn as one
     tree — up to the pages above, across or down to the pages beside or under
     this one, and out to the other top-level places. Right, what you can do:

@@ -21,7 +21,7 @@
  * Back is the browser's.
  *
  * A page that another page opened leaves by a real Back — and only one module
- * decides that: `lib/leave.ts` (`useLeave`, `openedHere`). The pages had grown
+ * decides that: `lib/leave.ts` (`useLeave`). The pages had grown
  * six names for the same marker, each checked by its own copy of the same
  * three lines. So `navigate(-1)` is allowed there, and in the master-detail
  * selection, which unwinds only the one entry it pushed itself.

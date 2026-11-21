@@ -14,7 +14,7 @@
  * sentences and score bumps), so each page sends only its own group's fields.
  */
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { SettingsPage } from "@/react/components/SettingsPage";
@@ -33,6 +33,7 @@ import {
   SettingsGroupPage,
   type SettingsGroup,
 } from "../comp/settings/CompSettingsIndex";
+import { useLeave } from "../lib/leave";
 
 export function CompSettingsPage() {
   const { compId: compParam, group } = useParams<{
@@ -40,7 +41,7 @@ export function CompSettingsPage() {
     group?: string;
   }>();
   const compId = idFromSegment(compParam ?? "");
-  const navigate = useNavigate();
+  const leave = useLeave();
   const { loading } = useUser();
   // Bumped after a sub-page save so the index re-reads the stored values
   // rather than showing the seed it loaded before the edit.
@@ -107,7 +108,9 @@ export function CompSettingsPage() {
       comp={comp}
       onSaved={() => {
         setRefresh((r) => r + 1);
-        navigate(compSettingsPath(compId, comp.name));
+        // Back to the settings list the group was opened from: a real Back,
+        // so the saved form is not left behind it (lib/leave.ts).
+        leave(compSettingsPath(compId, comp.name));
       }}
     />
   );

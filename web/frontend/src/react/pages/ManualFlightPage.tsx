@@ -17,7 +17,7 @@
  * own URL there is no grid to hand them over.
  */
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { SettingsPage } from "@/react/components/SettingsPage";
@@ -36,6 +36,7 @@ import type {
   TaskDetailData,
 } from "../comp/types";
 import { ManualFlightForm } from "../comp/ManualFlightForm";
+import { useLeave } from "../lib/leave";
 
 export function ManualFlightPage() {
   const {
@@ -46,7 +47,7 @@ export function ManualFlightPage() {
   const compId = idFromSegment(compParam ?? "");
   const taskId = idFromSegment(taskParam ?? "");
   const compPilotId = idFromSegment(pilotParam ?? "");
-  const navigate = useNavigate();
+  const leave = useLeave();
   const { loading } = useUser();
 
   const { data: comp, notFound: compNotFound, current: compCurrent } =
@@ -172,8 +173,9 @@ export function ManualFlightPage() {
     );
   }
 
-  const backToTask = () =>
-    navigate(taskPath(compId, comp.name, taskId, task.name));
+  // Back to where the organiser came from, which is the pilot's page for
+  // this task; the task page for someone who arrived here directly.
+  const backToTask = () => leave(taskPath(compId, comp.name, taskId, task.name));
 
   return (
     <ManualFlightForm

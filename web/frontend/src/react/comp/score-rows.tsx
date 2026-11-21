@@ -15,43 +15,29 @@
  * The rows are real `<a>` elements, because the scores pages are
  * server-rendered and must work with JavaScript off (docs/ssr.md).
  */
-import { createContext, useContext, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link as AriaLink } from "react-aria-components";
 import { cn } from "@/react/lib/utils";
 import { cardSurface } from "@/react/rac/card";
 import { navRowClass } from "@/react/rac/nav-list";
 import { RowContent } from "@/react/rac/grid-list";
 import { formatRankedScore, ordinal } from "../lib/format";
-import { openedHereFrom } from "../lib/leave";
-
-/**
- * The page a list sits on, by the name its rows' pages say "Back to" with.
- * A row's page is reached by more than one path (a report card from the
- * scores, from Top 3 or from a pilot's page), so its bar's Back is a real
- * Back to wherever the reader was, named for that page (lib/leave.ts).
- */
-const ListPageContext = createContext("Scores");
 
 /** The list surface: one card, rows divided by hairlines. */
 export function ScoreList({
   label,
-  page = "Scores",
   children,
   className,
 }: {
   /** The list's accessible name (a heading names a list visually). */
   label: string;
-  /** The name of the page the list is on: where a row's page goes Back to. */
-  page?: string;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <ListPageContext.Provider value={page}>
-      <ul aria-label={label} className={cn(cardSurface, "divide-y divide-border overflow-hidden", className)}>
-        {children}
-      </ul>
-    </ListPageContext.Provider>
+    <ul aria-label={label} className={cn(cardSurface, "divide-y divide-border overflow-hidden", className)}>
+      {children}
+    </ul>
   );
 }
 
@@ -90,10 +76,9 @@ interface RowProps {
 
 /** A row that opens a page: the whole row is the link. */
 export function ScoreLinkRow({ href, ...row }: RowProps & { href: string }) {
-  const page = useContext(ListPageContext);
   return (
     <li>
-      <AriaLink href={href} routerOptions={openedHereFrom(page)} className={cn(navRowClass, "min-h-14")}>
+      <AriaLink href={href} className={cn(navRowClass, "min-h-14")}>
         <RowContent
           leading={<Rank>{row.rank}</Rank>}
           title={row.title}

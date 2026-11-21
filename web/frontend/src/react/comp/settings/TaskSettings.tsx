@@ -119,7 +119,9 @@ export function TaskSettings({
         }),
       { fallback: "Failed to delete the task." }
     );
-    if (res) navigate(compPath(compId, comp.name));
+    // A replace: the settings of a task that no longer exists must not be
+    // the page behind the competition.
+    if (res) navigate(compPath(compId, comp.name), { replace: true });
   }
 
   return (

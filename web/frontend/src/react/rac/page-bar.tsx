@@ -69,7 +69,7 @@ import { Button, LinkButton, buttonVariants } from "./button";
 import { Menu, MenuHeader, MenuItem, MenuSection, MenuSeparator } from "./menu";
 import { useTabsCollectionPass } from "./tabs";
 import { cn } from "@/react/lib/utils";
-import { openedFromLabel, openedHere, useLeave } from "@/react/lib/leave";
+import { useBackLabel, useLeave } from "@/react/lib/leave";
 import {
   DEV_SIGN_IN_ENABLED,
   signInAsDev,
@@ -189,11 +189,12 @@ function Bar({
   const leave = useLeave();
   const goToSignIn = useGoToSignIn();
   // Signing in from the bar comes back to the page it was asked from.
-  const { pathname, search, state: entryState } = useLocation();
+  const { pathname, search } = useLocation();
   const here = pathname + search;
   const { user, loading } = useUser();
   const width = WIDTH[useContext(PageWidthContext)];
   const parent = trail[trail.length - 1];
+  const backLabel = useBackLabel(title, parent?.label);
   const hasMenu = trail.length > 0 || !!related;
   const topLevel = useTopLevel();
 
@@ -210,8 +211,9 @@ function Bar({
     );
   } else if (parent) {
     // A real link, so it works with JavaScript off and a crawler can follow
-    // it. With JavaScript it is `leave()`: a real Back when a page of ours
-    // opened this one, else a replace with the page above (lib/leave.ts).
+    // it. With JavaScript it is `leave()`: the browser's own Back when the
+    // reader came from a page of the app, else a replace with the page
+    // above (lib/leave.ts). So this control and the browser's Back agree.
     const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
       if (e.defaultPrevented || e.button !== 0) return;
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -221,9 +223,9 @@ function Bar({
     leading = (
       <RouterLink
         to={parent.to}
-        // Back goes where the reader came from when a page of ours opened
-        // this one, so it is named for that page when the opener said which.
-        aria-label={`Back to ${openedFromLabel(entryState) ?? parent.label}`}
+        // Named for where it goes: the page behind this one when the reader
+        // came from a page of the app, else the page above (lib/leave.ts).
+        aria-label={backLabel}
         // Read by the unsaved-changes guard: this is Back, and Back never asks.
         data-bar-back
         onClick={onClick}
@@ -349,7 +351,6 @@ function Bar({
           {add?.to ? (
             <LinkButton
               href={add.to}
-              routerOptions={openedHere()}
               variant="ghost"
               size="icon"
               aria-label={add.label}
@@ -561,7 +562,6 @@ function menuItems(actions: BarAction[]): ReactNode[] {
         download={a.download}
         target={a.target}
         rel={a.target ? "noopener noreferrer" : undefined}
-        routerOptions={a.to && !a.download && !a.target ? openedHere() : undefined}
         onAction={a.onAction}
         isDisabled={a.disabled}
         className={cn(ROW, a.destructive && "text-danger data-focused:text-danger")}

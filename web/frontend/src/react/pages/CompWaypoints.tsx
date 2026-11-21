@@ -110,7 +110,6 @@ import {
   waypointCameras,
 } from "../comp/use-waypoints-editor";
 import { DraftNotices } from "../comp/DraftNotices";
-import { openedHere } from "../lib/leave";
 import {
   cleanCodes,
   fromRow,
@@ -119,6 +118,7 @@ import {
   validRecords,
   type WpRow,
 } from "../comp/waypoints-draft";
+import { useLeave } from "../lib/leave";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
 
@@ -167,6 +167,7 @@ export function CompWaypoints() {
   const editor = useWaypointsEditor();
   const { comp, compId, urlId, compName, isAdmin, draft, dirty } = editor;
   const navigate = useNavigate();
+  const leave = useLeave();
   const confirm = useConfirm();
   // The map's fold, owned here rather than by MasterDetail so its toggle can
   // ride the line above the list instead of taking a row of its own.
@@ -233,7 +234,6 @@ export function CompWaypoints() {
   });
 
   /** Into one of the editor's pages, marked so it can come back here by Back. */
-  const fromHere = openedHere();
 
   async function loadFile(file: File | null) {
     if (!file) return;
@@ -275,7 +275,7 @@ export function CompWaypoints() {
    */
   async function checkAltitudes() {
     if (await altitudeCheck.run()) {
-      navigate(compAltitudeReviewPath(urlId, compName), fromHere);
+      navigate(compAltitudeReviewPath(urlId, compName));
     }
   }
 
@@ -294,7 +294,7 @@ export function CompWaypoints() {
     });
     if (!ok) return;
     editor.discard();
-    navigate(compPath(urlId, compName));
+    leave(compPath(urlId, compName));
   }
 
   /** Arm the map for one tap, with the map on screen to take it. */
@@ -531,9 +531,7 @@ export function CompWaypoints() {
                         onMapPick={(lat, lon, details) => {
                           setAddMode(false);
                           navigate(
-                            compWaypointsNewPath(urlId, compName, newWaypointSearch(lat, lon, details)),
-                            fromHere
-                          );
+                            compWaypointsNewPath(urlId, compName, newWaypointSearch(lat, lon, details)));
                         }}
                       />
                     </Suspense>
@@ -565,7 +563,6 @@ export function CompWaypoints() {
                       // WHAT is maximised for anyone reading the link alone.
                       aria-label="Maximise map"
                       href={compWaypointsMapPath(urlId, compName)}
-                      routerOptions={fromHere}
                     >
                       <Maximize2Icon className="size-4" aria-hidden="true" />
                       Maximise
@@ -592,7 +589,7 @@ export function CompWaypoints() {
                   }
                   onOpen={
                     isAdmin
-                      ? (id) => navigate(compWaypointPath(urlId, compName, id), fromHere)
+                      ? (id) => navigate(compWaypointPath(urlId, compName, id))
                       : undefined
                   }
                   onLocate={locate}

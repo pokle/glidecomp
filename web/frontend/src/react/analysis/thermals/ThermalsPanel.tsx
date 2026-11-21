@@ -25,7 +25,6 @@
  * a model run beside the track-measured wind — a reader must never mistake
  * the prediction for the measurement (docs/weather.md).
  */
-import { openedHere } from "../../lib/leave";
 import {
   lazy,
   Suspense,
@@ -760,7 +759,6 @@ function RoseFigure({
             href={maximiseHref}
             // Marks the entry it pushes: the map page's Back is then a real
             // Back, which returns this section with its scroll.
-            routerOptions={openedHere()}
           >
             <ExpandIcon />
           </LinkButton>

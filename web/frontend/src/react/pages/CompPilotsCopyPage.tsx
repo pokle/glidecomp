@@ -26,7 +26,7 @@
  * commit in the bar, live only when there is somebody to copy.
  */
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useFilter } from "react-aria-components";
 import { Alert, AlertDescription } from "@/react/rac/alert";
 import { SearchField } from "@/react/rac/field";
@@ -38,7 +38,7 @@ import { api } from "../../comp/api";
 import { RosterToolBar } from "../comp/RosterActions";
 import { useRosterAdminPage, type RosterAdminPage } from "../comp/use-roster-admin-page";
 import { formatTaskDate } from "../lib/format";
-import { compPilotsCopyPath } from "../lib/slug";
+import { compPilotsCopyPath, compPilotsPath } from "../lib/slug";
 import { toast } from "../lib/toast";
 import { useSeededResource } from "../lib/use-seeded-resource";
 
@@ -164,6 +164,7 @@ function ChooseSource({ page }: { page: ReadyPage }) {
 
 /** Step 2: what copying `from` would do, and the button that does it. */
 function CopyReview({ page, from }: { page: ReadyPage; from: string }) {
+  const navigate = useNavigate();
   const { data, notFound, current } = useSeededResource<CopyPreview>({
     ids: [page.urlId, from],
     seed: null,
@@ -209,7 +210,10 @@ function CopyReview({ page, from }: { page: ReadyPage; from: string }) {
       onSuccess={async (res) => {
         const done = (await res!.json()) as { copied: number; from: { name: string } };
         toast.success(`Copied ${pilots(done.copied)} from ${done.from.name}`);
-        page.leave();
+        // To the list, by a replace, never a Back: this review is the second
+        // step of the page, so the entry behind it is the page's own list of
+        // competitions to choose from.
+        navigate(compPilotsPath(page.urlId, page.comp.name), { replace: true });
       }}
       className="contents"
     >

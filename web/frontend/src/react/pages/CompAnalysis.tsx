@@ -18,7 +18,6 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCompAnalysis } from "../analysis/use-comp-analysis";
 import { taskReadings, taskReadingsWords } from "../analysis/comp-behaviour";
-import { openedHereFrom } from "../lib/leave";
 import { NotFound } from "../components/NotFound";
 import { Page, PageBar } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
@@ -495,7 +494,6 @@ function SeparationTable({
                   the behaviour's own page, which lists each task's figure. */}
               <ReadingRowLink
                 href={behaviourHref(m.id)}
-                routerOptions={openedHereFrom(COMP_ANALYSIS_LABEL)}
               >
                 {m.label}
               </ReadingRowLink>
