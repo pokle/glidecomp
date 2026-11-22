@@ -53,6 +53,7 @@ import { cn } from "@/react/lib/utils";
 import { Popover, PopoverTrigger } from "@/react/rac/popover";
 import { Explain } from "@/react/rac/explain";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { ReportTableView } from "../ReportTableView";
 import { READING_LINK_ROOM, READING_TABLE } from "@/react/rac/reading-list";
 import { formatTimeOfDay } from "../../lib/time";
 import { formatAltitude, useUnits } from "../../lib/units";
@@ -1280,39 +1281,33 @@ export function ThermalsPanel({
             <summary className="cursor-pointer text-sm text-muted-foreground">
               Pilots in this thermal (climb rates)
             </summary>
-            <div className="mt-2 overflow-x-auto">
-              <Table aria-label="Pilots in this thermal, climb rates" className="min-w-[28rem] text-xs">
-                <TableHeader>
-                  <Column isRowHeader>Pilot</Column>
-                  <Column>Min</Column>
-                  <Column>Median</Column>
-                  <Column>Max</Column>
-                </TableHeader>
-                <TableBody>
-                  {selected.pilots
-                    .map((name, i) => ({ name, i, climb: selected.pilotClimbs![i] }))
-                    .sort((a, b) => b.climb.medianVario - a.climb.medianVario)
-                    .map(({ name, i, climb }) => (
-                      <Row key={i}>
-                        <Cell>{name}</Cell>
-                        {climb.samples === 0 ? (
-                          <>
-                            <Cell>—</Cell>
-                            <Cell>—</Cell>
-                            <Cell>—</Cell>
-                          </>
-                        ) : (
-                          <>
-                            <Cell>{signedClimb(climb.minVario, climbText)}</Cell>
-                            <Cell>{signedClimb(climb.medianVario, climbText)}</Cell>
-                            <Cell>{signedClimb(climb.maxVario, climbText)}</Cell>
-                          </>
-                        )}
-                      </Row>
-                    ))}
-                </TableBody>
-              </Table>
-            </div>
+            {/* Four columns, so a list of records at every width (guide
+                5.7): as a table it was forced to 448 px in a phone's
+                327 px box, with Max off screen. */}
+            <ReportTableView
+              table={{
+                title: "Pilots in this thermal, climb rates",
+                columns: [
+                  { header: "Pilot", align: "left" },
+                  { header: "Min", align: "right" },
+                  { header: "Median", align: "right" },
+                  { header: "Max", align: "right" },
+                ],
+                rows: selected.pilots
+                  .map((name, i) => ({ name, climb: selected.pilotClimbs![i] }))
+                  .sort((a, b) => b.climb.medianVario - a.climb.medianVario)
+                  .map(({ name, climb }) =>
+                    climb.samples === 0
+                      ? [name, "—", "—", "—"]
+                      : [
+                          name,
+                          signedClimb(climb.minVario, climbText),
+                          signedClimb(climb.medianVario, climbText),
+                          signedClimb(climb.maxVario, climbText),
+                        ],
+                  ),
+              }}
+            />
             <p className="mt-1 text-xs text-muted-foreground">
               Each pilot's slowest, typical and best climb over their own vario samples in this
               thermal — a negative minimum means they touched sink inside it.
@@ -1324,49 +1319,43 @@ export function ThermalsPanel({
           <summary className="cursor-pointer text-sm text-muted-foreground">
             Band table (exact numbers)
           </summary>
-          <div className="mt-2 overflow-x-auto">
-            <Table aria-label="Thermal bands, exact numbers" className="min-w-[46rem] text-xs">
-              <TableHeader>
-                <Column isRowHeader>Band</Column>
-                <Column>Core offset E/N (m)</Column>
-                <Column>Working radius</Column>
-                <Column>Extent</Column>
-                <Column>Mean climb</Column>
-                <Column>Best climb</Column>
-                <Column>Samples</Column>
-                <Column>Pilots</Column>
-                <Column>Cores</Column>
-                {model ? <Column>Model wind</Column> : null}
-              </TableHeader>
-              <TableBody>
-                {[...selected.bands].reverse().map((b) => {
-                  const mw = model?.bands.find((x) => x.altMid === b.altMid);
-                  return (
-                    <Row key={b.altMid}>
-                      <Cell>
-                        {altLabel(b.altMin)}–{altWithUnit(b.altMax)}
-                      </Cell>
-                      <Cell>
-                        {Math.round(b.core.east)} / {Math.round(b.core.north)}
-                      </Cell>
-                      <Cell>{altWithUnit(b.coreRadius)}</Cell>
-                      <Cell>{altWithUnit(b.extentRadius)}</Cell>
-                      <Cell>+{climbText(b.meanVario)}</Cell>
-                      <Cell>+{climbText(b.maxVario)}</Cell>
-                      <Cell>{b.sampleCount}</Cell>
-                      <Cell>{b.pilotCount}</Cell>
-                      <Cell>{Math.max(b.subCores.length, 1)}</Cell>
-                      {model ? (
-                        <Cell>
-                          {mw ? `${windText(mw.speedMs)} @ ${Math.round(mw.directionDeg)}°` : "—"}
-                        </Cell>
-                      ) : null}
-                    </Row>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+          {/* Nine or ten columns, so a list of records at every width
+              (guide 5.7): as a table it was forced to 790 px in a phone's
+              327 px box. Highest band first, as in the climb profile. */}
+          <ReportTableView
+            table={{
+              title: "Thermal bands, exact numbers",
+              columns: [
+                { header: "Band", align: "left" },
+                { header: "Core offset E/N (m)", align: "right" },
+                { header: "Working radius", align: "right" },
+                { header: "Extent", align: "right" },
+                { header: "Mean climb", align: "right" },
+                { header: "Best climb", align: "right" },
+                { header: "Samples", align: "right" },
+                { header: "Pilots", align: "right" },
+                { header: "Cores", align: "right" },
+                ...(model ? [{ header: "Model wind", align: "right" as const }] : []),
+              ],
+              rows: [...selected.bands].reverse().map((b) => {
+                const mw = model?.bands.find((x) => x.altMid === b.altMid);
+                return [
+                  `${altLabel(b.altMin)}–${altWithUnit(b.altMax)}`,
+                  `${Math.round(b.core.east)} / ${Math.round(b.core.north)}`,
+                  altWithUnit(b.coreRadius),
+                  altWithUnit(b.extentRadius),
+                  `+${climbText(b.meanVario)}`,
+                  `+${climbText(b.maxVario)}`,
+                  String(b.sampleCount),
+                  String(b.pilotCount),
+                  String(Math.max(b.subCores.length, 1)),
+                  ...(model
+                    ? [mw ? `${windText(mw.speedMs)} @ ${Math.round(mw.directionDeg)}°` : "—"]
+                    : []),
+                ];
+              }),
+            }}
+          />
         </details>
       </div>}
       />
