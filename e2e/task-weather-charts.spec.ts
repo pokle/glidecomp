@@ -261,6 +261,23 @@ test.describe("the task page", () => {
     await expect(legend("height")).toContainText("CAPE 120 J/kg");
   });
 
+  // The weather is what adds the Leg wind column, so this lives beside the
+  // stub. 375 px is the narrowest current iPhone, narrower than the mobile
+  // project's Pixel 7: at 393 px the table was 343 px in a 319 px box, with
+  // the end of the leg wind off screen, because the turnpoint's radius and
+  // elevation line could not wrap.
+  test("the turnpoints table fits a 375 px phone with its Leg wind column", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await openTaskPage(page);
+    const table = page.getByRole("grid", { name: "Turnpoints" });
+    await expect(table.getByRole("columnheader", { name: "Leg wind" })).toBeVisible();
+    const fit = await table.evaluate((el) => ({
+      table: Math.ceil(el.getBoundingClientRect().width),
+      box: el.parentElement!.clientWidth,
+    }));
+    expect(fit.table).toBeLessThanOrEqual(fit.box);
+  });
+
   test("arrow keys move the hour, and each hour is named with its figures", async ({ page }) => {
     const figure = await openTaskPage(page);
     const wind = figure.locator(WIND);

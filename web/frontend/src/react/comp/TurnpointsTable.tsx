@@ -119,10 +119,11 @@ export function TurnpointsTable({
 
   return (
     <div className="mt-2" {...focusHandlers}>
-      {/* With the wind column the listing is wider than a phone, so it scrolls
-          in its own viewport — which a keyboard user can only reach if that
-          viewport is a labelled tab stop (WCAG 2.1.1). Three columns fit, so
-          the stop is only claimed when there are four. */}
+      {/* With the wind column the listing fits a 375 px phone but not a
+          320 px one, where it scrolls in its own viewport — which a keyboard
+          user can only reach if that viewport is a labelled tab stop
+          (WCAG 2.1.1). Three columns fit, so the stop is only claimed when
+          there are four. */}
       <Table
         aria-label="Turnpoints"
         scrollLabel={showWind ? "Turnpoints" : undefined}
@@ -130,7 +131,9 @@ export function TurnpointsTable({
         <TableHeader>
           {/* Empty visible header for the role column; labelled for AT. */}
           <Column isRowHeader={false} aria-label="Type" className="w-16 px-1.5" />
-          <Column isRowHeader>Turnpoint</Column>
+          <Column isRowHeader className="px-1.5">
+            Turnpoint
+          </Column>
           {/* Abbreviated, and allowed to wrap, so four columns fit a phone
               without scrolling: the headers and the wind reading are the long
               things here, and the kit's columns and cells are nowrap by
@@ -194,7 +197,9 @@ export function TurnpointsTable({
                     ) : null}
                   </div>
                 </Cell>
-                <Cell className="align-top">
+                {/* Allowed to wrap: the kit's cells are nowrap, and this one's
+                    second line made the column the widest on a phone. */}
+                <Cell className="px-1.5 align-top whitespace-normal">
                   <div className="flex flex-col leading-tight">
                     <span className="font-medium">{tp.waypoint.name}</span>
                     {/* Cylinder radius (always) · the waypoint's ground
@@ -205,18 +210,26 @@ export function TurnpointsTable({
                         Two bare lengths side by side say nothing about which
                         is which, so both are labelled — abbreviated for
                         sighted readers, in full for assistive tech, which
-                        would otherwise read "r." and "amsl" as words. */}
+                        would otherwise read "r." and "amsl" as words.
+
+                        On a narrow phone the line breaks after the "·" and
+                        nowhere else: a figure is never parted from its unit
+                        or its label. */}
                     <span className="text-xs text-muted-foreground tabular-nums">
-                      <span className="sr-only">radius </span>
-                      <span aria-hidden="true">r. </span>
-                      {radius}
+                      <span className="whitespace-nowrap">
+                        <span className="sr-only">radius </span>
+                        <span aria-hidden="true">r. </span>
+                        {radius}
+                        {alt ? <span aria-hidden="true"> ·</span> : null}
+                      </span>
                       {alt ? (
                         <>
-                          <span aria-hidden="true"> · </span>
-                          <span className="sr-only">, elevation </span>
-                          {alt}
-                          <span className="sr-only"> above sea level</span>
-                          <span aria-hidden="true"> amsl</span>
+                          <span className="sr-only">, elevation</span>{" "}
+                          <span className="whitespace-nowrap">
+                            {alt}
+                            <span className="sr-only"> above sea level</span>
+                            <span aria-hidden="true"> amsl</span>
+                          </span>
                         </>
                       ) : null}
                     </span>
