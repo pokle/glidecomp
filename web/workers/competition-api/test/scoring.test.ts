@@ -474,12 +474,12 @@ describe("Live Scoring", () => {
       { pilot_class: "sport" }
     );
 
-    const res = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    expect(res.status).toBe(200);
-
-    const data = (await res.json()) as {
+    // The class change re-scores in the background, so the first read can be
+    // the pre-change body (both pilots in "open"), labelled stale.
+    const { data } = await getFreshScores<{
+      stale: boolean;
       class_scores: Array<{ pilot_class: string; pilots: unknown[] }>;
-    };
+    }>(`/api/comp/${compId}/task/${taskId}/score`);
 
     const openClass = data.class_scores.find((c) => c.pilot_class === "open");
     const sportClass = data.class_scores.find((c) => c.pilot_class === "sport");

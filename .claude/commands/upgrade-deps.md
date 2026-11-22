@@ -26,6 +26,24 @@ Read `docs/dependency-review-log.md`. At minimum, read the most recent two entri
   applies` and silently runs the unpatched code. Treat that warning as a
   finding: decide whether the patch is still needed on the new version and
   either port it or delete the entry and the file.
+- **wrangler, Miniflare and the vitest plugin move together.** wrangler is
+  pinned exact in every workspace because each release pins an exact Miniflare,
+  and Miniflare 5 is still a beta on npm. Before you bump, compare
+  `npm view wrangler@<new> dependencies.miniflare` with
+  `npm view @cloudflare/vitest-plugin@<new> dependencies.miniflare`. Take a
+  pair that agrees, so that `bun.lock` holds one Miniflare. Read the Miniflare
+  changelog as well as wrangler's: `bun run seed` constructs a Miniflare
+  itself (`web/scripts/seed-sample-comp.ts`), so a constructor-option change
+  breaks the seed and nothing else. After a Miniflare bump, run
+  `bun run kill-state && bun run seed` before the e2e. The vitest plugin's
+  `peerDependencies.vitest` limits the vitest you can take for auth-api and
+  competition-api.
+  - `@cloudflare/vitest-pool-workers` is the plugin's old name, and its last
+    release was 0.23.0. If it comes back into `bun.lock`, something has
+    pinned the old name again.
+  - The wrangler cap (4.116.0, August to November 2026) is gone. The
+    `no such table: comp` failure that caused it was the seed's Miniflare
+    options, not the files on disk. See the 2026-11-22 entry in the log.
 - **Read a map-library bump against the CSP** in
   `web/frontend/src/security-headers.ts`. Grep the new dist for `WebAssembly.`,
   `new Function` and `eval`: `script-src` has no `'wasm-unsafe-eval'`, and
@@ -92,7 +110,7 @@ After pushing, wait for the Deploy run to complete. On Claude Code on the web th
 
 If CI fails:
 
-- **Read the actual error.** If output is silent (e.g. `bun run --filter` swallowed the inner stderr — the failure mode looks like `error: script "X" exited with code 1` with nothing else), reproduce the inner command directly. The `Probe auth-api startup` step in `.github/workflows/deploy.yml` is the canonical pattern: run wrangler directly from the workspace dir, bypassing `bun run --filter`, so real stderr appears. Add a similar probe if you're diagnosing a different worker.
+- **Read the actual error.** If output is silent (e.g. `bun run --filter` swallowed the inner stderr — the failure mode looks like `error: script "X" exited with code 1` with nothing else), reproduce the inner command directly. Run wrangler directly from the workspace dir, bypassing `bun run --filter`, so real stderr appears (`test:e2e`'s `db:migrate` already calls wrangler that way, which is why deploy.yml no longer has a separate `Probe auth-api startup` step).
 - **Diagnose the root cause.** Don't retry blindly, don't disable tests, don't skip `--frozen-lockfile`.
 - **Don't mark the PR ready while CI is red.**
 

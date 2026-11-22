@@ -367,7 +367,7 @@ export async function computeAndStoreTaskScore(
     computed_at: new Date().toISOString(),
   };
   try {
-    await env.DB.prepare(
+    const write = await env.DB.prepare(
       `INSERT INTO task_scores (
          task_id, response_json, state_key, computed_at,
          engine_version, inputs_rev, computed_rev, revalidating_until
@@ -391,6 +391,19 @@ export async function computeAndStoreTaskScore(
         rev
       )
       .run();
+    // The guard refused the write: a concurrent revalidation already stored
+    // this rev (or a newer one). Serve that row, not this unstored copy —
+    // its computed_at is in the ETag, and an ETag for a body that was never
+    // stored can never revalidate.
+    if (write.meta.changes === 0) {
+      const row = await readTaskScoreRow(env.DB, taskId);
+      if (row && rowHasResult(row)) {
+        return {
+          response: JSON.parse(row.response_json) as StoredTaskScore,
+          stateKey: row.state_key,
+        };
+      }
+    }
   } catch (err) {
     // E.g. the task was deleted mid-compute (FK) — nothing to store.
     console.error("task_scores store write failed", err, { taskId, rev });

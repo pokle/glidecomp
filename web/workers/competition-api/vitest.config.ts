@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import {
   cloudflareTest,
   readD1Migrations,
-} from "@cloudflare/vitest-pool-workers";
+} from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 import { exportJWK, generateKeyPair } from "jose";
 

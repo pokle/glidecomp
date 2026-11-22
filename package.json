@@ -79,7 +79,7 @@
     "@types/node": "^25.9.9",
     "concurrently": "^9.2.5",
     "typescript": "^7.0.2",
-    "wrangler": "4.116.0"
+    "wrangler": "4.166.0"
   },
   "engines": {
     "node": ">=22.23.5"

@@ -233,7 +233,10 @@ type MiniflareInstance = {
   getR2Bucket(name: string): Promise<R2Bucket>;
   dispose(): Promise<void>;
 };
-type MiniflareCtor = new (opts: Record<string, unknown>) => MiniflareInstance;
+type MiniflareModule = {
+  Miniflare: new (opts: unknown) => MiniflareInstance;
+  convertV4MiniflareOptions(opts: Record<string, unknown>): unknown;
+};
 
 async function createLocalStore(): Promise<SeedStore> {
   // Import the *exact* Miniflare wrangler bundles (resolved through wrangler's
@@ -242,19 +245,28 @@ async function createLocalStore(): Promise<SeedStore> {
   // durable-object sqlite schema wrangler then refuses to open.
   const wranglerEntry = Bun.resolveSync('wrangler', REPO_ROOT);
   const miniflareEntry = Bun.resolveSync('miniflare', wranglerEntry.replace(/\/dist\/.*$/, ''));
-  const { Miniflare } = (await import(miniflareEntry)) as { Miniflare: MiniflareCtor };
+  const { Miniflare, convertV4MiniflareOptions } = (await import(miniflareEntry)) as MiniflareModule;
 
   const persistRoot = join(REPO_ROOT, PERSIST);
-  const mf = new Miniflare({
-    modules: true,
-    script: 'export default {};',
-    // D1 is keyed by database_id; R2 by bucket name — both taken from the
-    // worker's wrangler.toml so we hit the same files the dev workers use.
-    d1Databases: { [D1_BINDING]: D1_DATABASE_ID },
-    r2Buckets: { [R2_BINDING]: R2_BUCKET },
-    d1Persist: join(persistRoot, 'v3/d1'),
-    r2Persist: join(persistRoot, 'v3/r2'),
-  });
+  // Miniflare 5 takes a config-based `workers` list; this flat, v4-shaped
+  // object goes through its own converter, the migration path upstream
+  // documents. Persistence is one root now, with a subdirectory per plugin
+  // (v3/d1, v3/r2): the layout wrangler writes. The per-resource
+  // `d1Persist`/`r2Persist` options are gone. An early miniflare 5 alpha
+  // ignored them silently, so the seed wrote to an ephemeral, unmigrated D1
+  // and failed with `no such table: comp`. That was read as an on-disk format
+  // change, and it capped wrangler at 4.116.0 from August to November 2026.
+  const mf = new Miniflare(
+    convertV4MiniflareOptions({
+      modules: true,
+      script: 'export default {};',
+      // D1 is keyed by database_id; R2 by bucket name — both taken from the
+      // worker's wrangler.toml so we hit the same files the dev workers use.
+      d1Databases: { [D1_BINDING]: D1_DATABASE_ID },
+      r2Buckets: { [R2_BINDING]: R2_BUCKET },
+      resourcePersistencePath: join(persistRoot, 'v3'),
+    }),
+  );
   const db = await mf.getD1Database(D1_BINDING);
   const bucket = await mf.getR2Bucket(R2_BINDING);
 

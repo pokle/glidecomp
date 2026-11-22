@@ -22,6 +22,44 @@ more, so **a routing change belongs in three places at once**: `functions/api/`,
 `web/frontend/src/dev-routing.ts` — the one table both the Vite dev server and
 the e2e suite's server for the built output read.
 
+## Local state and Miniflare 5
+
+wrangler runs the Workers locally on Miniflare. From wrangler 4.117.0 that is
+Miniflare **5**, still a beta on npm in November 2026. The project moved to it
+on 2026-11-22 (wrangler 4.116.0 → 4.166.0).
+
+**After you pull that change, reset your local state once:**
+
+```bash
+bun run kill-state   # stops dev, deletes web/.wrangler/state, re-applies migrations
+bun run seed
+```
+
+This deletes every local account, comp and track. A state that wrangler 4.116.0
+wrote did open and seed under 4.166.0 in testing. But the fresh state is the one
+the e2e suite and CI were run against, so start from it.
+
+What changed for local dev:
+
+- **`bun run seed` runs its own Miniflare.** It loads the copy that wrangler
+  bundles and points it at the files `wrangler dev` reads. Miniflare 5 removed
+  the old flat constructor options, including `d1Persist` and `r2Persist`. The
+  seed now passes its options through Miniflare's `convertV4MiniflareOptions()`
+  and persists through one `resourcePersistencePath` (`web/.wrangler/state/v3`).
+  An early Miniflare 5 alpha dropped the removed options without a word. The
+  seed then wrote to an empty in-memory D1 and failed with
+  `D1_ERROR: no such table: comp`. That error held wrangler at 4.116.0 from
+  August to November 2026. If it comes back, check the seed's Miniflare
+  options before you suspect the files on disk.
+- **The Node floor is 22.12.0** for wrangler and Miniflare. `.node-version` is
+  far above it.
+- **The vitest suites use `@cloudflare/vitest-plugin`.** It replaced
+  `@cloudflare/vitest-pool-workers` (last release 0.23.0), and it is the
+  first release of the integration that runs on vitest 5.
+- **The local test endpoints moved** to `/cdn-cgi/local/*`, for example
+  `/cdn-cgi/local/scheduled`. `wrangler dev` still rewrites the old
+  `/cdn-cgi/handler/*` paths, and nothing in this repository calls either.
+
 ## `astro dev` must stay in the foreground
 
 Astro 7's `astro dev` **daemonises itself when it detects it is being run by a
@@ -51,7 +89,8 @@ sweep, then `typecheck:all`) followed by `test:workspaces`, which runs the three
 vitest suites — competition-api, auth-api, frontend — **concurrently** in one
 `bun run --filter` invocation.
 
-They share no state: both Worker pools are `@cloudflare/vitest-pool-workers` with
+They share no state: both Worker pools are `@cloudflare/vitest-plugin` (the
+package that was `@cloudflare/vitest-pool-workers` until its 1.0) with
 in-memory storage and no `persist`, so the #477 two-Miniflare-processes-on-one-
 SQLite-file hazard does not apply (that is a `wrangler dev` problem, not a vitest
 one). A failing suite still fails the whole invocation, so the gate is unchanged.

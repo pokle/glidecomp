@@ -374,6 +374,25 @@ describe("revalidation lock and CAS", () => {
     expect(row.response_json).toBe(fresh.response_json);
     expect(row.computed_at).toBe(fresh.computed_at);
   });
+
+  test("a writer that loses the race returns the stored body, not its own copy", async () => {
+    // The cold read path serves what this returns, and puts its computed_at
+    // in the ETag. A cold read racing a background revalidation of the same
+    // rev used to serve its own unstored copy, whose ETag no later request
+    // could ever match.
+    const t = await seedScoredTask();
+    const stored = await getRow(t.taskIdNum);
+
+    const { response, stateKey } = await computeAndStoreTaskScore(
+      env,
+      t.taskIdNum,
+      stored.computed_rev
+    );
+
+    expect(response.computed_at).toBe(stored.computed_at);
+    expect(stateKey).toBe(stored.state_key);
+    expect((await getRow(t.taskIdNum)).computed_at).toBe(stored.computed_at);
+  });
 });
 
 describe("comp scores aggregation", () => {

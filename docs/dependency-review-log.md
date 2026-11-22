@@ -2,7 +2,164 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
-**Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
+**Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice. A second is the **wrangler cap**: the 2026-08-02 entry's advice to keep wrangler at 4.116.0 until Miniflare 5 leaves beta is retired, and its diagnosis was wrong. See "2026-11-22 — wrangler cap lifted".
+
+## 2026-11-22 — wrangler cap lifted (focused PR)
+
+This is not a weekly cycle. It lifts the cap that held **wrangler at 4.116.0**
+for 17 cycles, since 2026-08-02. **`bun audit` goes from 1 high to 0**: the
+last finding, `zod@3.25.76`, leaves with the old vitest pool. No `overrides`
+entry was needed.
+
+**The cap rested on a wrong diagnosis.** On 2026-08-02, `bun run seed` failed
+with `D1_ERROR: no such table: comp` under wrangler 4.117.0, and the entry read
+it as Miniflare 5 writing an incompatible on-disk format. The files were never
+the problem. `web/scripts/seed-sample-comp.ts` constructs its own Miniflare and
+passed `d1Persist` and `r2Persist`, which Miniflare 5 removed in the same
+release (workers-sdk #14586). The 5.20260730.0 alpha dropped unknown options
+without a word, so the seed wrote to an empty in-memory D1. The current beta
+refuses them: `Unexpected options passed to new Miniflare() constructor:
+Unrecognized keys: "modules", "script", "d1Databases", "r2Buckets"`.
+
+The proof: with the seed fixed, a state that wrangler 4.116.0 wrote seeded and
+served under 4.166.0 (`/api/comp` and a comp's `/scores` answered 200 through
+`bun run dev`). The owner's plan was to validate a freshly created state, and
+every check below ran from one. `docs/local-dev.md` still asks developers to
+reset once, because the fresh state is what was tested.
+
+### Security Vulnerabilities Fixed
+
+| Advisory | Severity | What was patched |
+|----------|----------|------------------|
+| [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) | high | `zod@3.25.76`, pinned by `@cloudflare/vitest-pool-workers@0.19.1` (test runner only). Its replacement, `@cloudflare/vitest-plugin@1.9.0`, pins `zod 4.6.6`, the first fixed release. `bun.lock` now holds `zod@4.6.7` (competition-api, mcp-api) and the plugin's `zod@4.6.6`, and nothing older. |
+
+wrangler's own changelog for 4.117.0 to 4.166.0 also carries fixes for
+bundled dependencies (Undici 7.30.2 with six upstream fixes in 4.166.0,
+`shell-quote` CVE-2026-13311 in 4.131.0, and `brace-expansion`,
+`fast-xml-parser`, `minimatch` and `yaml`). `bun audit` had not flagged them,
+because wrangler bundles them.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.116.0 | 4.166.0 | root, frontend, airscore-api, auth-api, competition-api, mcp-api, dev-router | Still pinned exact (see Lessons). Bundles `miniflare 5.20261119.0-beta` and `workerd 1.20261119.1`, and now depends on the `cloudflare@5.2.0` SDK. Node floor `>=22.12.0` (4.159.0); `.node-version` is 22.23.5. Read for this repository: the old `/cdn-cgi/handler/*` test paths move to `/cdn-cgi/local/*` and are still rewritten (4.117.0; we call none); `wrangler dev` no longer exits when one request fails transiently (4.129.1), the class of crash in issue #477; **source maps upload by default** on `wrangler deploy` (4.150.0) when `upload_source_maps` is unset, which it is in all five `wrangler.toml` files. That is a change to every Worker deploy: better stack traces in logs, nothing public. A dry-run deploy of all five Workers gives the same upload size as 4.116.0 (competition-api differs only by this PR's 14 source lines). No config key we use was removed or renamed. |
+| **@cloudflare/vitest-pool-workers** → **@cloudflare/vitest-plugin** | 0.19.1 | 1.9.0 | auth-api, competition-api | The package was renamed at its 1.0 (Cloudflare changelog, 2026-08-19), and the old name stopped at 0.23.0. **0.23.0 cannot take vitest 5**: it peers `vitest ^4.1.0`, bun installs a second, nested vitest 4 under it, and every file fails with `[vitest-pool]: Failed to start cloudflare-pool worker … SyntaxError: Unexpected identifier 'file'`. The plugin peers `^4.1.0 \|\| ^5.0.0` and uses the same Miniflare as wrangler 4.166.0, so the lock holds one copy. Migration (no codemod run): the import in both `vitest.config.ts` files, and `types` in both `test/tsconfig.json` files to `@cloudflare/vitest-plugin/types`, as the migration guide says. |
+| **vitest** | 4.1.12 | 5.1.1 | frontend, auth-api, competition-api | Migration guide read in full. The grep for what it breaks (`test.sequential`, `toThrow("")`, nested `vi.mock`, unawaited `.resolves`/`.rejects`, removed entrypoints, `VITEST_POOL_ID`, `jest.Matchers`) found nothing, and `clearMocks` now defaulting to true changed no result. The two failures it did expose are below. |
+
+### Code Changes Required
+
+- **`web/scripts/seed-sample-comp.ts`: the seed's Miniflare.** Its v4-shaped
+  options now go through Miniflare's own `convertV4MiniflareOptions()`, the
+  migration path upstream documents, with one
+  `resourcePersistencePath: web/.wrangler/state/v3` in place of
+  `d1Persist`/`r2Persist`. Miniflare 5 keeps the per-plugin `v3/d1` and
+  `v3/r2` subdirectories, so the seed still writes the files `wrangler dev`
+  reads.
+- **`competition-api/src/score-store.ts`: a real race, which vitest 5 made
+  deterministic.** `official-results.test.ts` "a changed annotation changes
+  the ETag" failed every run: the 304 it expects came back 200. A task's
+  creation schedules a background revalidation. The test's first GET found no
+  servable row, computed one itself, and its guarded upsert lost to the
+  background write of the same rev. `computeAndStoreTaskScore` then returned
+  its own unstored body, and its doc says it returns "the stored blob … so the
+  cold read path can serve exactly what it stored". The ETag carried a
+  `computed_at` that no row held (`…958Z` served, `…948Z` stored), so it could
+  never revalidate. When the write changes no row, the function now reads
+  back and returns the stored row. In production this cost one extra full
+  body on the next conditional read. A new test, "a writer that loses the
+  race returns the stored body, not its own copy" in `score-store.test.ts`,
+  fails without the fix and passes with it.
+- **`competition-api/test/scoring.test.ts`: one test now waits for its
+  re-score.** "class-based scoring ranks pilots within their class only"
+  asserted on the first read after a class change. Stale-first serves the
+  pre-change body there, labelled stale, until the background re-score lands.
+  The file already has `getFreshScores()` for exactly this, and this test was
+  the one that never used it. vitest 5's runner changes the event-loop
+  ordering, so the background write no longer finishes first. With vitest 4
+  and the same Miniflare, both files pass, which isolates the change to
+  vitest. The plugin awaits `waitUntil` only at test boundaries, as 0.19.1 did.
+- **`auth-api/test/env.d.ts`, `competition-api/test/env.d.ts`.** They
+  augmented `ProvidedEnv`, which the pool's types have not read since before
+  0.19.1. `env` is `Cloudflare.Env` now. Nothing in CI typechecks these
+  projects, and on master `cloudflare:test` did not resolve at all (51 TS2307 in
+  competition-api), so every `env` was untyped. With the documented types
+  entry the module resolves, and the stale augmentation shows: 668 errors. Both
+  files now augment `Cloudflare.Env`. `tsc -p test/tsconfig.json` goes from
+  25/107 errors on master to 16/7 (auth-api/competition-api). Those that remain
+  predate this PR and are left for another one.
+
+`.github/workflows/deploy.yml` needed no change. `cloudflare/wrangler-action`
+(pinned `9acf94a…`, v3.15.0) uses the project's installed wrangler whenever
+`wranglerVersion` is not set (`installWrangler()` in its `dist/index.mjs`:
+"No wrangler version specified, using pre-installed wrangler version"), and
+master's last deploy log shows that line with 4.116.0. Its own default would be
+3.90.0. Deploys therefore run 4.166.0 from `bun.lock`.
+
+### Overrides Added / Updated / Removed
+
+None. The brief suggested a root `zod` override at `^4.6.6`. The pool's own zod
+use was checked first (`object`, `string`, `boolean`, `record`, `union`,
+`literal`, `looseObject`, `array`, `.optional/.default/.parse`), so it would
+have been safe, but the plugin's pin made it unnecessary.
+
+### Packages Not Upgraded (intentional)
+
+wrangler, the vitest pool, vitest and zod are off this list. Everything else
+stands as the 2026-11-15 entry left it (`@astrojs/mdx`, three, katex,
+kysely 0.29, `@cloudflare/workers-types` 5, jsdom, concurrently 10,
+`@types/node` 26), along with the routine bumps of the open weekly PR (#905),
+which this PR leaves alone.
+
+### Verification
+
+All on Node 22.23.5, from a fresh state (`bun run kill-state`, then
+`bun run seed`), one chain at a time.
+
+- `bun run typecheck:all` and `bun run --filter '@glidecomp/frontend' typecheck`:
+  clean.
+- `bun run test:all`: 1935 root/engine/airscore/dev-router/mcp-api/scripts,
+  1536 frontend, 249 auth-api (6 todo), 969 competition-api. 0 fail.
+- `bun run build`: clean, 10 Astro pages.
+- `wrangler deploy --dry-run` for all five Workers: clean, sizes as above.
+- `bun run dev`: the dev-router answered on :8790 and the frontend on :3000,
+  and a seeded comp page and its `/scores` loaded, on both the fresh and the
+  old state.
+- `bun run test:e2e:ssr`: **104/104 passed** in 1.6 minutes, run first.
+- `bun run test:e2e`: **520 passed, 1 skipped, 0 failed** in 18.9 minutes,
+  exit 0, on the first run, with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0`.
+  `wrangler-crashes.sh`: wrangler dev did not die. The one `✘ [ERROR]` line
+  was Open-Meteo's daily quota (HTTP 429) on a weather fetch, which the page
+  reports as no weather.
+- `bun audit`: 1 high before, **0 after**.
+- `bun install` printed no `warn:` lines. Both patches still match their
+  locked versions. `git diff package.json` (root) shows only the wrangler pin.
+- `bun.lock` holds one `vitest` (5.1.1), one `wrangler`, one `miniflare` and no
+  `vitest-pool-workers`.
+
+### Lessons / Notes for Future Sessions
+
+- **Before a cap blames a dependency, find the line of ours that failed.** The
+  August entry saw `no such table: comp` and named a cause it never checked.
+  It came from our own `new Miniflare({...})`, and the Miniflare 5 changelog
+  names the removed options in the same release. Seventeen cycles carried a cap
+  that was one changed option away from lifting, and that cap also held the
+  last audit finding.
+- **A renamed package leaves its old name looking current.**
+  `@cloudflare/vitest-pool-workers` still answered `latest: 0.23.0`, with no
+  deprecation notice on npm, three months after the rename. A peer range that
+  never moves across five releases (0.19 to 0.23, all `vitest ^4.1.0`) is the
+  sign to search for a successor.
+- **wrangler stays pinned exact.** Each release pins an exact Miniflare, still
+  a beta, so a caret would let `bun update` move the local runtime without
+  anyone reading it. The routine now says to pair wrangler with the vitest
+  plugin on one Miniflare.
+- **A test that fails only under a new runner, with the runtime unchanged, can
+  be a real race.** Of the two that vitest 5 exposed, one was a test that did
+  not wait (an existing helper fixed it), and one was a cache body that was
+  never stored. Bisect the runner against the runtime first (vitest 4 with
+  the same plugin and Miniflare passed), then read what each failing assertion
+  saw.
 
 ## 2026-11-15
 
