@@ -88,7 +88,7 @@ It also takes ~14 minutes, which is longer than a single tool call gets, so it w
 
 ## 4. Push, then watch CI to green
 
-After pushing, wait for the Deploy run to complete. On Claude Code on the web there is **no `gh` CLI** — watch CI with the GitHub MCP tools instead: `mcp__github__actions_list` (find the latest `deploy.yml` run for your branch/head SHA), then poll `mcp__github__actions_get` until it concludes, and `mcp__github__get_job_logs` (with `failed_only`) to read failures. Do **not** poll with Bash `sleep`; if you need to wait between checks, end the turn and use the `send_later` MCP tool to resume. (On a local terminal with `gh` available, `gh run watch <run-id> --exit-status` is the equivalent.)
+After pushing, wait for the Deploy run to complete. **Check what you have first.** On Claude Code on the web, `gh api` (REST only) has worked since November 2026: `gh api 'repos/pokle/glidecomp/actions/runs?branch=<branch>&per_page=5'` finds the run, `gh api repos/pokle/glidecomp/actions/runs/<id>/jobs` gives each job's conclusion, and porcelain such as `gh run watch` or `gh pr` is refused. Where neither works, use the GitHub MCP tools: `mcp__github__actions_list` (find the latest `deploy.yml` run for your branch/head SHA), then poll `mcp__github__actions_get` until it concludes, and `mcp__github__get_job_logs` (with `failed_only`) to read failures. Do **not** poll with Bash `sleep`; if you need to wait between checks, end the turn and use the `send_later` MCP tool to resume. (On a local terminal with `gh` available, `gh run watch <run-id> --exit-status` is the equivalent.)
 
 If CI fails:
 

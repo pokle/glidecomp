@@ -4,6 +4,135 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-11-22
+
+**`bun audit` opens and closes at 1 high, the same test-only
+`zod@3.25.76` as the last four weeks.** Node 22.23.5 is still the newest 22.x,
+so `.node-version` stays. Every bump is a patch or an additive minor, and no
+source change was needed. The one finding of note is that **astro 7.4.13 now
+declares `rolldown ~1.3.2` while vite 8.3.8 still wants `~1.2.18`**, so the
+tree carries two rolldown copies (see below). One fresh release, dompurify
+3.5.0, is held back because it was published seven hours before this run.
+
+### Security Vulnerabilities Fixed
+
+None in `bun audit`. Two bumps carry hardening that no advisory names:
+
+- **better-auth 1.7.27**: on edge runtimes (Workers), the request-state store
+  now uses the runtime's `AsyncLocalStorage`, so overlapping requests no
+  longer read each other's state (`@better-auth/core`); `/sign-in/anonymous`
+  checks the origin (we do not use the anonymous plugin).
+- **hono 4.13.20**: `hono/jwt` checks `typ` case-insensitively and can pin
+  it; a cookie value of a single `"` no longer parses to an empty string; the
+  proxy helper drops `transfer-encoding`/`keep-alive`.
+
+**Open, and not reachable:**
+
+| Advisory | Severity | Package | Why it stays |
+|----------|----------|---------|--------------|
+| [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) | high | `zod@3.25.76` | Unchanged: pinned exactly by `@cloudflare/vitest-pool-workers@0.19.1`, test runner only. zod 3 has no newer release than 3.25.76. It leaves with the wrangler cap. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **better-auth**, **@better-auth/api-key**, **@better-auth/mcp** | 1.7.25 | 1.7.27 | frontend, auth-api | Fixes. Besides the two above: an expired verification value is deleted when a lookup finds it (1.7.26, fixes a 1.7.24 regression where it could be returned for a minute); bodyless `POST`s (`/sign-out`, `/revoke-sessions`) no longer answer 415 on servers that pass an empty stream; JWKS: a valid access token is accepted against the cached key set when a refetch fails (`@better-auth/core`), and unpinned tokens prefer a key for `jwks.keyPairConfig.alg` (we set no `keyPairConfigs`, so nothing rotates); `requireMcpAuth` no longer caches keys from a custom `adapter.getJwks` (we have none). **No schema change:** `@better-auth/core`'s `dist/db/get-tables.mjs` is identical, and api-key's field declarations are identical. |
+| **hono** | 4.13.18 | 4.13.20 | frontend, airscore-api, auth-api, competition-api + root override | Dist diff (no changelog). Besides the above: `secureHeaders({ overwrite })` option (default unchanged), JSX/DOM-hook and Lambda/Bun adapter fixes, `hono/client`'s plain-object check now rejects class instances. We import `hono/cors`, `hono/body-limit`, `hono/factory` and `hono/client`; none changed in a way we call. |
+| **mapbox-gl** | 3.35.0 | 3.35.2 | root, frontend | Patches. **CSP:** counts of `WebAssembly.` (27), `new Function` (0) and `eval(` (0) across `dist/*.js` are identical to 3.35.0. |
+| **astro** | 7.4.12 | 7.4.13 | frontend (dev) | Fixes (dev toolbar audits, `<Font preload>` ranges, sparse-array props, faster start-up without `fonts`). Node floor unchanged at `>=22.23.4`. **Declares `rolldown ~1.3.2`** (was `~1.2.16`): see Lessons. |
+| react-router-dom | 7.18.5 | 7.18.6 | frontend | Patch. |
+| lucide-react | 1.73.0 | 1.77.0 | frontend | 153 names added, none removed (the `.d.ts` export lists compared). |
+| tailwind-merge | 3.7.0 | 3.7.1 | frontend | Patch. |
+| jose | 6.2.17 | 6.2.18 | competition-api (dev), shared | Fixes: JWKS fetch timeouts cover the body read, mixed-case `ago` suffixes, AKP keys need `alg`. |
+| @types/bun | 1.4.4 | 1.4.5 | root (dev) | Types for bun 1.4.5. The container and CI run bun 1.4.4; `setup-bun` has no `bun-version` pin, so CI takes the newest. |
+| `anthropics/claude-code-action` | v1.0.276 | v1.0.286 | `.github/workflows/claude.yml` | Re-pinned to the peeled commit `acfe7992…`. The other six actions are at the newest release in their major line. |
+
+### Code Changes Required
+
+None.
+
+### Overrides Added / Updated / Removed
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `hono` `^4.13.18` → `^4.13.20` | Updated | Aligned with the workspaces. |
+
+Every override matches exactly one package key in `bun.lock` (a grep per
+override). Three stale nested copies that `bun update` left behind
+(`@astrojs/telemetry/ci-info@4.4.0`,
+`@astrojs/vite-plugin-astro/@astrojs/compiler-rs@0.5.2`,
+`@astrojs/vite-plugin-astro/@astrojs/runtime@0.1.1`) were deleted from
+`bun.lock` by hand, because the hoisted versions satisfy their ranges; `bun
+install` re-resolved without them and `--frozen-lockfile` agrees.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **dompurify** | 3.4.18 | 3.5.0 | Published 2026-11-22 14:32 UTC, seven hours before this run. It is the sanitiser behind our Trusted Types policy (`src/trusted-types.ts`), and 3.5.0 is a minor that changes behaviour (removes custom elements inside SVG/MathML, restores the outer configuration after a nested `sanitize()`). Take it next cycle. |
+| **wrangler** | 4.116.0 | 4.166.0 | Still capped (17 cycles). `wrangler@4.166.0` depends on `miniflare 5.20261119.0-beta`; miniflare's `latest` is still 4.20260730.0. |
+| @cloudflare/vitest-pool-workers, **vitest** 5 | 0.19.1, 4.1.12 | 0.23.0, 5.1.1 | Paired with the wrangler cap (0.23.0 bundles an alpha miniflare). Also holds the last `zod@3.25.76`. |
+| **@astrojs/mdx** | 7.0.8 | 8.1.6 | Still vestigial. It wants its own PR to delete it. |
+| **three**, **@types/three** | 0.185.x | 0.187.0 | Pre-1.0 minor (two); focused PR. |
+| **katex** | 0.18.11 | 0.19.1 | Pre-1.0 minor; focused PR. |
+| kysely 0.29 | 0.28.20 | 0.29.9 | Pre-1.0 minor; `kysely-d1@0.4.0` (patched) is written against 0.28. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20261122.2 | Major. |
+| jsdom, concurrently 10, @types/node 26 | — | 31.0.1, 10.0.7, 26.6.6 | Majors. Reasons unchanged from 2026-09-27. |
+| Node | 22.23.5 | 22.23.5 | Already the newest 22.x (`nodejs.org/dist/index.json`). |
+
+### Verification
+
+All on Node 22.23.5 (the container's Node already matched `.node-version`).
+
+- `bun run typecheck:all` and `bun run --filter '@glidecomp/frontend' typecheck`:
+  clean.
+- `bun run test:all`: 1935 root/engine/airscore/dev-router/mcp-api, 1536
+  frontend, 249 auth-api (6 todo), 968 competition-api. 0 fail.
+- `bun run build`: clean, 10 Astro pages (astro 7.4.13 with the second
+  rolldown copy).
+- `bun run test:e2e:ssr`: **104/104 passed** in 1.5 minutes, run first and
+  from a fresh state.
+- `bun run test:e2e`: **520 passed, 1 skipped, 0 failed** in 18.8 minutes,
+  exit 0, on the first run (with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0`). No
+  wrangler `✘ [ERROR]` lines.
+- `bun audit`: 1 high before, 1 high after (the test-only `zod@3.25.76`).
+- `bun install` printed no `warn:` lines; both patches (`kysely-d1@0.4.0`,
+  `threebox-plugin@2.2.7`) still match the locked versions.
+- Root `package.json` `dependencies`: read first (the same three legitimate
+  entries). `git diff package.json` after the workspace `bun update`s showed
+  no change; the root edits are by hand (`mapbox-gl`, `@types/bun`, the
+  `hono` override).
+- GitHub Actions: `git ls-remote --tags` for all seven; one re-pin.
+- Map-library bump: CSP grep done (above).
+
+### Lessons / Notes for Future Sessions
+
+- **astro and vite can disagree about rolldown, and bun keeps both.** astro
+  7.4.13 asks for `rolldown ~1.3.2`; vite 8.3.8 (the newest vite) and
+  `@astrojs/vite-plugin-astro@0.1.3` ask for `~1.2.x`. bun hoists 1.3.3 and
+  nests 1.2.19 under each of the other two. astro's own dist never imports
+  rolldown: it hands plain plugin objects to vite through `rolldownOptions`,
+  so vite's copy does the bundling and the build is unaffected. Don't add a
+  `rolldown` override to unify them: a `~` range is a deliberate pin, and the
+  bindings are native. When vite moves to rolldown 1.3, the nested copies
+  should disappear on their own; check that they do.
+- **Look at a release's publish time, not only its changelog.** dompurify
+  3.5.0 was seven hours old at this run, and hono 4.13.20 fifteen. A
+  dependency that is hours old has had no time for anyone to notice a bad
+  publish. This cycle held the minor on the sanitiser and took the hono
+  patch after reading its whole dist diff. `npm view <pkg> time --json`
+  gives the dates. There is no `minimumReleaseAge` in `bunfig.toml`; that
+  would be a policy change, not part of this routine.
+- **`bun update` left three stale nested copies again** (astro's
+  `ci-info`, `compiler-rs` and `runtime`). Delete such keys from `bun.lock`
+  when the hoisted version satisfies the range, then `bun install` and
+  `bun install --frozen-lockfile`. Grep the lock diff for new `"<parent>/<pkg>"`
+  keys after every update.
+- **`gh api` works in this environment.** The routine said there is no `gh`
+  on Claude Code on the web; REST calls through `gh api` work now (porcelain
+  like `gh run watch` does not). The routine is updated.
+- **`cd <workspace> && bun update <pkgs>` behaved for a twelfth cycle.**
+
 ## 2026-11-15
 
 **`bun audit` opens and closes at 1 high, the same test-only
