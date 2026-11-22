@@ -5,7 +5,7 @@
  * It replaced a 145-row, eight-column Tabulator grid, and replaced it
  * everywhere rather than below a breakpoint: two editors meant two code paths
  * and a reviewer on a desktop seeing something the author never tested on a
- * phone (see the mobile-first rule in CLAUDE.md). The grid did not work at a
+ * phone (see the mobile-first rule in docs/interaction-guide.md). The grid did not work at a
  * phone's width at all — eight columns do not fit, so it scrolled sideways
  * inside a page that scrolled down, under a map pane that stuck, and the
  * frozen Code column hid whichever column sat next to it, which is how a

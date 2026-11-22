@@ -153,7 +153,7 @@ lives in [GitHub issues](https://github.com/pokle/glidecomp/issues)):
    than done: the react-aria-components migration
    ([#483](https://github.com/pokle/glidecomp/issues/483), finished 2026-07-27)
    rebuilt those pages on a kit that carries the ARIA wiring, and
-   [docs/accessibility-standard.md](accessibility-standard.md) now sets WCAG 2.2
+   [docs/interaction-guide.md](interaction-guide.md) (Part 3) now sets WCAG 2.2
    AA across the SPA, the static pages, the analysis map and the 3D replay, with
    a per-PR checklist. Measure against that standard rather than against this
    line*

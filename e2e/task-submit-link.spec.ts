@@ -1,6 +1,6 @@
 /**
  * Submit track on the TASK page is a link to the /submit page, not a dialog
- * (#820, the overlays rule in CLAUDE.md).
+ * (#820, the overlays rule in docs/interaction-guide.md).
  *
  * What this holds, on a phone and on a desktop:
  *  - the task page's "Submit your track" — the first row of the bar's ⋯ menu

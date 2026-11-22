@@ -93,7 +93,7 @@ export function SettingsForm({
    * fields ("a name has been typed").
    */
   canCommit?: boolean;
-  /** Save, Create, Add: see "Button wording" in CLAUDE.md. */
+  /** Save, Create, Add: see "Button wording" in docs/interaction-guide.md. */
   submitLabel?: string;
   pendingLabel?: string;
   /** The question Cancel and the unsaved-changes guard ask. */

@@ -8,7 +8,7 @@
  * is already known and that step collapses to a line. The task page used to
  * open this form in a dialog instead (SubmitTrackDialog, deleted in #820): a
  * dialog with text fields is the overlay the "no full-screen overlays" rule in
- * CLAUDE.md retired, and a page gets Back, reload and the keyboard for free.
+ * docs/interaction-guide.md retired, and a page gets Back, reload and the keyboard for free.
  *
  * A step that arrives prefilled shows its answer with a Change button rather
  * than disappearing: the commonest failure of a flow like this is filing a

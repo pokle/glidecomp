@@ -7,7 +7,7 @@
  * They go to the public page this one belongs to — the competition, the task,
  * the waypoints list, the scores — which is what there is for them to read,
  * signed in or not: the waypoints editor's pages already sent every visitor
- * to the read-only list (CLAUDE.md), and a pilot following a link should not
+ * to the read-only list (docs/interaction-guide.md), and a pilot following a link should not
  * be stopped at a sign-in form. A line says why they are there and not where
  * the link pointed, so an organiser signed in with the wrong account, or not
  * signed in at all, is not left guessing.

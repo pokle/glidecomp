@@ -6,7 +6,7 @@
  * functions/comp/[[path]].ts serves it a noindex shell.
  *
  * It was a dialog over the list until 2026-11, and a dialog with a text field
- * is the shape the overlays rule in CLAUDE.md retires: on an iPhone, the
+ * is the shape the overlays rule in docs/interaction-guide.md retires: on an iPhone, the
  * keyboard and a fixed layer over a scrolled page do not get along. As a page,
  * Back is the browser's Back and a reload keeps the reader where they were.
  *

@@ -39,7 +39,7 @@ import { useEffect, useState } from "react";
 
 /**
  * Target sizes, in CSS px, named for the iOS type styles they correspond to
- * (docs/accessibility-standard.md, and the HIG review in issue #704).
+ * (docs/interaction-guide.md 3.13, and the HIG review in issue #704).
  *
  * `body` is for a chart that is the point of the section it sits in — the
  * reader is looking AT it, and its labels should read like the prose around

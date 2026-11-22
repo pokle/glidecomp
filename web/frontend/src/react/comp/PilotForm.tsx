@@ -10,7 +10,7 @@
  * locks, history entries for Back, scroll resets) imitated something a page
  * does natively, so editing became a page: Back is the browser's Back, the
  * keyboard behaves as on any form, and the list keeps its scroll by the
- * router's restoration. See the overlays rule in CLAUDE.md.
+ * router's restoration. See the overlays rule in docs/interaction-guide.md.
  *
  * **Save saves this pilot, and only this pilot** (Add, on a new one). It is
  * in the page's bar, with Cancel on the other side (components/SettingsForm.tsx,

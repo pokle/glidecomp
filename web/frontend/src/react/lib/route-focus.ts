@@ -2,7 +2,7 @@
  * Where keyboard focus goes when the page changes (WCAG 2.4.3, and the
  * accessibility standard's "focus is never lost", §4.2).
  *
- * The overlays rule in CLAUDE.md made every full-screen sheet and dialog a
+ * The overlays rule in docs/interaction-guide.md made every full-screen sheet and dialog a
  * page. A dialog moved focus into itself and gave it back to its trigger on
  * close; a page does neither by itself. Pressing Expand, QR code or a
  * pilot's row unmounts the control that was pressed, so focus fell to

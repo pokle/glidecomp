@@ -579,7 +579,7 @@ bump (v28 — a payload roll, no behaviour change), so they shipped together.
   covered by the same SSR check. Anything measured from the DOM (the full-screen
   overlay's aspect) must stay behind the open state, as `MetricChartOverlay`
   already does.
-- Chart accessibility is measured against `docs/accessibility-standard.md` like
+- Chart accessibility is measured against `docs/interaction-guide.md` like
   the rest of the UI: caption states the reading in words, dots are focusable
   with a 24px target, and the section's existing item/value lines remain the full
   data equivalent.

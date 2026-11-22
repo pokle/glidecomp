@@ -307,7 +307,7 @@ test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
 });
 
 /**
- * Back is the browser's Back, on a dirty sub-page too (#817; CLAUDE.md, "No
+ * Back is the browser's Back, on a dirty sub-page too (#817; docs/interaction-guide.md, "No
  * full-screen overlays"). The guard asks before a link (above), a reload or a
  * tab close — never on Back. It used to: it held a history entry of its own
  * while the form was dirty so that Back could be answered with a question,

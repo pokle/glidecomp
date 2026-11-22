@@ -137,7 +137,7 @@ export default defineConfig({
     // touch, `isMobile`.
     //
     // Note it is NOT 320px. That is the floor the accessibility standard
-    // commits to (docs/accessibility-standard.md §3.2), not a device anyone
+    // commits to (docs/interaction-guide.md 3.3), not a device anyone
     // holds, and a suite pinned there would report every ordinary phone as
     // passing something it never ran. The tests that are specifically ABOUT
     // the floor still set 320 themselves, inside this project, so they get the

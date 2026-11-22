@@ -9,7 +9,7 @@
  * row, which made each row 180px of a phone.
  *
  * Its actions are ON the page, not in the bar's ⋯: they are what the page is
- * for (CLAUDE.md, "The page is for information, and every action goes in the
+ * for (docs/interaction-guide.md, "The page is for information, and every action goes in the
  * bar", and its exception for a page whose content IS its actions).
  *
  * A PAGE with its own URL, never an overlay. The pilot is named by the URL

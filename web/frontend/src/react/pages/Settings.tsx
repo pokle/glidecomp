@@ -766,7 +766,7 @@ function ApiKeysPage() {
 /**
  * /settings/api-keys/new — the form that makes a key: Create in the bar. A
  * page, not a dialog (#821): a dialog with a text field is the overlay
- * CLAUDE.md rules out, for the iPhone keyboard's sake. A kit form, so a
+ * docs/interaction-guide.md rules out, for the iPhone keyboard's sake. A kit form, so a
  * refusal lands under Label and never in a toast.
  *
  * The key is the result, and it takes the form's place on this page: there is

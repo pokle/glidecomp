@@ -107,7 +107,7 @@ redesign.
 5. **Hiding a table column means removing the `Column`, not CSS-hiding it** —
    RAC's grid semantics have to stay coherent for keyboard and screen-reader
    navigation.
-6. **Accessibility standard applies** (`docs/accessibility-standard.md`,
+6. **Accessibility standard applies** (`docs/interaction-guide.md`,
    per-PR checklist). New ⓘ triggers inherit `MetricExplanation`'s
    already-compliant shape.
 7. **Metric labels live in the engine registry**, shared with the CLI, and are
@@ -406,7 +406,7 @@ Per phase:
   paper.
 - **Re-measure** page height, word count and prose-paragraph count against the
   table at the top of this document; record the numbers in the PR.
-- Accessibility per-PR checklist from `docs/accessibility-standard.md`.
+- Accessibility per-PR checklist from `docs/interaction-guide.md`.
 
 Target for the task page after phases 1–5: **under 8,000 px** and **under 1,500
 words** in the default reading flow, with every one of today's 8,998 words still

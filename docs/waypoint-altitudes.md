@@ -94,7 +94,7 @@ The review is **two pages** (`pages/CompAltitudeReviewPage.tsx`, content in
 began as three extra columns in the Tabulator grid the page used to be, which
 is the right shape on a desktop and a poor one on a phone — see the editor
 section below for what that cost. It was then a full-screen sheet until #811,
-when the overlays rule in CLAUDE.md made each of its two views a page.
+when the overlays rule in the interaction guide (2.1) made each of its two views a page.
 
 ### What the review shows
 
@@ -189,7 +189,7 @@ and a pin that flies the page's map. Tapping the row opens that waypoint's page,
 `/comp/:id/waypoints/:n` (`pages/CompWaypointPage.tsx`): every field of that one
 waypoint, the radius chips, and Remove. Add waypoint (`/waypoints/new`) and the
 map at full size (`/waypoints/map`) are pages too. They were sheets and a dialog
-over the list until #811; the overlays rule in CLAUDE.md says why they are
+over the list until #811; the overlays rule in the interaction guide (2.1) says why they are
 pages now.
 
 What all of them edit is the waypoint FILE, saved as a set — so the file is a
@@ -215,7 +215,7 @@ to be looked at.
 
 It was a Tabulator grid until 2026-09-19, and Tabulator was the app's standard
 for an editable table. What settled it is that GlideComp is used from a hill
-with a phone — see the mobile-first rule in CLAUDE.md. The grid scrolled
+with a phone — see the mobile-first rule in the interaction guide (5.1). The grid scrolled
 sideways inside a page that scrolled down, under a map pane that stuck, with its
 frozen Code column hiding whichever column sat beside it. The grid is **gone**,
 not hidden behind a breakpoint: two editors would mean two code paths and a

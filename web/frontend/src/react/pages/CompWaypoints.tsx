@@ -18,7 +18,7 @@
  * used from a hill with a phone, and on a phone the grid scrolled sideways
  * inside a page that scrolled down, under a map pane that stuck, with its
  * frozen Code column hiding whichever column sat beside it. See the
- * mobile-first rule in CLAUDE.md. A visitor's six-column RAC Table went the
+ * mobile-first rule in docs/interaction-guide.md. A visitor's six-column RAC Table went the
  * same way and for the same reason, a little later: it sat in its own
  * sideways-scrolling region, so the shape the editor had stopped using
  * survived for the PILOT, who is the one actually on the hill.
@@ -26,7 +26,7 @@
  * **The editor is pages, over one draft** (#811). One waypoint, Add waypoint,
  * the map at full size and the altitude review were sheets and a dialog over
  * this page until 2026-11, and are pages of their own now (the overlays rule
- * in CLAUDE.md). What they edit is the waypoint FILE, saved as a set — so the
+ * in docs/interaction-guide.md). What they edit is the waypoint FILE, saved as a set — so the
  * file is a draft in this tab's storage (comp/waypoints-draft.ts,
  * comp/use-waypoints-editor.ts) that every one of them reads and writes, and
  * Save here sends it.

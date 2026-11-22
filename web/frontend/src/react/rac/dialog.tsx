@@ -16,7 +16,7 @@
  * #817 every dialog pushed an entry so that Back closed it instead; that
  * imitated navigation, raced every page that went Back straight after a
  * confirmation, and went with the full-screen sheets it was built for
- * (CLAUDE.md, "No full-screen overlays").
+ * (docs/interaction-guide.md, "No full-screen overlays").
  */
 import { useContext, useEffect } from "react";
 import {
@@ -69,7 +69,7 @@ function CloseOnNavigation() {
  * This is a centered panel and cannot be talked into being anything else —
  * the overlay's padding, background and centering below are not overridable.
  * There is no full-screen variant: anything that would fill the screen is a
- * page (CLAUDE.md, "No full-screen overlays").
+ * page (docs/interaction-guide.md, "No full-screen overlays").
  */
 export function Modal({
   className,

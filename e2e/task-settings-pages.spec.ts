@@ -642,7 +642,7 @@ test("a turnpoint's numbers show every digit on a phone", { tag: PHONE_ONLY }, a
 }) => {
   // Issue #803: with 44 px steppers inside a fixed w-36, a 4 km radius read
   // "4,00" — and nothing showed a digit was missing. 320 px is the reflow
-  // floor (docs/accessibility-standard.md §3.2), set here inside the
+  // floor (docs/interaction-guide.md 3.3), set here inside the
   // `mobile` project so the touch-sized steppers come with it.
   await page.setViewportSize({ width: 320, height: 812 });
   await devLogin(page, ADMIN_USER);

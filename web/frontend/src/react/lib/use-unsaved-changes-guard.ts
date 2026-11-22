@@ -18,7 +18,7 @@
  *
  * ## Back is not guarded
  *
- * Back is the browser's Back, and it leaves without asking (CLAUDE.md, "No
+ * Back is the browser's Back, and it leaves without asking (docs/interaction-guide.md, "No
  * full-screen overlays"; #817). Until 2026-11 this guard held a history entry
  * of its own while the form was dirty, so that a Back could be answered with
  * "Discard changes?" — and that entry had to share the stack with every sheet

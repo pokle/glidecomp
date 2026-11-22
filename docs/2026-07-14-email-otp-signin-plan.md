@@ -253,7 +253,7 @@ button are untouched.
 
 ### A11y & SSR
 
-- Per `docs/accessibility-standard.md`: labeled inputs, `aria-live="polite"`
+- Per `docs/interaction-guide.md` (Part 3): labeled inputs, `aria-live="polite"`
   status for "code sent"/error messages, focus moves to the code input on
   step change, resend button has an accessible countdown. Part of "done".
 - `/signin` is **not** one of the five SSR routes and must stay that way (an

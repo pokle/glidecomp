@@ -192,7 +192,7 @@ const shortDate = (date: string) =>
  * opens a pilot, then a report card, and comes Back twice. With the choice in
  * memory they came back to the first class and the first view; with it in the
  * query, Back returns the page as it was left — the rule every list page
- * keeps (CLAUDE.md, the overlays rule). Written with `replace`, so the views
+ * keeps (docs/interaction-guide.md, the overlays rule). Written with `replace`, so the views
  * do not pile up in the history, and read in the first render, which the
  * server renders with the query too (entry-server.tsx), so a shared link to
  * the Floater top 3 is that view in the server HTML.

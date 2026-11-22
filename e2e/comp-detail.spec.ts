@@ -281,7 +281,7 @@ test("scores page: a pilot's row opens their tasks, a task opens its report card
 
 test("scores page: no view scrolls sideways on a narrow phone", { tag: PHONE_ONLY }, async ({ page }) => {
   // 320px is the narrowest viewport the accessibility standard supports
-  // (docs/accessibility-standard.md §3.2). The tables these views were
+  // (docs/interaction-guide.md 3.3). The tables these views were
   // scrolled sideways inside the page; the lists fit it.
   await page.setViewportSize({ width: 320, height: 812 });
   await page.goto(`/comp/${compId}/scores`);

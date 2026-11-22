@@ -27,7 +27,7 @@
  * server-rendered and the chart must be in the first paint, not swapped in
  * after hydration. Geometry comes from charts/scale.ts.
  *
- * Accessibility (docs/accessibility-standard.md): the figure's caption states
+ * Accessibility (docs/interaction-guide.md 3.13): the figure's caption states
  * the reading in words and doubles as the accessible name, so nothing is
  * conveyed by the picture alone; every dot is focusable with an accessible
  * name; arrow keys walk the field in curve order; a tap, a click or a finger

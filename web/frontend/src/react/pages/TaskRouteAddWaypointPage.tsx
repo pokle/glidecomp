@@ -6,7 +6,7 @@
  * Reached by a tap on the route's map with Add from map armed. The tap and
  * what the map said about it ride in the URL (`?at=…&pick=…`,
  * comp/AddWaypointForm.tsx), so a reload comes back to the same point. It was
- * a dialog over the route editor until #812 (the overlays rule in CLAUDE.md
+ * a dialog over the route editor until #812 (the overlays rule in docs/interaction-guide.md
  * makes anything with fields a page); its fields are the ones the waypoints
  * editor's Add waypoint shows (pages/CompWaypointNewPage.tsx), from the same
  * component, so the two cannot fork.
