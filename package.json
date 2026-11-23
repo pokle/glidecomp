@@ -75,7 +75,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260702.1",
     "@playwright/test": "^1.65.1",
-    "@types/bun": "^1.4.4",
+    "@types/bun": "^1.4.5",
     "@types/node": "^25.9.9",
     "concurrently": "^9.2.5",
     "typescript": "^7.0.2",
@@ -86,7 +86,7 @@
   },
   "dependencies": {
     "@fontsource/atkinson-hyperlegible-next": "^5.3.0",
-    "mapbox-gl": "^3.35.0",
+    "mapbox-gl": "^3.35.2",
     "threebox-plugin": "^2.2.7"
   },
   "overrides": {
@@ -94,7 +94,7 @@
     "devalue": "^5.9.2",
     "esbuild": "^0.28.1",
     "form-data": "^4.0.6",
-    "hono": "^4.13.18",
+    "hono": "^4.13.20",
     "http-cache-semantics": "^4.3.0",
     "js-yaml": "^4.3.2",
     "kysely": "^0.28.20",
@@ -105,7 +105,7 @@
     "source-map-js": "^1.2.2",
     "smol-toml": "^1.9.0",
     "svgo": "^4.1.0",
-    "undici": "^7.30.1",
+    "undici": "^7.30.2",
     "vite": "^8.3.8",
     "ws": "^8.21.0"
   },
