@@ -368,6 +368,11 @@ WCAG 1.4.4, 1.4.10, 1.4.12.
 - A layout survives **200% zoom** and a **320px-wide viewport** with **no
   sideways scrolling of the page**. Wide content scrolls inside its own
   container.
+- **A tab strip fits its box where it can** (#804). Where it cannot (a
+  panel dragged narrow, a long class name), it scrolls sideways with its
+  scrollbar hidden, a fade at each end that still has tabs behind it, and
+  the selected tab scrolled into view. Never centre it: centred overflow
+  spills off both ends, and the first tab can no longer be reached.
 - Use relative units for text and spacing. Never disable pinch-zoom.
 - The comp page's print sections stay legible on paper: `#tasks` and
   `#activity` each start a fresh page. Scores are not a print target; the
@@ -835,6 +840,7 @@ A pattern is safe when one place in the code owns it or a test holds it.
 | Nothing fixed to an edge ([2.8](#28-the-keyboard-and-the-screens-edges)) | `rac/page-bar.tsx` | `e2e/page-bar.spec.ts` |
 | Colour as text ([3.2](#32-colour-and-contrast)) | The tokens in `react/globals.css` | `src/react/accent-text.test.ts` |
 | No sideways scroll ([3.3](#33-text-and-zoom)) | Each page | The `mobile` Playwright project, for the pages in `e2e/fixtures/mobile.ts` |
+| A tab strip that does not fit ([3.3](#33-text-and-zoom)) | `rac/tabs.tsx`; on the analysis page, `analysis/tab-overflow.ts` | `e2e/analysis-bar.spec.ts` for the analysis page. None for the kit's fades |
 | 44px in the bar ([3.9](#39-targets)) | `rac/page-bar.tsx` | `e2e/page-bar.spec.ts`, `e2e/replay-bar.spec.ts`, `e2e/analysis-bar.spec.ts` |
 | 44px in the kit on a coarse pointer ([3.9](#39-targets)) | The kit components | Partly: the specs that measure a target. No test finds a new control that is too small |
 | Chart labels at 11px ([3.13](#313-charts-maps-and-the-3d-scene)) | `charts/use-chart-box.ts`, `charts/use-chart-label-size.ts` | `e2e/analysis-charts.spec.ts`, `e2e/task-weather-charts.spec.ts`, `e2e/data-cleaning-charts.spec.ts` |
