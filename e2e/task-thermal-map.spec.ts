@@ -131,6 +131,17 @@ function urlState(page: Page): { path: string; thermal: string | null; map: stri
  * control exists in. Returns the pane's heading, "Thermal at HH:MM".
  */
 async function openSectionWithMap(page: Page): Promise<string> {
+  const title = await openThermal(page);
+  const mapToggle = thermalsCard(page).getByRole("button", { name: "Map", exact: true });
+  await mapToggle.click();
+  await expect(mapToggle).toHaveAttribute("aria-pressed", "true");
+  // URL state, so Back to here can return it as it was left.
+  await expect.poll(() => urlState(page).map).toBe("1");
+  return title;
+}
+
+/** The section, on a thermal. Returns the pane's heading, "Thermal at HH:MM". */
+async function openThermal(page: Page): Promise<string> {
   await page.goto(sectionPath, { waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: THERMALS_HEADING }).waitFor();
   const census = page.getByRole("grid", { name: "Reconstructed thermals" });
@@ -150,12 +161,6 @@ async function openSectionWithMap(page: Page): Promise<string> {
   const heading = (await thermalPane(page).locator("h3").first().innerText()).trim();
   const title = heading.split(" — ")[0];
   expect(title).toMatch(/^Thermal at /);
-
-  const mapToggle = thermalsCard(page).getByRole("button", { name: "Map", exact: true });
-  await mapToggle.click();
-  await expect(mapToggle).toHaveAttribute("aria-pressed", "true");
-  // URL state, so Back to here can return it as it was left.
-  await expect.poll(() => urlState(page).map).toBe("1");
   return title;
 }
 
@@ -170,6 +175,34 @@ async function expectScrollRestoredTo(page: Page, y: number) {
   await page.waitForTimeout(1000);
   expect(await offBy()).toBeLessThanOrEqual(3);
 }
+
+// 375 px is the narrowest current iPhone. Both of a thermal's tables had
+// more than three columns and were drawn as tables with a forced minimum
+// width: the pilots' climbs at 448 px and the height bands at 790 px, in a
+// 327 px box, so Max and most of the bands were off screen. More than three
+// columns is a list of records (interaction guide 5.7), which fits any width.
+test("a thermal's pilots and height bands fit a 375 px phone", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await openThermal(page);
+  const pane = thermalPane(page);
+  for (const [summary, name] of [
+    ["Pilots in this thermal (climb rates)", "Pilots in this thermal, climb rates"],
+    ["Band table (exact numbers)", "Thermal bands, exact numbers"],
+  ] as const) {
+    await pane.locator("summary", { hasText: summary }).click();
+    const list = pane.getByRole("list", { name });
+    await expect(list.getByRole("listitem").first()).toBeVisible();
+    const fit = await list.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const widest = Math.max(
+        ...Array.from(el.querySelectorAll("*")).map((c) => c.getBoundingClientRect().right),
+      );
+      return { overflow: Math.max(0, Math.ceil(widest - box.right)), scroll: el.scrollWidth - el.clientWidth };
+    });
+    expect(fit, `${name} must fit its box`).toEqual({ overflow: 0, scroll: 0 });
+  }
+  await expectNoSidewaysScroll(page, "the thermal's detail");
+});
 
 test("maximise is a link to the thermal map page: reload keeps it, Back returns", async ({
   page,
