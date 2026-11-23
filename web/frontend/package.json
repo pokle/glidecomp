@@ -28,8 +28,8 @@
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
-    "vitest": "^4.1.12",
-    "wrangler": "4.116.0"
+    "vitest": "^5.1.1",
+    "wrangler": "4.166.0"
   },
   "dependencies": {
     "@glidecomp/engine": "workspace:*",
