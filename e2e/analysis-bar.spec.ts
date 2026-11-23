@@ -17,7 +17,10 @@
  * - an anonymous reader is not offered the rows that would send them to sign
  *   in (the samples, My Flights in ⋯);
  * - every control in the bar and its menus is 44 px, and on a coarse
- *   pointer so is every control the map and the panel show (#860 §1).
+ *   pointer so is every control the map and the panel show (#860 §1);
+ * - the panel's tab row fits the panel at its default width, and a panel
+ *   dragged narrower scrolls it, with a fade at the end that hides tabs
+ *   (#804).
  *
  * Signed out throughout: the report card's link is the one URL shape the
  * page opens for anonymously (`isPublicCompLink`), and it is the way most
@@ -87,6 +90,25 @@ async function openFromReportCard(page: Page): Promise<void> {
   await expect(page.locator("#bar-back")).toHaveAttribute("aria-label", `Back to ${pilotName}`, {
     timeout: 60_000,
   });
+}
+
+/**
+ * The panel slides open (a width transition): measure what it holds once it
+ * has stopped, or every row reads as a sliver. While it is still opening, each
+ * resize also scrolls the chosen tab back into view (analysis/tab-overflow.ts),
+ * which would undo a scroll made too early.
+ */
+async function panelSettled(page: Page): Promise<void> {
+  const sidebar = page.locator("#waypoint-sidebar");
+  let last = -1;
+  await expect
+    .poll(async () => {
+      const w = (await sidebar.boundingBox())?.width ?? 0;
+      const settled = w > 100 && w === last;
+      last = w;
+      return settled;
+    }, { intervals: [200] })
+    .toBe(true);
 }
 
 test.describe("the analysis page's bar", () => {
@@ -218,18 +240,7 @@ test.describe("the analysis page's bar", () => {
     await page.getByRole("button", { name: "Lists", exact: true }).click();
     await expect(page.locator("#waypoint-sidebar")).toHaveAttribute("aria-hidden", "false");
     await expect(page.locator(".mapboxgl-ctrl-zoom-in")).toBeVisible({ timeout: 30_000 });
-    // The panel slides open (a width transition): measure what it holds once it
-    // has stopped, or every row reads as a sliver.
-    const sidebar = page.locator("#waypoint-sidebar");
-    let last = -1;
-    await expect
-      .poll(async () => {
-        const w = (await sidebar.boundingBox())?.width ?? 0;
-        const settled = w > 100 && w === last;
-        last = w;
-        return settled;
-      }, { intervals: [200] })
-      .toBe(true);
+    await panelSettled(page);
     // Measured in one call: one round trip per control is slow on a busy map.
     const small = await page.evaluate((min) => {
       const out: string[] = [];
@@ -251,5 +262,56 @@ test.describe("the analysis page's bar", () => {
       return out;
     }, TARGET);
     expect(small, "controls under 44 px on a coarse pointer").toEqual([]);
+
+    // The tab row fits the panel at its default width (#804: "Sinks" ran past
+    // the screen's edge), so nothing is behind either end and every tab is
+    // whole on screen.
+    const row = page.locator("#tab-row-single");
+    const fit = await row.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+    expect(fit.scroll, "the tab row must not scroll sideways").toBeLessThanOrEqual(fit.client + 1);
+    const viewport = page.viewportSize()!.width;
+    for (const name of ["Task", "Score", "Events", "Glides", "Climbs", "Sinks"]) {
+      const box = (await row.getByRole("tab", { name, exact: true }).boundingBox())!;
+      expect(box.x, `${name} starts on screen`).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, `${name} ends on screen`).toBeLessThanOrEqual(viewport + 0.5);
+    }
+    await expect(page.locator("#tab-rows")).not.toHaveAttribute("data-fade-end");
+  });
+
+  // Dragged narrower than its tabs, the row scrolls, and says so (#804): a fade
+  // at the end with tabs behind it, and the chosen tab is the one on screen.
+  test("a panel narrower than its tabs scrolls them, with a fade at the hidden end", async ({ page, context }) => {
+    await installMapbox(context);
+    await context.addInitScript(() => {
+      localStorage.setItem("glidecomp-sidebar-width", "200");
+      localStorage.setItem("glidecomp-active-tab", "sinks");
+    });
+    await openFromReportCard(page);
+    const sidebar = page.locator("#waypoint-sidebar");
+    if ((await sidebar.getAttribute("aria-hidden")) !== "false") {
+      await page.getByRole("button", { name: "Lists", exact: true }).click();
+    }
+    await expect(sidebar).toHaveAttribute("aria-hidden", "false");
+    await panelSettled(page);
+    const row = page.locator("#tab-row-single");
+    const rows = page.locator("#tab-rows");
+
+    // The last tab was the one chosen, so the row has scrolled to it.
+    const inView = async (name: string) =>
+      row.evaluate((el, name) => {
+        const tab = [...el.querySelectorAll("[role=tab]")].find((t) => t.textContent === name)!;
+        const r = el.getBoundingClientRect();
+        const t = tab.getBoundingClientRect();
+        return t.left >= r.left - 0.5 && t.right <= r.right + 0.5;
+      }, name);
+    await expect.poll(() => inView("Sinks")).toBe(true);
+    await expect(rows).toHaveAttribute("data-fade-start", "");
+    await expect(rows).not.toHaveAttribute("data-fade-end");
+
+    // Back at the start, the fade moves to the other end.
+    await row.evaluate((el) => (el.scrollLeft = 0));
+    await expect(rows).toHaveAttribute("data-fade-end", "");
+    await expect(rows).not.toHaveAttribute("data-fade-start");
+    expect(await inView("Task")).toBe(true);
   });
 });

@@ -145,15 +145,42 @@
     @apply text-danger bg-card;
   }
 
-  /* Tabs (panel tab strip; switching behavior is the page's own JS) */
+  /* Tabs (panel tab strip; switching behavior is the page's own JS).
+     The six single-track tabs fit the panel's default 320 px (issue #804:
+     "Sinks" ran 6 px past it at px-2, the kit's px-1.5 gives them room). The
+     panel can be dragged narrower, so the row scrolls sideways there, with
+     the scrollbar hidden as on the kit's strip and a fade at whichever end
+     still has tabs behind it (`data-fade-*`, set by analysis/tab-overflow.ts).
+     justify-start, not justify-center: centred overflow spills off BOTH ends,
+     and the first tab is then behind a scroll origin nothing can reach. */
   .tabs {
-    @apply flex flex-col gap-2;
+    @apply relative flex flex-col gap-2;
+
+    &::before,
+    &::after {
+      @apply pointer-events-none absolute inset-y-0 z-10 hidden w-6 content-[''];
+    }
+
+    &::before {
+      @apply left-0 rounded-l-lg bg-linear-to-r from-muted to-muted/0;
+    }
+
+    &::after {
+      @apply right-0 rounded-r-lg bg-linear-to-l from-muted to-muted/0;
+    }
+
+    &[data-fade-start]::before,
+    &[data-fade-end]::after {
+      @apply block;
+    }
 
     [role='tablist'] {
-      @apply bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px] pointer-coarse:h-[3.25rem];
+      @apply bg-muted text-muted-foreground flex h-9 w-full items-center justify-start overflow-x-auto overscroll-x-contain rounded-lg p-[3px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pointer-coarse:h-[3.25rem];
 
+      /* grow, never shrink: a tab is as wide as its label, and 44 px at the
+         least (the touch floor; "Task" is 43 px at px-1.5). */
       [role='tab'] {
-        @apply focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring text-foreground inline-flex h-[calc(100%_-_1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 cursor-pointer;
+        @apply focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring text-foreground inline-flex h-[calc(100%_-_1px)] min-w-11 shrink-0 grow basis-auto items-center justify-center gap-1.5 rounded-md border border-transparent px-1.5 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 cursor-pointer;
 
         &[aria-selected='true'] {
           @apply bg-background shadow-sm;

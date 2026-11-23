@@ -13,6 +13,7 @@ import { config } from './config';
 import { createTaskEditor, type TaskEditor } from './task-editor';
 import { html, nothing, renderInto, type TemplateResult } from '../render-html';
 import { restorePanelTab, type PanelTabType } from './panel-tab';
+import { revealTab, watchTabOverflow } from './tab-overflow';
 
 export type { PanelTabType };
 
@@ -290,7 +291,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     </div>
 
     <!-- Unified tab row -->
-    <div class="tabs w-full border-b border-border">
+    <div class="tabs w-full border-b border-border" id="tab-rows">
       <nav role="tablist" class="w-full" id="tab-row-single">
         <button type="button" role="tab" id="tab-task" aria-selected="false">Task</button>
         <button type="button" role="tab" id="tab-score" aria-selected="false">Score</button>
@@ -376,6 +377,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   const compScorePanelContent = panel.querySelector('#comp-score-panel-content') as HTMLElement;
   const tabRowSingle = panel.querySelector('#tab-row-single') as HTMLElement;
   const tabRowMulti = panel.querySelector('#tab-row-multi') as HTMLElement;
+  // Narrower than its tabs, a row scrolls, with a fade at the end that hides some.
+  watchTabOverflow(panel.querySelector('#tab-rows') as HTMLElement, [tabRowSingle, tabRowMulti]);
 
   const tabTask = panel.querySelector('#tab-task') as HTMLButtonElement;
   const tabScore = panel.querySelector('#tab-score') as HTMLButtonElement;
@@ -610,6 +613,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       'comp-score': tabCompScore,
     };
     tabMap[tab]?.setAttribute('aria-selected', 'true');
+    const selectedTab = tabMap[tab];
+    if (selectedTab) revealTab(selectedTab);
 
     // Hide all content panels first
     trackPanelContent.classList.add('hidden');
