@@ -92,6 +92,25 @@ async function openFromReportCard(page: Page): Promise<void> {
   });
 }
 
+/**
+ * The panel slides open (a width transition): measure what it holds once it
+ * has stopped, or every row reads as a sliver. While it is still opening, each
+ * resize also scrolls the chosen tab back into view (analysis/tab-overflow.ts),
+ * which would undo a scroll made too early.
+ */
+async function panelSettled(page: Page): Promise<void> {
+  const sidebar = page.locator("#waypoint-sidebar");
+  let last = -1;
+  await expect
+    .poll(async () => {
+      const w = (await sidebar.boundingBox())?.width ?? 0;
+      const settled = w > 100 && w === last;
+      last = w;
+      return settled;
+    }, { intervals: [200] })
+    .toBe(true);
+}
+
 test.describe("the analysis page's bar", () => {
   test("Back leads to the report card, and the title menu holds the trail", async ({ page, context }) => {
     await installMapbox(context);
@@ -221,18 +240,7 @@ test.describe("the analysis page's bar", () => {
     await page.getByRole("button", { name: "Lists", exact: true }).click();
     await expect(page.locator("#waypoint-sidebar")).toHaveAttribute("aria-hidden", "false");
     await expect(page.locator(".mapboxgl-ctrl-zoom-in")).toBeVisible({ timeout: 30_000 });
-    // The panel slides open (a width transition): measure what it holds once it
-    // has stopped, or every row reads as a sliver.
-    const sidebar = page.locator("#waypoint-sidebar");
-    let last = -1;
-    await expect
-      .poll(async () => {
-        const w = (await sidebar.boundingBox())?.width ?? 0;
-        const settled = w > 100 && w === last;
-        last = w;
-        return settled;
-      }, { intervals: [200] })
-      .toBe(true);
+    await panelSettled(page);
     // Measured in one call: one round trip per control is slow on a busy map.
     const small = await page.evaluate((min) => {
       const out: string[] = [];
@@ -284,6 +292,7 @@ test.describe("the analysis page's bar", () => {
       await page.getByRole("button", { name: "Lists", exact: true }).click();
     }
     await expect(sidebar).toHaveAttribute("aria-hidden", "false");
+    await panelSettled(page);
     const row = page.locator("#tab-row-single");
     const rows = page.locator("#tab-rows");
 
