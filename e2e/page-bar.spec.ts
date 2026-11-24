@@ -269,4 +269,61 @@ test.describe("the page bar", () => {
     await bar(page).getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   });
+
+  // docs/interaction-guide.md 2.7: a page does not move focus by itself, as a
+  // dialog did, so the Shell does it (lib/route-focus.ts).
+  test("focus goes to the page's heading on arrival, and back to the link on Back", async ({
+    page,
+  }) => {
+    await page.goto(`/comp/${compId}/settings`);
+    const general = page.getByRole("main").getByRole("link", { name: /^General/ });
+    await general.click();
+    await expect(page.getByRole("heading", { level: 1, name: "General" })).toBeFocused();
+
+    await page.goBack();
+    await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+    await expect(general).toBeFocused();
+  });
+
+  // docs/interaction-guide.md 2.3: the page a delete was made from names
+  // nothing any more, so it must not stay in the history.
+  test("a delete replaces its page: Back does not return to the settings of what is gone", async ({
+    page,
+  }) => {
+    const made = await api.post("/api/comp", {
+      data: { name: e2eCompName("Page bar delete"), category: "hg", pilot_classes: ["open"] },
+    });
+    expect(made.ok(), await made.text()).toBe(true);
+    const doomed = ((await made.json()) as { comp_id: string }).comp_id;
+    const task = await api.post(`/api/comp/${doomed}/task`, {
+      data: { name: "Doomed task", task_date: "2026-01-05", pilot_classes: ["open"] },
+    });
+    expect(task.ok(), await task.text()).toBe(true);
+    const taskId = ((await task.json()) as { task_id: string }).task_id;
+    const dialog = page.getByRole("alertdialog").or(page.getByRole("dialog"));
+
+    // The task, from its own settings page, reached through the app.
+    await page.goto(`/comp/${doomed}/task/${taskId}`);
+    await expect(page.getByRole("heading", { level: 1, name: "Doomed task" })).toBeVisible();
+    await bar(page).getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("menuitem", { name: "Task settings" }).click();
+    await expect(page).toHaveURL(/\/task\/[^/]+\/settings$/);
+    await page.getByRole("button", { name: "Delete task" }).click();
+    await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page).not.toHaveURL(/\/settings$/);
+    await expect(page).not.toHaveURL(/\/task\//);
+    await page.goBack();
+    await expect(page).not.toHaveURL(/\/settings$/);
+
+    // The competition, from its settings index.
+    await page.goto(`/comp/${doomed}`);
+    await bar(page).getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
+    await expect(page).toHaveURL(/\/settings$/);
+    await page.getByRole("button", { name: "Delete competition" }).click();
+    await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page).toHaveURL(/\/comp$/);
+    await page.goBack();
+    await expect(page).not.toHaveURL(/\/settings$/);
+  });
 });
