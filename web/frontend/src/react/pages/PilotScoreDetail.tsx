@@ -160,7 +160,9 @@ async function loadDetail(
 
   if (isMissing(compRes.status) || isMissing(taskRes.status))
     throw new DetailNotFoundError("Task not found");
-  if (!compRes.ok || !taskRes.ok) throw new Error("Task not found");
+  // Not a 404: the task may well exist, and we failed to load it.
+  if (!compRes.ok || !taskRes.ok)
+    throw new Error("This task could not be loaded. Try again in a moment.");
   if (!scoreRes.ok) throw new Error("Scores are not available for this task");
   // A missing analysis means this pilot has no result on this task — either the
   // id is dead or they never flew it. Both are "no such page", not a failure.

@@ -752,6 +752,11 @@ test("Who flew like me?: the results are one dot a pilot, and a row opens the co
   await expect(page.getByText("← flew the opposite way", { exact: true })).toHaveCount(1);
   await expect(page.getByText("flew alike →", { exact: true })).toHaveCount(1);
 
+  // What made a pair alike is said in words, never in the engine's table
+  // codes: "Alike: glide speed between climbs.", not "+ GlideSpd".
+  await expect(list).toContainText(/Alike: |Opposite: /);
+  await expect(list).not.toContainText(/[+−] [A-Z][A-Za-z/%]+,/);
+
   // One meter a row. Its value text gives the similarity and what it has to
   // beat, and the tick for that level is on the row's own track.
   const row = rows.first();

@@ -137,7 +137,7 @@ export function Competitions() {
             <SearchField
               variant="floating"
               aria-label="Search competitions, tasks, pilots and turnpoints"
-              placeholder="Search comps, tasks, pilots, turnpoints…"
+              placeholder="Search comps, tasks, pilots…"
               value={query}
               onChange={handleQueryChange}
             />

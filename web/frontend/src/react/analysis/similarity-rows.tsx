@@ -50,6 +50,39 @@ export function pilotBadge(name: string): string {
   return (name.trim()[0] ?? "?").toUpperCase();
 }
 
+/** A behaviour's name inside a sentence: "Glide speed…" reads "glide speed…",
+ *  and a name that opens with an abbreviation ("L/D", "ESS") is left alone. */
+function inSentence(label: string): string {
+  return /^[A-Z][a-z]/.test(label) ? label[0].toLowerCase() + label.slice(1) : label;
+}
+
+/**
+ * The line under a pilot's track in "Who flew like me?": the one behaviour
+ * that most made the pair alike, and the one on which they most differed, in
+ * words. It printed the engine's table codes with a sign ("+ GlideSpd,
+ * − InGaggle%") until 2026-11; three full names are three lines on a phone,
+ * and the row opens the pair's page, which lists every behaviour.
+ *
+ * A positive contribution is two pilots on the same side of the field's
+ * average on that behaviour; a negative one is one on each side.
+ */
+export function alikeAndOpposite(
+  contributions: Pick<PairContribution, "label" | "contribution">[]
+): string {
+  let alike: (typeof contributions)[number] | undefined;
+  let opposite: (typeof contributions)[number] | undefined;
+  for (const c of contributions) {
+    if (c.contribution > 0 && (!alike || c.contribution > alike.contribution)) alike = c;
+    if (c.contribution < 0 && (!opposite || c.contribution < opposite.contribution)) opposite = c;
+  }
+  return [
+    alike ? `Alike: ${inSentence(alike.label)}.` : null,
+    opposite ? `Opposite: ${inSentence(opposite.label)}.` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 /** A pilot's given name, for the short line under a track. */
 export function shortName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;

@@ -63,6 +63,7 @@ import { MetricDistribution } from "../analysis/charts/MetricDistribution";
 import { NotFound } from "../components/NotFound";
 import {
   PairAxis,
+  alikeAndOpposite,
   PairBehaviourRow,
   formatSimilarity,
   similarityOnTrack,
@@ -606,13 +607,7 @@ export function TaskPilotSimilarity() {
                           />
                           <p className="mt-1 text-sm text-muted-foreground">
                             {n.aboveNoiseFloor
-                              ? n.contributions
-                                  .slice(0, 3)
-                                  .map(
-                                    (c) =>
-                                      `${c.contribution >= 0 ? "+" : "−"} ${c.shortLabel ?? c.label}`
-                                  )
-                                  .join(", ")
+                              ? alikeAndOpposite(n.contributions)
                               : `too little in common to tell (needs ${n.noiseFloor.toFixed(2)})`}
                           </p>
                         </ReadingRow>
