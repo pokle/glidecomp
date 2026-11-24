@@ -229,7 +229,7 @@ test.describe("a file with a class the comp does not have", () => {
     await expect(h1(page, "Import other-comp.csv")).toBeVisible();
     await expect(page.getByText("This file can’t be imported yet.")).toBeVisible();
     // Nothing to apply while anything blocks: Apply is in the bar, not live.
-    await expect(page.getByRole("button", { name: "Apply" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Import" })).toBeDisabled();
   }
 
   async function classesOf(id: string): Promise<Record<string, string>> {
@@ -273,7 +273,7 @@ test.describe("a file with a class the comp does not have", () => {
       await page.reload();
       await expect(moved).toBeVisible({ timeout: 20_000 });
 
-      await page.getByRole("button", { name: "Apply" }).click();
+      await page.getByRole("button", { name: "Import" }).click();
       await expect(page.getByRole("grid", { name: "Pilots" })).toBeVisible({ timeout: 20_000 });
       expect(await classesOf(id)).toEqual({
         "Ada Floater": "sport",
@@ -290,12 +290,12 @@ test.describe("a file with a class the comp does not have", () => {
     try {
       await openBlockedReview(page, id);
       await page.getByRole("button", { name: 'Add class "floater"' }).click();
-      await expect(page.getByRole("button", { name: "Apply" })).toBeEnabled({ timeout: 20_000 });
+      await expect(page.getByRole("button", { name: "Import" })).toBeEnabled({ timeout: 20_000 });
       await expect(page.getByText("This file can’t be imported yet.")).toHaveCount(0);
       const comp = (await (await api.get(`/api/comp/${id}`)).json()) as { pilot_classes: string[] };
       expect(comp.pilot_classes).toEqual(["open", "floater"]);
 
-      await page.getByRole("button", { name: "Apply" }).click();
+      await page.getByRole("button", { name: "Import" }).click();
       await expect(page.getByRole("grid", { name: "Pilots" })).toBeVisible({ timeout: 20_000 });
       expect(await classesOf(id)).toEqual({
         "Ada Floater": "floater",

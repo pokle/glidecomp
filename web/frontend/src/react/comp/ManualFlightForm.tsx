@@ -13,11 +13,11 @@
  * (rac/form.tsx) with TextField/NumberField/ChoiceList. The landing point is
  * the shared CoordsField — Latitude and Longitude, either of which takes a
  * pasted "lat, lon" — and a malformed half shows inline as it is typed.
- * Record flight with no landing point, and every refusal the server gives,
+ * Save with no landing point, and every refusal the server gives,
  * lands under the field it is about — the server's `landing_lat` under
  * Latitude, `landing_lon` under Longitude — or in the banner at the top of
- * the column when it is about no field. Cancel and Record flight are in the
- * bar (issue #863); Record flight is live once there is a landing point, or,
+ * the column when it is about no field. Cancel and Save are in the
+ * bar (issue #863); Save is live once there is a landing point, or,
  * for a flight already recorded, a change to it. Never a toast: toasts are for "recorded".
  *
  * Pre-scoped to one pilot (unlike SubmitTrackForm, which picks the pilot
@@ -185,7 +185,7 @@ export function ManualFlightForm({
       dirty={dirty}
       // A first record needs a landing point; an edit needs a change.
       canCommit={existing ? dirty : coords.trim() !== ""}
-      submitLabel="Record flight"
+      submitLabel="Save"
       validate={() => coordsProblems("landing", coords, true)}
       onSubmit={save}
       onSuccess={() => {

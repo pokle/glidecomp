@@ -270,9 +270,9 @@ export function ImportReview({
             // menu prints it in full.
             title={`Import ${plan.fileName}`}
             onCancel={onCancel}
-            commit="Apply"
+            commit="Import"
             canCommit={canApply}
-            pendingLabel="Applying"
+            pendingLabel="Importing"
           />
         }
         className="flex flex-col gap-6"

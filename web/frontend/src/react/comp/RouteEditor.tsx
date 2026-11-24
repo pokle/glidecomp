@@ -50,11 +50,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowRightLeftIcon,
   ArrowUpDownIcon,
   CopyIcon,
   DownloadIcon,
   FileSpreadsheetIcon,
+  FilesIcon,
   GlobeIcon,
   ImportIcon,
   KeyboardIcon,
@@ -481,7 +481,7 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
     {
       // Import and export the whole route: rare, so behind one row.
       id: "transfer",
-      icon: ArrowRightLeftIcon,
+      icon: FilesIcon,
       label: "Import or export",
       children: [
         {

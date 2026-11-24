@@ -154,7 +154,8 @@ test("the report card's map button, time slider and flight steps", { tag: PHONE_
   await page.goto(`/comp/${compId}/task/${taskId}/pilot/${pilotId}`, {
     waitUntil: "domcontentloaded",
   });
-  const expand = page.getByRole("button", { name: "Expand map" });
+  // A link: the map at full size is a page of its own (#870).
+  const expand = page.getByRole("link", { name: "Expand map" });
   await expand.waitFor({ timeout: 60_000 });
   await expectTarget(expand, "the map's expand button");
 

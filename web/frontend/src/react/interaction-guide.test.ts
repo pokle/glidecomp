@@ -48,18 +48,16 @@ function code(src: string): string {
 const COMMIT_WORDS = ["Save", "Create", "Add", "Done"];
 
 /**
- * Commit buttons that say something else. Each is older than the rule
- * (2026-11-15) or names an act the four words do not cover, and the owner has
- * not ruled on it. Do not add to this list without asking: wording is the
- * owner's call (CLAUDE.md, "Propose UI wording before you change it").
+ * A commit that sends, imports or fetches is named for that act (the guide's
+ * 5.6, owner's decision 2026-11-24). These are the four, and where each is.
+ * A fifth is a new word for the owner to rule on: wording is the owner's call
+ * (CLAUDE.md, "Propose UI wording before you change it").
  */
 const OTHER_COMMIT_WORDS: Record<string, string> = {
   Submit: "Submit track: the track goes to the organiser; nothing of the reader's is saved",
-  "Record flight": "A manual flight, on the organiser's page for one pilot",
-  Apply: "Roster import: applies the rows read from a CSV",
-  Fill: "Roster: fills ranking points from the CIVL rankings",
-  Copy: "Copy pilots from another competition",
-  Load: "Loads a route from XContest into the draft; its page saves it later",
+  Import: "Roster import: brings in the rows read from a CSV",
+  Fill: "Roster: fills pilots' details from the CIVL rankings, as the row that opens it says",
+  Load: "Fetches a route from XContest into the draft, and can fail; its page saves it later",
 };
 
 /** Every commit button's label, as the source spells it. */
@@ -204,7 +202,7 @@ Object.assign(ICON_MEANINGS, {
   ClipboardPenIcon: { means: "A manual flight", labels: ["Record a manual flight"] },
   KeyboardIcon: { means: "Type the route as one line", labels: ["Quick entry"] },
   ArrowUpDownIcon: { means: "Reorder a list", labels: ["Reorder turnpoints"] },
-  ArrowRightLeftIcon: { means: "The import and export rows, behind one row", labels: ["Import or export"] },
+  FilesIcon: { means: "The import and export rows, behind one row", labels: ["Import or export"] },
   ArrowLeftRightIcon: {
     means: "Swap two fields of a waypoint file",
     labels: ['`Swap code & name: ${swap ? "on" : "off"}`'],
