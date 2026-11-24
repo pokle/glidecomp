@@ -384,7 +384,10 @@ These are the standing imperatives. Each links to the reference that explains it
     [docs/drafts.md](docs/drafts.md)), a typed altitude (`AltitudeField` in
     `comp/fields.tsx`). There is no sheet component and no grid library;
     `src/react/no-overlays.test.ts` fails if the sheets come back, and
-    nothing yet fails on a grid.
+    `src/react/interaction-guide.test.ts` fails on a grid library. That
+    second test also holds the words on a commit button, what each ⋯ icon
+    means, the trail, a row's body and the buttons a page draws for itself:
+    when it fails, the list it carries is the record to change on purpose.
   - **Every form submits through the kit form, `rac/form.tsx`** (`Form`, on
     a page). What the reader sees when a save is refused is the guide's
     (5.6); how to build on it is here. The server's half is

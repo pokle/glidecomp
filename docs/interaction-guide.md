@@ -696,6 +696,11 @@ thing everywhere.
 | `Undo2Icon` | Discard changes |
 | `RotateCcwIcon` | Reset to defaults |
 
+- The table above is the part a reader needs. Every icon, with each row that
+  carries it, is in `src/react/interaction-guide.test.ts`, which fails when an
+  icon is put on a row it does not list. Ten more icons have one row each
+  there (the route, weather notes, a manual flight, Quick entry, Reorder and
+  others).
 - A destructive row's icon is red with its label.
 - A row with no icon keeps an empty slot, so the labels line up. A list of
   formats behind one row keeps empty slots, not one icon repeated.
@@ -729,7 +734,9 @@ Cancel is on the left. A failed save is never a toast and never an alert.
 | **Add** | Makes a new member of a list |
 | **Done** | Only closes, or finishes one part of a draft that its page will save later. Always live. In the bar it is drawn as Save is |
 
-There is no Done where Back does the same thing.
+There is no Done where Back does the same thing. Six older buttons say
+something else ([9](#9-known-gaps)); `interaction-guide.test.ts` lists them
+and fails on a seventh.
 
 **When a save does not work** (`rac/form.tsx` owns all of this)
 
@@ -831,12 +838,12 @@ A pattern is safe when one place in the code owns it or a test holds it.
 | Back is never caught ([2.2](#22-back-is-the-browsers)) | `rac/dialog.tsx`, `lib/use-unsaved-changes-guard.ts` | `no-overlays.test.ts`, `use-unsaved-changes-guard.test.ts`, `e2e/comp-settings-pages.spec.ts` |
 | The bar's back is the browser's Back ([2.3](#23-leaving-a-page)) | `useLeave()` and `useBackLabel()` in `lib/leave.ts` | `lib/leave.test.ts`, `e2e/comp-analysis.spec.ts`, `e2e/page-bar.spec.ts` |
 | A save leaves by Back ([2.3](#23-leaving-a-page)) | `useLeave()`, called by each page | `e2e/comp-creation.spec.ts`, `e2e/task-settings-pages.spec.ts`. No test finds a page that forgets |
-| A delete and a create replace ([2.3](#23-leaving-a-page)) | Each page | `e2e/task-new-page.spec.ts` for create. None for delete |
+| A delete and a create replace ([2.3](#23-leaving-a-page)) | Each page | `e2e/task-new-page.spec.ts` for create, `e2e/page-bar.spec.ts` for delete. No test finds a new delete that forgets |
 | The view is in the URL ([2.4](#24-the-url-holds-the-view)) | Each page | `e2e/comp-detail.spec.ts` for the scores views. None in general |
 | Drafts ([2.5](#25-reload-a-shared-link-and-drafts)) | `lib/draft-store.ts`, `lib/draft-editor.ts` | `lib/draft-store.test.ts`, `e2e/comp-waypoints.spec.ts` |
 | Links in the markup ([2.6](#26-links-are-links)) | `rac/page-bar.tsx` | `e2e/page-bar.spec.ts`, `bun run test:e2e:ssr` |
 | Scroll on Back ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/scroll-restoration.ts` | `lib/scroll-restoration.test.ts`, `e2e/task-thermal-map.spec.ts` |
-| Focus on arrival ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/route-focus.ts` | None |
+| Focus on arrival ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/route-focus.ts` | `e2e/page-bar.spec.ts` |
 | Nothing fixed to an edge ([2.8](#28-the-keyboard-and-the-screens-edges)) | `rac/page-bar.tsx` | `e2e/page-bar.spec.ts` |
 | Colour as text ([3.2](#32-colour-and-contrast)) | The tokens in `react/globals.css` | `src/react/accent-text.test.ts` |
 | No sideways scroll ([3.3](#33-text-and-zoom)) | Each page | The `mobile` Playwright project, for the pages in `e2e/fixtures/mobile.ts` |
@@ -846,14 +853,14 @@ A pattern is safe when one place in the code owns it or a test holds it.
 | Chart labels at 11px ([3.13](#313-charts-maps-and-the-3d-scene)) | `charts/use-chart-box.ts`, `charts/use-chart-label-size.ts` | `e2e/analysis-charts.spec.ts`, `e2e/task-weather-charts.spec.ts`, `e2e/data-cleaning-charts.spec.ts` |
 | A mark is chosen by pointing near it ([3.13](#313-charts-maps-and-the-3d-scene)) | `charts/use-nearest-pointer.ts` | `e2e/analysis-charts.spec.ts` |
 | One bar, three slots ([5.3](#53-one-bar-no-tab-bar)) | `rac/page-bar.tsx`, `SiteHeader.astro` | `e2e/page-bar.spec.ts` |
-| The trail ([5.3](#53-one-bar-no-tab-bar)) | `lib/crumbs.ts` | None for a trail built inline |
-| Actions in ⋯ ([5.4](#54-actions-go-in-)) | `rac/page-bar.tsx` | None. A button on a page is found only in review |
-| One icon, one meaning ([5.5](#55-every--row-has-an-icon)) | The table in 5.5 | None |
-| The commit button and its words ([5.6](#56-forms)) | `components/SettingsForm.tsx` | `e2e/comp-settings-pages.spec.ts` for "live only when changed". None for the words |
+| The trail ([5.3](#53-one-bar-no-tab-bar)) | `lib/crumbs.ts` | `src/react/interaction-guide.test.ts`: no page starts a trail by hand |
+| Actions in ⋯ ([5.4](#54-actions-go-in-)) | `rac/page-bar.tsx` | `src/react/interaction-guide.test.ts`, for the files in `pages/`: it records every button a page draws for itself. A component under `comp/` is found only in review |
+| One icon, one meaning ([5.5](#55-every--row-has-an-icon)) | The table of icons, labels and meanings in `src/react/interaction-guide.test.ts` | `src/react/interaction-guide.test.ts` |
+| The commit button and its words ([5.6](#56-forms)) | `components/SettingsForm.tsx` | `e2e/comp-settings-pages.spec.ts` for "live only when changed". `src/react/interaction-guide.test.ts` for the words |
 | A refused save ([5.6](#56-forms)) | `rac/form.tsx` | `rac/form.test.ts`, `e2e/forms.spec.ts` |
 | One kit ([3.12](#312-name-role-value-and-status)) | `src/react/rac/` | `src/react/one-kit.test.ts` |
-| A row's body ([5.7](#57-lists)) | `RowContent` in `rac/grid-list.tsx` | None |
-| No editable grid ([5.7](#57-lists)) | No component exists to build one, and no grid library is installed | None |
+| A row's body ([5.7](#57-lists)) | `RowContent` in `rac/grid-list.tsx` | `src/react/interaction-guide.test.ts` |
+| No editable grid ([5.7](#57-lists)) | No component exists to build one, and no grid library is installed | `src/react/interaction-guide.test.ts`: no grid library is installed or imported |
 | Waiting ([5.8](#58-waiting)) | `rac/progress.tsx` | `rac/progress.test.ts` |
 | Typed altitudes ([5.9](#59-units)) | `AltitudeField` in `comp/fields.tsx` | `lib/units.test.ts` |
 
@@ -927,7 +934,10 @@ to the list.
    IGC file appears silently. Confirm that `sonner` announces its toasts.
 3. **No automated accessibility check runs.** Closing this means
    `@axe-core/playwright` and a spec that sweeps one route for each surface.
-4. **Patterns with no owner and no test.** Part 6 marks them "none": the
-   words on a commit button, one icon for one meaning, actions in ⋯, a trail
-   built inline, a row's body, focus on arrival, a grid library coming back,
-   and where a delete goes. Each needs one owner in code or a test.
+4. **Patterns a test holds only in part.** Part 6 says where: a save or a
+   delete on a new page that forgets how to leave, a view that is not in the
+   URL, a new kit control under 44px, the kit tab strip's fades, and a button
+   drawn by a component outside `pages/`.
+5. **Six commit buttons do not say Save, Create, Add or Done**: Submit,
+   Record flight, Apply, Fill, Copy and Load. `interaction-guide.test.ts`
+   lists each with what it does. The owner has not ruled on them.
