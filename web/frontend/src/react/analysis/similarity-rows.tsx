@@ -83,6 +83,31 @@ export function alikeAndOpposite(
     .join(" ");
 }
 
+/**
+ * The whole line under a pilot's track, for each of the three kinds of pair:
+ * clearly alike, clearly opposite, and neither. "Neither" is a similarity
+ * within the threshold either side of zero; the dashed tick on the track
+ * already shows the threshold, so the line does not repeat its figure.
+ */
+export function pairLine(pair: {
+  similarity: number;
+  noiseFloor: number;
+  aboveNoiseFloor: boolean;
+  contributions: Pick<PairContribution, "label" | "contribution">[];
+}): string {
+  if (pair.aboveNoiseFloor) return alikeAndOpposite(pair.contributions);
+  if (pair.similarity < -pair.noiseFloor) {
+    let most: (typeof pair.contributions)[number] | undefined;
+    for (const c of pair.contributions) {
+      if (c.contribution < 0 && (!most || c.contribution < most.contribution)) most = c;
+    }
+    return most
+      ? `Flew the opposite way. Most opposite: ${inSentence(most.label)}.`
+      : "Flew the opposite way.";
+  }
+  return "Too little in common to tell.";
+}
+
 /** A pilot's given name, for the short line under a track. */
 export function shortName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;

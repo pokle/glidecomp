@@ -37,7 +37,7 @@
  */
 import { ChartColumnIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFilter, type Selection } from "react-aria-components";
+import { useFilter } from "react-aria-components";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { Card } from "@/react/rac/card";
@@ -46,7 +46,8 @@ import { Button } from "@/react/rac/button";
 import { Page, PageBar } from "@/react/rac/page-bar";
 import { Checkbox } from "@/react/rac/checkbox";
 import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
-import { TagGroup, Tag } from "@/react/rac/tag-group";
+import { CheckList } from "@/react/rac/choice-list";
+import { Disclosure } from "@/react/rac/disclosure";
 import { Loading } from "@/react/rac/progress";
 import { SimpleSelect } from "@/react/rac/select";
 import { DotMeter, DotMeterAxis } from "@/react/rac/meter";
@@ -63,7 +64,7 @@ import { MetricDistribution } from "../analysis/charts/MetricDistribution";
 import { NotFound } from "../components/NotFound";
 import {
   PairAxis,
-  alikeAndOpposite,
+  pairLine,
   PairBehaviourRow,
   formatSimilarity,
   similarityOnTrack,
@@ -179,13 +180,12 @@ export function TaskPilotSimilarity() {
     writeSelection(ids);
   }
 
-  /** One family's chips changed. RAC hands back that group's selection only,
-   * so the other families are carried across unchanged. */
-  function selectFamilyKeys(family: MetricFamily, keys: Selection) {
+  /** One family's rows changed. The group hands back that family's selection
+   * only, so the other families are carried across unchanged. */
+  function selectFamilyIds(family: MetricFamily, chosen: string[]) {
     const familyIds = (byFamily.get(family) ?? []).map((m) => m.id);
     const ids = new Set(selectedMetricIds.filter((id) => !familyIds.includes(id)));
-    if (keys === "all") for (const id of familyIds) ids.add(id);
-    else for (const k of keys) ids.add(String(k));
+    for (const id of chosen) ids.add(id);
     if (ids.size === 0 && available[0]) ids.add(available[0].id);
     writeSelection(ids);
   }
@@ -428,42 +428,41 @@ export function TaskPilotSimilarity() {
                 </Button>
               </div>
 
-              {/* One family per row: a tri-state parent for the whole family,
-                  then its behaviours as selectable chips. The parent replaces
-                  the old "Only <family>" buttons, which sat beside checkboxes
-                  but REPLACED the whole selection rather than adding to it —
-                  two mental models in one block, and the surprising one was
-                  unlabelled. Indeterminate is the honest third state and says
-                  "some of these", which a two-state control cannot. */}
+              {/* One family per section, folded: its name, how many of its
+                  behaviours are chosen, and a tri-state checkbox for the whole
+                  family. Open, each behaviour is a row with its full name.
+                  They were chips printing the engine's table codes
+                  ("GlideSpd") until 2026-11: a full name is up to 59
+                  characters, which a chip cannot hold on a phone. The parent
+                  is tri-state because "some of these" is a real third state. */}
               {FAMILY_ORDER.filter((f) => (byFamily.get(f) ?? []).length > 0).map((f) => {
                 const family = byFamily.get(f) ?? [];
-                const chosen = family.filter((m) => selectedSet.has(m.id)).length;
+                const chosen = family.filter((m) => selectedSet.has(m.id));
                 return (
-                  <div key={f} className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-4">
-                    <Checkbox
-                      className="w-full sm:w-44 sm:shrink-0"
-                      isSelected={chosen === family.length}
-                      isIndeterminate={chosen > 0 && chosen < family.length}
-                      onChange={(on) => toggleFamily(f, on)}
-                    >
-                      <span className="text-sm font-medium">{FAMILY_LABELS[f]}</span>
-                    </Checkbox>
-                    <TagGroup
-                      label={`${FAMILY_LABELS[f]} behaviours`}
-                      selectionMode="multiple"
-                      selectedKeys={family
-                        .filter((m) => selectedSet.has(m.id))
-                        .map((m) => m.id)}
-                      onSelectionChange={(keys) => selectFamilyKeys(f, keys)}
-                      className="min-w-0 flex-1"
-                    >
-                      {family.map((m) => (
-                        <Tag key={m.id} id={m.id} textValue={m.shortLabel ?? m.label}>
-                          {m.shortLabel ?? m.label}
-                        </Tag>
-                      ))}
-                    </TagGroup>
-                  </div>
+                  <Disclosure
+                    key={f}
+                    title={FAMILY_LABELS[f]}
+                    badge={
+                      <Checkbox
+                        className="ml-auto"
+                        isSelected={chosen.length === family.length}
+                        isIndeterminate={chosen.length > 0 && chosen.length < family.length}
+                        onChange={(on) => toggleFamily(f, on)}
+                        aria-label={`All ${FAMILY_LABELS[f]} behaviours`}
+                      >
+                        <span className="text-sm text-muted-foreground">
+                          {chosen.length} of {family.length}
+                        </span>
+                      </Checkbox>
+                    }
+                  >
+                    <CheckList
+                      ariaLabel={`${FAMILY_LABELS[f]} behaviours`}
+                      value={chosen.map((m) => m.id)}
+                      onChange={(ids) => selectFamilyIds(f, ids)}
+                      options={family.map((m) => ({ value: m.id, label: m.label }))}
+                    />
+                  </Disclosure>
                 );
               })}
             </div>
@@ -606,9 +605,7 @@ export function TaskPilotSimilarity() {
                             valueLabel={`${formatSimilarity(n.similarity)}, needs to beat ${n.noiseFloor.toFixed(2)}`}
                           />
                           <p className="mt-1 text-sm text-muted-foreground">
-                            {n.aboveNoiseFloor
-                              ? alikeAndOpposite(n.contributions)
-                              : `too little in common to tell (needs ${n.noiseFloor.toFixed(2)})`}
+                            {pairLine(n)}
                           </p>
                         </ReadingRow>
                       ))}
