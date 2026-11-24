@@ -2,8 +2,8 @@
  * The kit's small controls on a phone (issue #860 §2): each is a target a
  * finger can hit, 44 px on its smallest side (accessibility standard §4.5).
  *
- * Measured here on the public pages that show them: a tag that can be
- * selected, a checkbox's label and a combo-box field on "Who flew like me?",
+ * Measured here on the public pages that show them: a row of a check list,
+ * a checkbox's label and a combo-box field on "Who flew like me?",
  * a disclosure's header on Metric details, and the time that switches time
  * zone on the task page. The date field is measured where an organiser meets
  * it, in task-settings-pages.spec.ts.
@@ -65,23 +65,32 @@ async function expectTarget(control: Locator, what: string) {
   expect(box!.height, `${what} is 44 px tall or more`).toBeGreaterThanOrEqual(TARGET);
 }
 
-test("tags, checkboxes and the combo box on Who flew like me?", { tag: PHONE_ONLY }, async ({
+test("the behaviour lists and the combo box on Who flew like me?", { tag: PHONE_ONLY }, async ({
   page,
 }) => {
   await page.goto(`/comp/${compId}/task/${taskId}/analysis/similar`, {
     waitUntil: "domcontentloaded",
   });
-  const tags = page.locator('[role="row"][data-selection-mode]');
-  await expect(tags.first()).toBeVisible({ timeout: 60_000 });
-  expect(await tags.count()).toBeGreaterThan(5);
-  for (const tag of await tags.all()) await expectTarget(tag, `tag ${await tag.innerText()}`);
 
-  // A checkbox is its label: the whole row of it is what a finger hits.
-  const families = page.locator("label").filter({ has: page.getByRole("checkbox") });
+  // Each family is folded: its header, and a checkbox for the whole family
+  // that says how many of its behaviours are chosen. A checkbox is its label:
+  // the whole of it is what a finger hits.
+  const families = page.locator("label").filter({ has: page.getByRole("checkbox", { name: /^All .* behaviours$/ }) });
+  await expect(families.first()).toBeVisible({ timeout: 60_000 });
   expect(await families.count()).toBeGreaterThan(2);
   for (const family of await families.all()) {
     await expectTarget(family, `checkbox ${await family.innerText()}`);
   }
+
+  // Open, a family is a row for each behaviour, with its full name and never
+  // the engine's table code. A name wraps; it is not cut and does not run off.
+  await page.getByRole("button", { name: "Gliding", exact: true }).click();
+  const rows = page.getByRole("group", { name: "Gliding behaviours" }).locator("label");
+  await expect(rows.first()).toBeVisible();
+  expect(await rows.count()).toBeGreaterThan(2);
+  for (const row of await rows.all()) await expectTarget(row, `row ${await row.innerText()}`);
+  await expect(rows.first()).toContainText("Glide speed between climbs");
+  await expect(page.getByRole("group", { name: "Gliding behaviours" })).not.toContainText("GlideSpd");
 
   await expectTarget(page.getByRole("combobox").first(), "the pilot field");
   await expectNoSidewaysScroll(page);
