@@ -45,7 +45,7 @@ export const TASK_ANALYSIS_SECTIONS = [
   {
     slug: "weather",
     label: "Weather",
-    lede: "The organiser's account of the day, and the day's own profile.",
+    lede: "The day as forecast, and as the field flew it.",
   },
   {
     slug: "thermals",

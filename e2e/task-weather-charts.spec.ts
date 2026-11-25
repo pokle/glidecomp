@@ -227,7 +227,15 @@ test.describe("the task page", () => {
     expect(report.sideways).toBe(false);
 
     // The source is on every chart, and nothing asks for a hover.
-    await expect(figure.locator("[data-met-source]")).toHaveCount(3);
+    await expect(figure.locator("[data-met-source]")).toHaveText([
+      "Open-Meteo · modelled",
+      "Open-Meteo · modelled",
+      "Open-Meteo · modelled",
+    ]);
+    // Until an hour is chosen, the cloud legend is the shading's scale.
+    await expect(figure.locator('[data-met-chart="cloud"] [data-chart-legend]')).toHaveText(
+      "10%50%100% of the layer covered"
+    );
     await expect(figure).not.toContainText(/hover/i);
     await expect(figure).toContainText("Select an hour on a chart to see its exact figures.");
   });
@@ -245,16 +253,17 @@ test.describe("the task page", () => {
 
     await expect(figure.locator("[data-selected]")).toHaveCount(3);
     await expect(figure.locator("[data-chart-when]")).toHaveText([
-      "· 14:00–15:00 AEDT",
-      "· 14:00–15:00 AEDT",
-      "· 14:00–15:00 AEDT",
+      "14:00–15:00 AEDT",
+      "14:00–15:00 AEDT",
+      "14:00–15:00 AEDT",
     ]);
     const legend = (chart: string) =>
       figure.locator(`[data-met-chart="${chart}"] [data-chart-legend]`);
     await expect(legend("wind")).toContainText("flying height 23 km/h WNW");
     await expect(legend("wind")).toContainText("surface 12 km/h W, gusting 25");
     await expect(legend("wind")).toContainText("direction 290°");
-    await expect(legend("cloud")).toHaveText("high 20%mid 40%low 0%");
+    // The hour leads the row, then the layers; the shading's scale is gone.
+    await expect(legend("cloud")).toHaveText("14:00–15:00 AEDThigh 20%mid 40%low 0%");
     await expect(legend("height")).toContainText("thermal top 2950 m");
     await expect(legend("height")).toContainText("cloud base 3100 m");
     await expect(legend("height")).toContainText("blue");
@@ -340,13 +349,45 @@ test.describe("Task analysis → Weather", () => {
 
     // The band: the three modelled charts, wind by hour and climb by hour.
     await expect(figure.locator("[data-selected]")).toHaveCount(5);
-    await expect(climb.locator("[data-chart-when]")).toHaveText(`· ${hour}`);
+    await expect(climb.locator("[data-chart-when]")).toHaveText(hour);
     await expect(climb.locator("[data-chart-legend]")).toContainText(`median climb ${median}`);
     await expect(climb.locator("[data-chart-legend]")).toContainText(/p10–p90 [\d.]+–[\d.]+/);
     await expect(
       figure.locator('[data-day-chart="wind"] [data-chart-legend]')
     ).toContainText(/wind speed [\d.]+ km\/h [NESW]+/);
-    await expect(figure.locator(`${WIND} [data-chart-when]`)).toHaveText(`· ${hour}`);
+    await expect(figure.locator(`${WIND} [data-chart-when]`)).toHaveText(hour);
+  });
+
+  // The page is the charts: the two cards are titled for their evidence, and
+  // what each day metric measures is behind the ⓘ on the chart it draws
+  // rather than a block of prose between the cards.
+  test("two titled cards, with each metric's explanation behind its chart's ⓘ", async ({
+    page,
+  }) => {
+    const figure = await openAnalysisPage(page);
+    await expect(figure.locator('[data-slot="card-title"]')).toHaveText([
+      "From the weather model",
+      "From the pilots’ tracks",
+    ]);
+    await expect(figure.locator("[data-chart-source]")).toHaveText(
+      Array(3).fill(/^\d+ tracks · measured$/)
+    );
+    // The explanation is not printed on the page...
+    const climbHelp = /We group the thermal climbs of all pilots/;
+    await expect(figure).not.toContainText(climbHelp);
+    // ...it is one tap away, on the chart.
+    await figure
+      .locator('[data-day-chart="climb"]')
+      .getByRole("button", { name: /^About How strong the day.s climbs were/ })
+      .click();
+    await expect(page.getByRole("dialog")).toContainText(climbHelp);
+    await page.keyboard.press("Escape");
+
+    // The exact figures are a link away.
+    await expect(figure.getByRole("link", { name: /Metric details/ })).toHaveAttribute(
+      "href",
+      /\/analysis\/metrics$/
+    );
   });
 
   test("a leg is a row that opens its full sentence", async ({ page }) => {

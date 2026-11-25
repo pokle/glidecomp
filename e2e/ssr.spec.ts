@@ -925,6 +925,9 @@ test.describe("SSR — hydration is clean (real browser)", () => {
     ":compAnalysis",
     ":taskAnalysis",
     ":taskStrategies",
+    // The weather section: two cards of charts drawn at a width measured
+    // after mount, which the server cannot know.
+    ":taskWeather",
     // A leaf under a section (#815): SSR'd through the section's loader, with
     // its own chart in the server's HTML.
     ":taskMetricChart",
@@ -964,6 +967,7 @@ test.describe("SSR — hydration is clean (real browser)", () => {
         ":compAnalysis": `/comp/${d.compId}/analysis`,
         ":taskAnalysis": `/comp/${d.compId}/task/${d.taskId}/analysis`,
         ":taskStrategies": `/comp/${d.compId}/task/${d.taskId}/analysis/strategies`,
+        ":taskWeather": `/comp/${d.compId}/task/${d.taskId}/analysis/weather`,
         ":taskMetricChart": metricChart,
         ":scoresByTask": `/comp/${d.compId}/scores?task=${d.taskId}`,
         ":scoresTop3ByClass": `/comp/${d.compId}/scores?view=top3${

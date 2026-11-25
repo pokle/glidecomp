@@ -28,6 +28,15 @@ export interface ChartFrame {
   plotRight: number;
   /** Label size in viewBox units; also the unit ("em") heights are set in. */
   fontSize: number;
+  /**
+   * Height added to every plot, in viewBox units. A plot's height used to be
+   * a fixed number of ems, so a 1078px desktop chart was the same 130px tall
+   * as a 319px phone one: a strip on the desktop, and a cramped line on the
+   * phone. A tenth of the width, held between 2.5 and 6 ems, gives a phone
+   * about 33px more and a desktop about 78px, and keeps the labels the size
+   * they are.
+   */
+  plotExtra: number;
 }
 
 /**
@@ -48,6 +57,7 @@ export function frameForWidth(cssWidth: number, rootPx = 16): ChartFrame {
     plotLeft: Math.round(fontSize * 3.5),
     plotRight: width - Math.round(fontSize * 1.4),
     fontSize,
+    plotExtra: Math.round(Math.min(fontSize * 6, Math.max(fontSize * 2.5, width * 0.1))),
   };
 }
 

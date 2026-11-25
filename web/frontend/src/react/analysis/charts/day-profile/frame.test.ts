@@ -30,6 +30,13 @@ describe("frameForWidth", () => {
     expect(frame.plotLeft).toBeGreaterThan(frameForWidth(319).plotLeft);
   });
 
+  it("draws a taller plot on a wider chart, within limits", () => {
+    expect(frameForWidth(332).plotExtra).toBe(33);
+    expect(frameForWidth(1078).plotExtra).toBe(78);
+    // A narrow phone still gets 2.5 ems more than the old fixed height.
+    expect(frameForWidth(240).plotExtra).toBe(33);
+  });
+
   it("does not lay out for a collapsed parent", () => {
     expect(frameForWidth(1).width).toBe(240);
   });

@@ -169,7 +169,7 @@ export function AxisUnit({
  * A chart's own title, top-left inside the plot — what this chart is, where
  * the eye lands first.
  *
- * The day-profile stack established this ("Weather: wind" on MetWindChart);
+ * The day-profile stack established this (the "Wind" title on MetWindChart);
  * the pilot-derived charts in the same stack had nothing, so a reader
  * scrolling the stack lost track of which quantity they were looking at. Same
  * type size and weight as the modelled charts' titles so the stack reads as

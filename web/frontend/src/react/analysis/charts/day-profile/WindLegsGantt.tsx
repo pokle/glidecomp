@@ -31,7 +31,7 @@
  * the leg's full sentence under it — what a hover over the row used to say.
  * The Wind by leg table below remains the exact reading.
  */
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { DayTimingSeries, WindLegsSeries } from "../../types";
 import { formatTimeRange } from "@/react/lib/time";
 import { useUnits } from "@/react/lib/units";
@@ -41,7 +41,7 @@ import type { TimeAxis } from "./time-axis";
 import type { ChartFrame } from "./frame";
 import { TimeTickLabels } from "./TimeAxisParts";
 import { ChartHeader } from "./MetSourceTag";
-import { MetLegend, type LegendEntry } from "./MetLegend";
+import type { LegendEntry } from "./MetLegend";
 import { degToCompass, windArrowPath, windArrowTransform, windLabel } from "./shared";
 
 const HOUR_MS = 3_600_000;
@@ -82,6 +82,8 @@ export function WindLegsGantt({
   frame,
   timeZone,
   selectedMs,
+  stamp = null,
+  info,
 }: {
   series: WindLegsSeries;
   timing: DayTimingSeries | null;
@@ -90,6 +92,11 @@ export function WindLegsGantt({
   timeZone: string | undefined;
   /** The stack's selected hour, drawn as a band through every leg's strip. */
   selectedMs: number | null;
+  /** "37 tracks · measured" — what the chart is drawn from, where a weather
+   * chart names its provider. */
+  stamp?: string | null;
+  /** The ⓘ beside the title: what the metric behind the chart measures. */
+  info?: ReactNode;
 }) {
   // Wind follows the speed preference; series values are km/h and convert
   // here at the display boundary. Arrow lengths use the km/h ratio directly
@@ -186,8 +193,7 @@ export function WindLegsGantt({
         `The Wind by leg table below carries the exact numbers and sample counts.`
       }
     >
-      <ChartHeader title="From tracks: wind by leg" />
-      <MetLegend entries={legend} />
+      <ChartHeader title="Wind by leg" stamp={stamp} info={info} legend={legend} />
       <div className="divide-y divide-border border-y border-border">
         {series.legs.map((l, i) => {
           const { flown: flownWin, circling } = windows(l);

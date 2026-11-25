@@ -40,7 +40,8 @@ export interface LegendEntry extends Partial<SeriesStroke> {
    * "box" is a filled swatch (`fillClass`); "dot" a point mark; "note" is
    * text alone. */
   kind?: "line" | "arrow" | "box" | "dot" | "note";
-  /** Tailwind background class for a "box" or "dot" swatch. */
+  /** Tailwind background class for a "box" or "dot" swatch; a "box" with an
+   * `opacity` is drawn at it. */
   fillClass?: string;
 }
 
@@ -54,23 +55,41 @@ const MIN_LINES = {
   4: "min-h-16 sm:min-h-4",
 } as const;
 
+export type LegendLines = keyof typeof MIN_LINES;
+
 export function MetLegend({
   entries,
+  when,
   lines = 1,
+  className = "",
 }: {
   entries: LegendEntry[];
-  lines?: keyof typeof MIN_LINES;
+  /** The selected hour, printed first so the figures after it say which
+   * hour they are for. */
+  when?: string | null;
+  lines?: LegendLines;
+  className?: string;
 }) {
   return (
     <div
       aria-hidden
       data-chart-legend
-      className={`flex flex-wrap content-start gap-x-4 gap-y-0 text-xs text-muted-foreground ${MIN_LINES[lines]}`}
+      className={`flex flex-wrap content-start gap-x-4 gap-y-0 text-xs text-muted-foreground ${MIN_LINES[lines]} ${className}`}
     >
+      {when ? (
+        <span data-chart-when className="font-medium text-foreground">
+          {when}
+        </span>
+      ) : null}
       {entries.map((e) => (
         <span key={e.key} className="inline-flex items-center gap-1.5">
           {e.kind === "note" ? null : e.kind === "box" ? (
-            <span className={`inline-block size-3 shrink-0 rounded-xs border border-border ${e.fillClass ?? ""}`} />
+            <span
+              className={`inline-block size-3 shrink-0 rounded-xs border border-border ${e.fillClass ?? ""}`}
+              // A scale of shades (the cloud chart's cover) is one fill at
+              // several opacities, the same ones its cells are drawn in.
+              style={e.opacity === undefined ? undefined : { opacity: e.opacity }}
+            />
           ) : e.kind === "dot" ? (
             <span className={`inline-block size-1.5 shrink-0 rounded-full ${e.fillClass ?? ""}`} />
           ) : (

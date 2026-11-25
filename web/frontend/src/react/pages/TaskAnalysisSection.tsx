@@ -18,7 +18,7 @@
  */
 import { useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { Card } from "@/react/rac/card";
+import { Card, CardTitle } from "@/react/rac/card";
 import { Explain } from "@/react/rac/explain";
 import { NotFound } from "../components/NotFound";
 import {
@@ -28,7 +28,7 @@ import {
   taskThermalMapPath,
 } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
-import { TaskAnalysisFrame } from "../analysis/TaskAnalysisFrame";
+import { TaskAnalysisFrame, reportViewState } from "../analysis/TaskAnalysisFrame";
 import { useTaskAnalysis } from "../analysis/use-task-report";
 import { findTaskAnalysisSection } from "../analysis/sections";
 import { SeparationRanking, rankMetrics } from "../analysis/SeparationRanking";
@@ -113,7 +113,7 @@ function SectionBody({
     case "strategies":
       return <StrategiesSection bundle={bundle} active={active} report={report} />;
     case "weather":
-      return <WeatherSection bundle={bundle} />;
+      return <WeatherSection bundle={bundle} report={report} />;
     case "thermals":
       return <ThermalsSection bundle={bundle} report={report} />;
     case "metrics":
@@ -195,9 +195,19 @@ function StrategiesSection({
   );
 }
 
-/** The organiser's account of the day, and the day's own profile. */
-function WeatherSection({ bundle }: { bundle: ReturnType<typeof useTaskAnalysis> }) {
-  const { comp, dayMetrics, weather, weatherNotes, weatherPending } = bundle;
+/** The organiser's account of the day, then the day as modelled and as
+ *  flown. No heading of its own: the bar's h1 already says "Weather", and
+ *  each card below carries its own title. */
+function WeatherSection({
+  bundle,
+  report,
+}: {
+  bundle: ReturnType<typeof useTaskAnalysis>;
+  report: FrameCtx["report"];
+}) {
+  const { comp, task, compId, taskId, dayMetrics, weather, weatherNotes, weatherPending } =
+    bundle;
+  const [searchParams] = useSearchParams();
 
   if (!bundle.hasWeatherSection) {
     return (
@@ -210,14 +220,24 @@ function WeatherSection({ bundle }: { bundle: ReturnType<typeof useTaskAnalysis>
     );
   }
 
+  // The day metrics' tables, with the class and pinned pilot carried over.
+  const view = reportViewState(searchParams);
+  const tablesHref =
+    compId && taskId
+      ? taskAnalysisSectionPath(compUrlId(comp, compId), comp?.name, taskId, task?.name, "metrics") +
+        (view ? `?${view}` : "")
+      : null;
+
   return (
-    <Card aria-labelledby="weather-heading" className="gap-3">
-      <h2 id="weather-heading" className="scroll-mt-32 text-lg font-semibold">
-        What the weather did
-      </h2>
-      {/* The organizer's own account first — a human who was there outranks a
-          grid cell. */}
-      <WeatherNotesBlock notes={weatherNotes} />
+    <>
+      {/* The organiser's own account first — a human who was there outranks
+          a grid cell. */}
+      {weatherNotes.trim() ? (
+        <Card className="gap-3 px-3 py-4 sm:p-5">
+          <CardTitle>From the organiser</CardTitle>
+          <WeatherNotesBlock notes={weatherNotes} />
+        </Card>
+      ) : null}
       {/* One shared time axis, so the predicted day can be read against the
           day the field actually flew. */}
       <DayProfilePanel
@@ -225,8 +245,10 @@ function WeatherSection({ bundle }: { bundle: ReturnType<typeof useTaskAnalysis>
         compTimezone={comp?.timezone ?? null}
         weather={weather.data?.weather ?? null}
         weatherPending={weatherPending}
+        trackCount={report.basis.pilotCount}
+        tablesHref={tablesHref}
       />
-    </Card>
+    </>
   );
 }
 

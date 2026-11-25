@@ -15,6 +15,7 @@
  * Geometry comes from the stack's `ChartFrame`, and every height here is a
  * multiple of its type size — see frame.ts.
  */
+import type { ReactNode } from "react";
 import type { WindHourlySeries } from "../../types";
 import { useUnits } from "@/react/lib/units";
 import { formatMetricValue } from "../../types";
@@ -24,7 +25,7 @@ import type { TimeAxis } from "./time-axis";
 import type { ChartFrame } from "./frame";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
 import { ChartHeader } from "./MetSourceTag";
-import { MetLegend, type LegendEntry } from "./MetLegend";
+import type { LegendEntry } from "./MetLegend";
 import { HourColumns, columnAt, hourRange, useHourPointer, type HourColumn } from "./HourColumns";
 import { degToCompass, windArrowPath, windArrowTransform } from "./shared";
 
@@ -43,6 +44,8 @@ export function WindHourlyChart({
   timeZone,
   selectedMs,
   onSelect,
+  stamp = null,
+  info,
 }: {
   series: WindHourlySeries;
   axis: TimeAxis;
@@ -50,6 +53,11 @@ export function WindHourlyChart({
   timeZone: string | undefined;
   selectedMs: number | null;
   onSelect: (tMs: number | null) => void;
+  /** "37 tracks · measured" — what the chart is drawn from, where a weather
+   * chart names its provider. */
+  stamp?: string | null;
+  /** The ⓘ beside the title: what the metric behind the chart measures. */
+  info?: ReactNode;
 }) {
   // Wind is a horizontal drift, so it follows the speed preference; the
   // engine's series values are km/h and convert here at the display boundary.
@@ -78,7 +86,7 @@ export function WindHourlyChart({
   // row for the time labels — the same rows as the modelled wind chart.
   const em = frame.fontSize;
   const laneY = em * 0.95;
-  const plot = { top: em * 2.5, bottom: em * 10 };
+  const plot = { top: em * 2.5, bottom: em * 10 + frame.plotExtra };
   const H = plot.bottom + em * 2;
   const columnWidth = Math.abs(axis.x(points[0].tMs + HOUR_MS) - axis.x(points[0].tMs));
   const arrowLen = Math.max(7, Math.min(em * 1.3, columnWidth * 0.75));
@@ -121,8 +129,14 @@ export function WindHourlyChart({
   const speeds = points.map((p) => p.speed);
   return (
     <div className="space-y-0.5" data-day-chart="wind">
-      <ChartHeader title="From tracks: wind" when={sel ? hourRange(sel.tMs, timeZone) : null} />
-      <MetLegend entries={legend} lines={3} />
+      <ChartHeader
+        title="Wind"
+        when={sel ? hourRange(sel.tMs, timeZone) : null}
+        stamp={stamp}
+        info={info}
+        legend={legend}
+        lines={3}
+      />
       <svg
         viewBox={`0 0 ${frame.width} ${H}`}
         className="h-auto w-full select-none"

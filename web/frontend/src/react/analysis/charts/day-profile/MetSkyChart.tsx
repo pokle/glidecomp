@@ -25,7 +25,7 @@ import type { TimeAxis } from "./time-axis";
 import type { ChartFrame } from "./frame";
 import { TimeTickLabels } from "./TimeAxisParts";
 import { ChartHeader, sourceSentence } from "./MetSourceTag";
-import { MetLegend, type LegendEntry } from "./MetLegend";
+import type { LegendEntry } from "./MetLegend";
 import { HourColumns, columnAt, hourRange, useHourPointer, type HourColumn } from "./HourColumns";
 import { cloudReading } from "./met-readout";
 import { coverOpacity } from "./met-shared";
@@ -35,6 +35,9 @@ const HOUR_MS = 3_600_000;
 /** The layers in DRAWING order: high at the top, low at the bottom, so the
  * lanes are stacked the way the sky is — and so this chart sitting above the
  * ceiling chart reads as one continuous column of air. */
+/** The cover the legend's scale shows a swatch for, when no hour is chosen. */
+const COVER_SCALE = [10, 50, 100] as const;
+
 const LANES = [
   { key: "highPct", label: "high" },
   { key: "midPct", label: "mid" },
@@ -90,8 +93,9 @@ export function MetSkyChart({
 
   const peakLow = Math.max(0, ...cells.map((c) => c.cloud.lowPct ?? 0));
 
-  // The lanes are named beside themselves, so this legend is empty until an
-  // hour is chosen: then it is that hour's cover, layer by layer.
+  // The lanes are named beside themselves, so until an hour is chosen this
+  // legend is the shading's scale — the swatches are the very opacities the
+  // cells are drawn in. Then it is that hour's cover, layer by layer.
   const sel = columnAt(cells, selectedMs);
   const legend: LegendEntry[] = sel
     ? LANES.filter(({ key }) => sel.cloud[key] !== null).map(({ key, label }) => ({
@@ -100,7 +104,13 @@ export function MetSkyChart({
         text: label,
         value: `${Math.round(sel.cloud[key]!)}%`,
       }))
-    : [];
+    : COVER_SCALE.map((pct, i) => ({
+        key: `scale-${pct}`,
+        kind: "box" as const,
+        fillClass: "bg-chart-1",
+        opacity: coverOpacity(pct),
+        text: i === COVER_SCALE.length - 1 ? `${pct}% of the layer covered` : `${pct}%`,
+      }));
   if (sel && sel.rainMm && sel.rainMm > 0) {
     legend.push({ key: "rain", kind: "note", text: "rain", value: `${sel.rainMm.toFixed(1)} mm` });
   }
@@ -108,11 +118,11 @@ export function MetSkyChart({
   return (
     <div className="space-y-0.5" data-met-chart="cloud">
       <ChartHeader
-        title="Weather: cloud"
+        title="Cloud"
         when={sel ? hourRange(sel.tMs, timeZone) : null}
         source={source}
+        legend={legend}
       />
-      <MetLegend entries={legend} />
       <svg
         viewBox={`0 0 ${frame.width} ${H}`}
         className="h-auto w-full select-none"

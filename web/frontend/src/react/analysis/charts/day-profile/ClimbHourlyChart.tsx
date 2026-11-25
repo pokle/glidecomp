@@ -21,6 +21,7 @@
  * Geometry comes from the stack's `ChartFrame`, and every height here is a
  * multiple of its type size — see frame.ts.
  */
+import type { ReactNode } from "react";
 import type { ClimbHourlySeries, DayTimingSeries } from "../../types";
 import { formatTimeRange, hhmmInZone } from "@/react/lib/time";
 import { useUnits } from "@/react/lib/units";
@@ -31,7 +32,7 @@ import type { TimeAxis } from "./time-axis";
 import type { ChartFrame } from "./frame";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
 import { ChartHeader } from "./MetSourceTag";
-import { MetLegend, type LegendEntry } from "./MetLegend";
+import type { LegendEntry } from "./MetLegend";
 import { HourColumns, columnAt, hourRange, useHourPointer, type HourColumn } from "./HourColumns";
 import { approxTextWidth } from "./met-shared";
 
@@ -53,6 +54,8 @@ export function ClimbHourlyChart({
   timeZone,
   selectedMs,
   onSelect,
+  stamp = null,
+  info,
 }: {
   series: ClimbHourlySeries;
   timing: DayTimingSeries | null;
@@ -61,6 +64,11 @@ export function ClimbHourlyChart({
   timeZone: string | undefined;
   selectedMs: number | null;
   onSelect: (tMs: number | null) => void;
+  /** "37 tracks · measured" — what the chart is drawn from, where a weather
+   * chart names its provider. */
+  stamp?: string | null;
+  /** The ⓘ beside the title: what the metric behind the chart measures. */
+  info?: ReactNode;
 }) {
   // Climb rates follow the climb preference; series quantiles are m/s and
   // convert here at the display boundary.
@@ -128,7 +136,7 @@ export function ClimbHourlyChart({
   // phone, and no stagger of two rows keeps three labels off each other.
   const em = frame.fontSize;
   const labelRows = shownRules.length;
-  const plot = { top: em * (1.5 + labelRows * 1.25), bottom: em * (10 + labelRows * 1.25) };
+  const plot = { top: em * (1.5 + labelRows * 1.25), bottom: em * (10 + labelRows * 1.25) + frame.plotExtra };
   const takeoffLane = { top: plot.bottom + em * 0.4, bottom: plot.bottom + em * 1.6 };
   const takeoffCy = (takeoffLane.top + takeoffLane.bottom) / 2;
   const nStrip = { top: takeoffLane.bottom + em * 0.3, bottom: takeoffLane.bottom + em * 2.3 };
@@ -204,8 +212,14 @@ export function ClimbHourlyChart({
   const medians = hours.map((h) => h.median);
   return (
     <div className="space-y-0.5" data-day-chart="climb">
-      <ChartHeader title="From tracks: climb" when={sel ? hourRange(sel.tMs, timeZone) : null} />
-      <MetLegend entries={legend} lines={4} />
+      <ChartHeader
+        title="Climbs"
+        when={sel ? hourRange(sel.tMs, timeZone) : null}
+        stamp={stamp}
+        info={info}
+        legend={legend}
+        lines={4}
+      />
       <svg
         viewBox={`0 0 ${frame.width} ${H}`}
         className="h-auto w-full select-none"

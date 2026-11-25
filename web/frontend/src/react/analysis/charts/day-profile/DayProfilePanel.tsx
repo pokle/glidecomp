@@ -1,8 +1,8 @@
 /**
- * The day, flown and modelled, on ONE shared time axis — the body of the
- * task-analysis page's "What the weather did" section.
+ * The day, flown and modelled, on ONE shared time axis — the body of Task
+ * analysis → Weather.
  *
- * TWO labelled groups, stacked deliberately rather than overlaid:
+ * TWO cards, stacked deliberately rather than overlaid:
  *
  * 1. "From the weather model" — what an outside provider says the day did
  *    (wind, cloud, thermal ceiling); see the engine's weather/ module. The
@@ -20,20 +20,22 @@
  * imply one is a correction of the other. Side by side on a shared clock, a
  * vertical scan reads "at 2pm: the model had 30 km/h NW, the field's circles
  * said 24; climbs at their best, most of the field on leg 3" — and a
- * disagreement stays legible as a disagreement. Each group carries an
- * explicit source label so a reader always knows which evidence they are
- * looking at; every modelled chart additionally carries its provider inside
- * the plot.
+ * disagreement stays legible as a disagreement. Each card's title says which
+ * evidence it holds, and every chart repeats it in its own stamp.
  *
- * Each chart is a labelled group; the day metrics' tables further
- * down the page remain the exact, screen-reader-navigable reading. One hour
- * is selected for the whole stack, and each chart prints its figures for it
- * in its own legend row; nothing is hover-only.
+ * The page is the charts. What each metric measures is behind the ⓘ on the
+ * chart it draws, not a block of prose between the two cards; the same text
+ * is printed in full on "How this was measured", and the metrics' tables on
+ * "Metric details" remain the exact, screen-reader-navigable reading. One
+ * hour is selected for the whole stack, and each chart prints its figures
+ * for it in its own legend row; nothing is hover-only.
  *
- * The task page shows the modelled group alone (TaskWeatherPanel) — it has
+ * The task page shows the modelled charts alone (TaskWeatherPanel) — it has
  * no per-pilot series to set against the model.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { Card, CardTitle } from "@/react/rac/card";
 import { Explain } from "@/react/rac/explain";
 import type {
   ClimbHourlySeries,
@@ -43,7 +45,6 @@ import type {
   WindLegsSeries,
 } from "../../types";
 import type { TaskWeather } from "@/react/weather/types";
-import { sourceKindLabel } from "@/react/weather/types";
 import { zoneAbbrev } from "@/react/lib/time";
 import { buildTimeAxis } from "./time-axis";
 import { TimeAxisTitle } from "./TimeAxisParts";
@@ -56,11 +57,12 @@ import { weatherInstants } from "./met-shared";
 
 const HOUR_MS = 3_600_000;
 
-/** How far the axis extends past the field's own flying, each side. Enough
- * to show the morning that set the day up and the glass-off after the last
- * landing, without the whole-day weather answer dragging the axis out to
- * midnight. */
-const WINDOW_PAD_MS = 2 * HOUR_MS;
+/** How far the axis extends past the field's own flying, each side. An hour
+ * shows the air before the first launch and after the last landing; two
+ * spent a quarter of every chart on hours nobody flew, which on a phone is
+ * 60px of a 270px plot. The whole-day weather answer is clamped into this
+ * window rather than allowed to drag the axis out to midnight. */
+const WINDOW_PAD_MS = HOUR_MS;
 
 /**
  * Every instant the FLOWN evidence occupies, as epoch ms: the pilot-derived
@@ -102,15 +104,52 @@ function flownInstants(
   return out.filter((t) => Number.isFinite(t));
 }
 
-/** A group's source label: the one line that says which evidence the charts
- * beneath it are drawn from. h3 because the panel lives inside the page's
- * h2 "What the weather did" section. */
-function GroupHeading({ title, detail }: { title: string; detail: string }) {
+/** One card of the stack: its title, and its charts. The title is an h2,
+ * because the page's h1 is the bar's and nothing sits between them. */
+function GroupCard({
+  title,
+  measureRef,
+  children,
+}: {
+  title: string;
+  /** The chart frame is measured on the first card's body (useChartFrame). */
+  measureRef?: (el: HTMLElement | null) => void;
+  children: ReactNode;
+}) {
   return (
-    <div className="space-y-0.5 pt-2">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      <p className="text-xs text-muted-foreground">{detail}</p>
-    </div>
+    // Tighter than a card's usual 20px on a phone: 16px more of a 360px
+    // screen goes to the charts.
+    <Card className="gap-3 px-3 py-4 sm:p-5">
+      <CardTitle>{title}</CardTitle>
+      <div ref={measureRef} className="space-y-5">
+        {children}
+      </div>
+    </Card>
+  );
+}
+
+/** One ⓘ for a chart: the explanation of each metric it draws. The first
+ * metric names the popover; any after it name their own paragraph. */
+function MetricInfo({
+  label,
+  metrics,
+  extra,
+}: {
+  label: string;
+  metrics: MetricReport[];
+  extra?: ReactNode;
+}) {
+  if (metrics.length === 0 && !extra) return null;
+  return (
+    <Explain label={label}>
+      {metrics.map((m, i) => (
+        <p key={m.id}>
+          {i > 0 ? <span className="font-medium">{m.label}. </span> : null}
+          {m.explanation}
+        </p>
+      ))}
+      {extra}
+    </Explain>
   );
 }
 
@@ -119,6 +158,8 @@ export function DayProfilePanel({
   compTimezone,
   weather = null,
   weatherPending = false,
+  trackCount = null,
+  tablesHref = null,
 }: {
   metrics: MetricReport[];
   /** Competition IANA zone; the axis ticks in it (viewer-local when null). */
@@ -130,6 +171,10 @@ export function DayProfilePanel({
   /** True while an answer is still on its way — the modelled group shows a
    * placeholder line rather than vanishing and popping in. */
   weatherPending?: boolean;
+  /** How many tracks the analysis read, for the track charts' stamp. */
+  trackCount?: number | null;
+  /** "Metric details", where the day metrics' tables are. */
+  tablesHref?: string | null;
 }) {
   const timeZone = compTimezone ?? undefined;
   // One hour selected for the whole stack: tap or drag on a phone, hover with
@@ -150,7 +195,7 @@ export function DayProfilePanel({
     };
   }, [metrics]);
 
-  // The axis window: when the field actually flew, plus two hours either
+  // The axis window: when the field actually flew, plus an hour either
   // side. The task's clock markers and the weather answer (which can span a
   // whole day when the task defines no times) are clamped INTO this window
   // rather than allowed to stretch it — an axis running to midnight is dead
@@ -196,74 +241,50 @@ export function DayProfilePanel({
   const showLegs = legs !== null && legs.legs.some((l) => l.n > 0);
   const showFlown = showWind || showClimb || showLegs;
   const showWeather = weather !== null && shownWeatherHours.length > 0;
-  // Whether the modelled group occupies the top slot (charts or the pending
-  // placeholder) — the flown group only draws its dividing rule beneath one.
+  // Whether the modelled card is drawn at all: its charts, or the line that
+  // says they are on their way.
   const showModelGroup = showWeather || weatherPending;
   if (!axis || (!showFlown && !showWeather)) return null;
 
   const zone = zoneAbbrev(new Date(axis.domainStart), timeZone);
 
-  // The ⓘ text of every metric whose series is actually drawn, inline under
-  // the group label — the panel composes several metrics, so each line
-  // carries its metric's name. Reads with the charts on screen and in print.
-  const shownKinds = new Set<string>([
-    ...(showWind ? ["wind-hourly"] : []),
-    ...(showClimb ? ["climb-hourly", "day-timing"] : []),
-    ...(showLegs ? ["wind-legs"] : []),
-  ]);
-  const contributors = metrics.filter((m) =>
-    (m.extraSeries ?? []).some((s) => shownKinds.has(s.kind))
-  );
+  const metric = (id: string) => metrics.filter((m) => m.id === id);
+  const windMetric = metric("day.wind");
+  const climbMetrics = [...metric("day.climb_by_hour"), ...metric("day.airtime_quality")];
+  const stamp = trackCount ? `${trackCount} tracks · measured` : "measured";
 
   return (
-    <figure ref={frameRef} className="space-y-1">
-      {/* ── Group 1: modelled — the day as predicted ──────────────────── */}
-      {showWeather && weather ? (
-        <>
-          <GroupHeading
-            title="From the weather model"
-            detail={`Independent of the tracklogs: ${sourceKindLabel(weather.source.kind)} conditions for the task area from ${weather.source.attribution}.`}
-          />
-          <MetChartsGroup
-            weather={weather}
-            hours={shownWeatherHours}
-            axis={axis}
-            frame={frame}
-            timeZone={timeZone}
-            selectedMs={selectedMs}
-            onSelect={setSelectedMs}
-          />
-        </>
-      ) : weatherPending ? (
-        <>
-          <GroupHeading
-            title="From the weather model"
-            detail="Independent of the tracklogs: modelled conditions for the task area."
-          />
-          <p className="text-sm text-muted-foreground">
-            Fetching the day&rsquo;s weather — it will appear here in a moment.
-          </p>
-        </>
+    <figure className="space-y-4">
+      {/* ── Card 1: modelled — the day as predicted ───────────────────── */}
+      {showModelGroup ? (
+        <GroupCard title="From the weather model" measureRef={frameRef}>
+          {showWeather && weather ? (
+            <div>
+              <MetChartsGroup
+                weather={weather}
+                hours={shownWeatherHours}
+                axis={axis}
+                frame={frame}
+                timeZone={timeZone}
+                selectedMs={selectedMs}
+                onSelect={setSelectedMs}
+              />
+              <TimeAxisTitle zone={zone} frame={frame} />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Fetching the day&rsquo;s weather — it will appear here in a moment.
+            </p>
+          )}
+        </GroupCard>
       ) : null}
 
-      {/* ── Group 2: measured, on the same clock ──────────────────────────
-          A labelled break, because everything above is modelled and
-          everything below is measured from the pilots' own tracks. */}
+      {/* ── Card 2: measured, on the same clock ───────────────────────── */}
       {showFlown ? (
-        <div className={showModelGroup ? "space-y-3 border-t" : "space-y-3"}>
-          <GroupHeading
-            title="From the pilots' tracks"
-            detail="What the field actually flew — wind, climb strength and leg timing measured from every pilot's tracklog."
-          />
-          {contributors.length > 0 ? (
-            <div className="space-y-0.5 pb-1">
-              {contributors.map((m) => (
-                <p key={m.id} className="text-xs text-muted-foreground">
-                  <span className="font-medium">{m.label}.</span> {m.explanation}
-                </p>
-              ))}
-            </div>
-          ) : null}
+        <GroupCard
+          title="From the pilots’ tracks"
+          measureRef={showModelGroup ? undefined : frameRef}
+        >
           {showWind ? (
             <WindHourlyChart
               series={wind}
@@ -272,6 +293,8 @@ export function DayProfilePanel({
               timeZone={timeZone}
               selectedMs={selectedMs}
               onSelect={setSelectedMs}
+              stamp={stamp}
+              info={<MetricInfo label={windMetric[0]?.label ?? "Wind"} metrics={windMetric} />}
             />
           ) : null}
           {showClimb ? (
@@ -283,69 +306,69 @@ export function DayProfilePanel({
               timeZone={timeZone}
               selectedMs={selectedMs}
               onSelect={setSelectedMs}
+              stamp={stamp}
+              info={
+                <MetricInfo label={climbMetrics[0]?.label ?? "Climbs"} metrics={climbMetrics} />
+              }
             />
           ) : null}
           {showLegs && legs ? (
-            <WindLegsGantt
-              series={legs}
-              timing={timing}
-              axis={axis}
-              frame={frame}
-              timeZone={timeZone}
-              selectedMs={selectedMs}
-            />
-          ) : null}
-        </div>
+            <div>
+              <WindLegsGantt
+                series={legs}
+                timing={timing}
+                axis={axis}
+                frame={frame}
+                timeZone={timeZone}
+                selectedMs={selectedMs}
+                stamp={stamp}
+                info={
+                  <MetricInfo
+                    label="The wind on each leg"
+                    metrics={windMetric}
+                    extra={<LegBarsNote />}
+                  />
+                }
+              />
+              <TimeAxisTitle zone={zone} frame={frame} />
+            </div>
+          ) : (
+            <TimeAxisTitle zone={zone} frame={frame} />
+          )}
+        </GroupCard>
       ) : null}
 
-      {/* The axis all of them share, named once at the foot of the stack. */}
-      <TimeAxisTitle zone={zone} frame={frame} />
-
-      <p className="text-xs text-muted-foreground print:hidden">
-        Select an hour or a leg on a chart to see its exact figures.
-      </p>
-      {/* Two conventions a reader cannot deduce from the charts stay visible:
-          the shared axis, and which way the arrows point. How the per-leg bars
-          are built is method — behind the ⓘ, printed in place below. */}
-      <p className="text-xs text-muted-foreground">
-        <span className="inline-flex items-baseline gap-1">
-          <span>
-            All charts share that one time axis. Arrows fly WITH the wind —
-            direction figures are degrees the wind blows from.
+      <div className="space-y-2 text-xs text-muted-foreground">
+        {/* Two conventions a reader cannot deduce from the charts stay in
+            view: the shared axis, and which way the arrows point. */}
+        <p>
+          <span className="print:hidden">
+            Select an hour or a leg on a chart to see its exact figures.{" "}
           </span>
-          <Explain label="Reading the day profile" className="self-center">
-            <DayProfileNote />
-          </Explain>
-        </span>
-      </p>
-      {/* The note renders <p>s, so its print copy sits beside the paragraph,
-          not inside it — a <p> cannot hold another <p>. */}
-      <div className="hidden text-xs text-muted-foreground print:block">
-        <DayProfileNote />
+          All charts share one time axis. Arrows fly WITH the wind —
+          direction figures are degrees the wind blows from.
+        </p>
+        {showWeather && weather ? <MetAttribution weather={weather} /> : null}
+        {tablesHref ? (
+          <p>
+            <Link to={tablesHref} className="text-link underline">
+              The same figures as tables: Metric details
+            </Link>
+          </p>
+        ) : null}
       </div>
-      {showWeather && weather ? <MetAttribution weather={weather} /> : null}
     </figure>
   );
 }
 
-/** How to read the arrows and the per-leg bars, and where the exact numbers
- * are. One definition, rendered in the ⓘ and again for print. */
-function DayProfileNote() {
+/** How the per-leg bars are built: method, so behind the legs chart's ⓘ. */
+function LegBarsNote() {
   return (
-    <>
-      <p>
-        A vertical scan compares the measured and the modelled at the same
-        moment. Arrow length and opacity track speed and sample count.
-      </p>
-      <p>
-        On the per-leg chart the pale bar is when the field flew that leg, and
-        the solid band inside it is the circling its wind was measured from — a
-        leg the field glided is measured in a sliver of the time it was flown.
-      </p>
-      <p>
-        Exact numbers are in the day family&rsquo;s tables under &ldquo;The
-        metrics in detail&rdquo;.
-      </p>
-    </>
+    <p>
+      The pale bar is when the field flew that leg, and the solid band inside
+      it is the circling its wind was measured from — a leg the field glided
+      is measured in a sliver of the time it was flown. Arrow length and
+      opacity track speed and sample count.
+    </p>
   );
 }

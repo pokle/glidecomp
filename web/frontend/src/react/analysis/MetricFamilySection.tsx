@@ -117,7 +117,7 @@ export function MetricFamilySection({
         ))}
 
         {/* The day family's charting series are NOT rendered here: the
-            page's "What the weather did" section composes them (via
+            Weather page composes them (via
             DayProfilePanel) onto one axis with the modelled weather, which
             is also why SeriesChart skips those kinds. This family keeps the
             exact tables. */}
