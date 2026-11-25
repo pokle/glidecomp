@@ -657,7 +657,9 @@ export const igcRoutes = new Hono<AuthedEnv>()
         `SELECT tt.igc_filename
          FROM task_track tt
          JOIN task t ON tt.task_id = t.task_id
-         WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?`
+         JOIN comp_pilot cp ON tt.comp_pilot_id = cp.comp_pilot_id
+         WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?
+           AND cp.comp_id = t.comp_id`
       )
         .bind(taskId, compPilotId, compId)
         .first<{ igc_filename: string }>();
@@ -704,7 +706,8 @@ export const igcRoutes = new Hono<AuthedEnv>()
          FROM task_track tt
          JOIN task t ON tt.task_id = t.task_id
          JOIN comp_pilot cp ON tt.comp_pilot_id = cp.comp_pilot_id
-         WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?`
+         WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?
+           AND cp.comp_id = t.comp_id`
       )
         .bind(taskId, compPilotId, compId)
         .first<{
@@ -773,6 +776,7 @@ export const igcRoutes = new Hono<AuthedEnv>()
          JOIN task t ON tt.task_id = t.task_id
          JOIN comp_pilot cp ON tt.comp_pilot_id = cp.comp_pilot_id
          WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?
+           AND cp.comp_id = t.comp_id
            AND tt.active = 1`
       )
         .bind(taskId, compPilotId, compId)
@@ -826,7 +830,8 @@ export const igcRoutes = new Hono<AuthedEnv>()
          FROM task_track tt
          JOIN task t ON tt.task_id = t.task_id
          JOIN comp_pilot cp ON tt.comp_pilot_id = cp.comp_pilot_id
-         WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?`
+         WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?
+           AND cp.comp_id = t.comp_id`
       )
         .bind(taskId, compPilotId, compId)
         .first<{
@@ -883,7 +888,8 @@ export const igcRoutes = new Hono<AuthedEnv>()
          FROM task_track tt
          JOIN task t ON tt.task_id = t.task_id
          JOIN comp_pilot cp ON tt.comp_pilot_id = cp.comp_pilot_id
-         WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?`
+         WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?
+           AND cp.comp_id = t.comp_id`
       )
         .bind(taskId, compPilotId, compId)
         .first<{

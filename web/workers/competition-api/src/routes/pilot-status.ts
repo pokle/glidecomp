@@ -373,6 +373,13 @@ export const pilotStatusRoutes = new Hono<AuthedEnv>()
         .first<{ comp_pilot_id: number; registered_pilot_name: string }>();
       if (!cp) return c.json({ error: "Pilot not found in this competition" }, 404);
 
+      const task = await c.env.DB.prepare(
+        "SELECT task_id FROM task WHERE task_id = ? AND comp_id = ?"
+      )
+        .bind(taskId, compId)
+        .first();
+      if (!task) return c.json({ error: "Task not found" }, 404);
+
       const authErr = await authorizeStatusMutation(
         c.env.DB,
         compId,
@@ -467,6 +474,13 @@ export const pilotStatusRoutes = new Hono<AuthedEnv>()
         .bind(compPilotId, compId)
         .first<{ comp_pilot_id: number; registered_pilot_name: string }>();
       if (!cp) return c.json({ error: "Pilot not found in this competition" }, 404);
+
+      const task = await c.env.DB.prepare(
+        "SELECT task_id FROM task WHERE task_id = ? AND comp_id = ?"
+      )
+        .bind(taskId, compId)
+        .first();
+      if (!task) return c.json({ error: "Task not found" }, 404);
 
       const authErr = await authorizeStatusMutation(
         c.env.DB,
