@@ -170,6 +170,9 @@ const TaskQrPage = lazy(() =>
 );
 // Client-only (a noindex shell in the SSR Function), and lazy so it costs
 // nothing on the pages that do not open it.
+const TaskPilotsPage = lazy(() =>
+  import("./pages/TaskPilotsPage").then((m) => ({ default: m.TaskPilotsPage }))
+);
 const TaskPilotPage = lazy(() =>
   import("./pages/TaskPilotPage").then((m) => ({ default: m.TaskPilotPage }))
 );
@@ -494,6 +497,14 @@ export function AppRoutes() {
               path="/comp/:compId/task/:taskId/pilot/:pilotId"
               element={<PilotScoreDetail />}
             />
+            {/* The report card's map at full size, and the page its title menu
+                opens to choose another pilot (#870). Pages, where the first was
+                a fixed layer and the second a menu of every pilot. */}
+            <Route
+              path="/comp/:compId/task/:taskId/pilot/:pilotId/map"
+              element={<PilotScoreDetail view="map" />}
+            />
+            <Route path="/comp/:compId/task/:taskId/pilots" element={<TaskPilotsPage />} />
             {/* One pilot on one task, for the organiser: what a row of the
                 task page's "Manage pilots & tracks" opens (#860). */}
             <Route

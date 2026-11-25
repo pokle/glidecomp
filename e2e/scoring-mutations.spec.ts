@@ -332,7 +332,7 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     // The live preview is the engine's own made-good number: seeing a distance
     // here is what says the coordinates parsed and the geometry ran.
     await expect(page.getByText(/km made good/)).toBeVisible();
-    await page.getByRole("button", { name: "Record flight" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
 
     // Saving returns to the task page, where the grid reflects the flight.
     await expect(

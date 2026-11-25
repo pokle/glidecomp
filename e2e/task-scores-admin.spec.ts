@@ -231,9 +231,9 @@ test("manual flight: a missing or refused landing point is said under the field"
   });
 
   const { lat: landing, lon: landingLon } = coordsFields(page, "Landing point");
-  const record = page.getByRole("button", { name: "Record flight" });
+  const record = page.getByRole("button", { name: "Save", exact: true });
 
-  // Record flight is in the bar, with Cancel opposite, and live only once
+  // Save is in the bar, with Cancel opposite, and live only once
   // there is a landing point (issue #863): nothing typed, nothing to send.
   await expect(record).toBeDisabled();
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();

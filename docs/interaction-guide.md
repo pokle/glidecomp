@@ -33,7 +33,7 @@ Each line is a rule. The number is the section that explains it.
 
 - One bar on every page: the way out on the left, the title in the centre, the action on the right. ([5.3](#53-one-bar-no-tab-bar))
 - A page's actions go in ⋯, each with its icon from the table. ([5.4](#54-actions-go-in-), [5.5](#55-every--row-has-an-icon))
-- A form's commit button is in the bar, is live only when there is something to commit, and says Save, Create, Add or Done. ([5.6](#56-forms))
+- A form's commit button is in the bar, is live only when there is something to commit, and says Save, Create, Add or Done. A commit that sends, imports or fetches is named for that act. ([5.6](#56-forms))
 
 **Forms, lists and waiting**
 
@@ -177,6 +177,9 @@ something a page does by itself.
 
 - **Small overlays are fine**: a confirmation, a menu, a combo box's list, a
   date picker. Nothing that fills the screen, and nothing with text fields.
+  One layer does cover the screen: "Drop files to upload" on My Flights,
+  only while a file is dragged over the page. It takes no input, and a phone
+  never shows it. `no-overlays.test.ts` names it and fails on another.
 - **A page fetches what it needs.** State goes in the URL or is fetched. It
   is never handed over in memory from the page underneath.
 - Worked example: the pilot editor, `pages/CompPilotPage.tsx`.
@@ -629,6 +632,10 @@ decision, 15 November 2026, #863.)
   are in the main menu and in every title menu.
 - **The title is one line.** It may be cut short. The menu prints every level
   in full.
+- **The menu is for the pages around this one, not for a search.** Where a
+  page has many siblings (a pilot's report card has one for every pilot),
+  the menu has one row that opens a page with a search field and the
+  siblings as rows (`pages/TaskPilotsPage.tsx`, #870).
 - **A page whose name is a sentence is an action.** The sentence is the ⋯ row
   that opens it. The page has a short `title` and the sentence as
   `fullTitle`.
@@ -734,9 +741,14 @@ Cancel is on the left. A failed save is never a toast and never an alert.
 | **Add** | Makes a new member of a list |
 | **Done** | Only closes, or finishes one part of a draft that its page will save later. Always live. In the bar it is drawn as Save is |
 
-There is no Done where Back does the same thing. Six older buttons say
-something else ([9](#9-known-gaps)); `interaction-guide.test.ts` lists them
-and fails on a seventh.
+There is no Done where Back does the same thing.
+
+**A commit that sends, imports or fetches is named for that act**: Submit
+(a track, to the organiser), Import (a CSV's rows), Fill (from the CIVL
+rankings) and Load (a route from XContest). Nothing of the reader's own is
+being saved there, or the act can fail in its own way, and Save or Done
+would hide that. (Owner's decision, 24 November 2026.)
+`interaction-guide.test.ts` lists the eight words and fails on a ninth.
 
 **When a save does not work** (`rac/form.tsx` owns all of this)
 
@@ -876,7 +888,7 @@ Interaction (docs/interaction-guide.md)
 - [ ] Platform: a new screen is a page with a URL; a reload and a shared link show it
 - [ ] Back: nothing catches it; the page leaves through useLeave(); a save leaves, a delete and a create replace
 - [ ] URL: what the reader chose to look at is in it
-- [ ] Bar: the page's actions are in ⋯ with an icon from the table; the commit button is in the right slot and says Save, Create, Add or Done
+- [ ] Bar: the page's actions are in ⋯ with an icon from the table; the commit button is in the right slot and says Save, Create, Add or Done (or Submit, Import, Fill, Load for those acts)
 - [ ] Forms: built on rac/form.tsx; a refusal lands under its field or in the banner, never in a toast
 - [ ] Phone: designed at phone width first; no sideways scroll; one layout at every width
 - [ ] Keyboard: every new control is reachable and operable; no focus trap; focus returns when a dialog closes
@@ -938,6 +950,3 @@ to the list.
    delete on a new page that forgets how to leave, a view that is not in the
    URL, a new kit control under 44px, the kit tab strip's fades, and a button
    drawn by a component outside `pages/`.
-5. **Six commit buttons do not say Save, Create, Add or Done**: Submit,
-   Record flight, Apply, Fill, Copy and Load. `interaction-guide.test.ts`
-   lists each with what it does. The owner has not ruled on them.

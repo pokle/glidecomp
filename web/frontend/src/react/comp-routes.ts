@@ -136,6 +136,20 @@ export const COMP_SHELL_ROUTES: readonly CompShellRoute[] = [
       "the SSR'd task page already gives a crawler the same route as text.",
   },
   {
+    path: "/comp/:compId/task/:taskId/pilots",
+    admin: false,
+    why:
+      "Choosing another pilot's report card (#870). PUBLIC, but a picker: the " +
+      "SSR'd scores page already gives a crawler every pilot of the task.",
+  },
+  {
+    path: "/comp/:compId/task/:taskId/pilot/:pilotId/map",
+    admin: false,
+    why:
+      "The report card's map at full size (#870). PUBLIC, but a map drawn in the " +
+      "browser from the tracklog: the SSR'd report card carries the words.",
+  },
+  {
     path: "/comp/:compId/task/:taskId/pilot/:pilotId/manage",
     admin: true,
     why: "One pilot on one task, for the organiser: status, track, manual flight (#860).",

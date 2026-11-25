@@ -316,6 +316,80 @@ test.describe("the pilot report card", () => {
     expect(await page.evaluate(() => window.scrollY), "a page long enough to scroll").toBeGreaterThan(0);
     await expect(map).toBeInViewport();
   });
+  // #870: the map at full size was a fixed layer over the report card. It is
+  // a page (docs/interaction-guide.md 2.1), reached by a link and left by Back.
+  test("Expand map opens the map's own page; a reload stands on it, and Back returns", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 780 });
+    await page.goto(cardUrl);
+    const expand = page.getByRole("link", { name: "Expand map" });
+    await expect(expand).toBeVisible({ timeout: 30_000 });
+    await expand.click();
+
+    await expect(page).toHaveURL(/\/pilot\/[^/]+\/map$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Map" })).toBeVisible();
+    const map = page.getByRole("region", { name: "Track map" });
+    await expect(map).toBeVisible();
+    // The page is the map: it fills what the bar leaves, and nothing scrolls.
+    const box = await map.boundingBox();
+    expect(box!.height, "the map has most of the screen").toBeGreaterThan(450);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(1);
+    await expect(page.getByRole("link", { name: `Back to ${cardPilot.pilot_name}` })).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: "Map" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("region", { name: "Track map" })).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/pilot\/[^/]+$/);
+    await expect(page.getByRole("heading", { level: 1, name: cardPilot.pilot_name })).toBeVisible();
+  });
+
+  // #870: the title's menu listed every pilot of the class, one row each. It
+  // has one row for them now, and that opens a page with a search field.
+  test("the title's menu has one row for the other pilots, which opens a page to choose one", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 780 });
+    await page.goto(cardUrl);
+    await expect(page.getByRole("heading", { level: 1, name: cardPilot.pilot_name })).toBeVisible({
+      timeout: 30_000,
+    });
+    const other = cls.pilots.find((p) => p.comp_pilot_id !== cardPilot.comp_pilot_id)!;
+
+    await page.getByRole("button", { name: /go to another page$/ }).click();
+    await expect(page.getByRole("menuitem", { name: other.pilot_name })).toHaveCount(0);
+    await page.getByRole("menuitem", { name: "Another pilot…" }).click();
+
+    await expect(page.getByRole("heading", { level: 1, name: "Another pilot" })).toBeVisible();
+    // The address settles on its slugs and keeps the one `from`.
+    await expect(page).toHaveURL(new RegExp(`-${fixture.taskId}/pilots\\?from=${cardPilot.comp_pilot_id}$`));
+    const list = page.getByRole("list", { name: "Pilots, by rank" });
+    await expect(list.getByRole("listitem")).toHaveCount(cls.pilots.length);
+    // The pilot the reader came from is named, and is not a link to itself.
+    const own = list.getByRole("listitem").filter({ hasText: cardPilot.pilot_name });
+    await expect(own).toContainText("The report card you came from");
+    await expect(own.getByRole("link")).toHaveCount(0);
+
+    // The search narrows the rows, and says so when nothing matches.
+    const search = page.getByRole("searchbox", { name: "Search pilots" });
+    await search.fill(other.pilot_name);
+    await expect(list.getByRole("listitem")).toHaveCount(1);
+    await search.fill("nobody of this name");
+    await expect(page.getByText("No pilot of that name on this task.")).toBeVisible();
+    await search.fill(other.pilot_name);
+
+    // A row opens that pilot's report card, and Back returns to the list.
+    await list.getByRole("link", { name: new RegExp(other.pilot_name) }).click();
+    await expect(page.getByRole("heading", { level: 1, name: other.pilot_name })).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.goBack();
+    await expect(page.getByRole("heading", { level: 1, name: "Another pilot" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  });
+
   /**
    * The anonymous reader (issue #666).
    *

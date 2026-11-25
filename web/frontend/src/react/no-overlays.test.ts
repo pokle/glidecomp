@@ -95,4 +95,22 @@ describe("no full-screen overlays", () => {
       .filter((f) => !allowed.includes(f));
     expect(offenders).toEqual([]);
   });
+
+  // A layer over the whole screen is `fixed inset-0`. Two are left, and both
+  // are small overlays by the guide's rule (2.1): they take no text.
+  //   rac/dialog.tsx       the kit dialog's backdrop
+  //   pages/Dashboard.tsx  "Drop files to upload" on My Flights. It shows only
+  //                        while a file is dragged over the page, takes no
+  //                        input, and a phone, which cannot drag, never sees
+  //                        it. The owner kept it (2026-11-24, #870).
+  it("nothing else covers the whole screen", () => {
+    const ALLOWED = new Set(["rac/dialog.tsx", "pages/Dashboard.tsx"]);
+    const layers = sourceFiles(REACT)
+      .filter((f) =>
+        /\bfixed inset-0\b/.test(readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ""))
+      )
+      .map((f) => f.slice(REACT.length + 1))
+      .filter((f) => !ALLOWED.has(f));
+    expect(layers).toEqual([]);
+  });
 });

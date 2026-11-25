@@ -24,7 +24,7 @@
 import { ClipboardPenIcon, MapIcon } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "../lib/use-in-view";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   parseIGC,
   type IGCFix,
@@ -36,9 +36,17 @@ import { formatTaskDate, ordinal } from "../lib/format";
 import { zoneNameWithOffset } from "../lib/time";
 import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
 import { Loading } from "@/react/rac/progress";
-import { underTask } from "../lib/crumbs";
+import { underPilot, underTask } from "../lib/crumbs";
 import { retry } from "../lib/retry";
-import { compUrlId, idFromSegment, manualFlightPath, pilotPath, taskPath } from "../lib/slug";
+import {
+  compUrlId,
+  idFromSegment,
+  manualFlightPath,
+  pilotMapPath,
+  pilotPath,
+  taskPath,
+  taskPilotsPath,
+} from "../lib/slug";
 import { useAdminView } from "../lib/user";
 import { LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
@@ -58,7 +66,7 @@ import {
   TrackValidityDocLink,
 } from "../score-detail/TrackNotes";
 import { ExplanationSection } from "../score-detail/Explanation";
-import { MaximizeIcon, MinimizeIcon } from "../score-detail/icons";
+import { MaximizeIcon } from "../score-detail/icons";
 import { ScoringGlossary } from "../components/ScoringGlossary";
 import { MasterDetail } from "../components/MasterDetail";
 import { TaskInCompScores } from "../comp/TaskInCompScores";
@@ -184,7 +192,15 @@ async function loadDetail(
 // Page
 // ---------------------------------------------------------------------------
 
-export function PilotScoreDetail() {
+/**
+ * `view="map"` is the same page with the map alone, at full size
+ * (`/pilot/:id/map`, #870). It is this component rather than a second one
+ * because the map is drawn from what the report card loads: the task, the
+ * events its steps are anchored to and the tracklog. It was a fixed layer
+ * over the report card until 2026-11; a screen of its own is a page
+ * (docs/interaction-guide.md 2.1), left with Back.
+ */
+export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = {}) {
   const { compId: compParam, taskId: taskParam, pilotId: pilotParam } = useParams<{
     compId: string;
     taskId: string;
@@ -226,7 +242,6 @@ export function PilotScoreDetail() {
   const [fixes, setFixes] = useState<IGCFix[] | null>(null);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
-  const [mapExpanded, setMapExpanded] = useState(false);
   // Mapbox (764 KB) waits until the map panel nears the viewport — the page's
   // narrative is what the visitor came for. See lib/use-in-view.
   const [mapRef, mapInView] = useInView<HTMLDivElement>();
@@ -247,22 +262,6 @@ export function PilotScoreDetail() {
     compId,
   )}&taskId=${encodeURIComponent(taskId)}&pilotId=${encodeURIComponent(pilotId)}`;
 
-  // While the map is expanded to fill the viewport: Esc restores it, and the
-  // page behind it must not scroll.
-  useEffect(() => {
-    if (!mapExpanded) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMapExpanded(false);
-    };
-    document.addEventListener("keydown", onKey);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [mapExpanded]);
-
   useEffect(() => {
     if (!compId || !taskId || !pilotId) return;
     // Seeded from SSR on the first render — skip the redundant fetch.
@@ -277,7 +276,6 @@ export function PilotScoreDetail() {
       setState({ kind: "loading" });
       setFocus(null);
       setSelectedItem(null);
-      setMapExpanded(false);
     }
     // Retry through a transient D1 blip (the 4 concurrent reads can 404 one
     // spuriously on a cold DB) so we don't flash a false "not found".
@@ -369,7 +367,7 @@ export function PilotScoreDetail() {
   const readyData = state.kind === "ready" ? state.data : null;
   useCanonicalPath(
     readyData && compId && taskId && pilotId
-      ? pilotPath(
+      ? (view === "map" ? pilotMapPath : pilotPath)(
           compUrlId(readyData.comp, compId),
           readyData.comp.name,
           taskId,
@@ -417,25 +415,56 @@ export function PilotScoreDetail() {
       ),
     });
   }
-  const bar = (
-    <PageBar
-      title={ready?.entry.pilot_name ?? "Pilot"}
-      trail={underTask(compId, ready?.comp.name, taskId, ready?.task.name)}
-      related={
-        ready && ready.field.length > 1
-          ? {
-              as: "siblings",
-              items: ready.field.map((p) => ({
-                label: p.name,
-                to: pilotPath(urlId, ready.comp.name, taskId, ready.task.name, p.id, p.name),
-                current: p.id === pilotId,
-              })),
-            }
-          : undefined
-      }
-      actions={actions}
-    />
-  );
+  const bar =
+    view === "map" ? (
+      // The map's own page: Back returns to the report card.
+      <PageBar
+        title="Map"
+        fullTitle={ready ? `Map of ${ready.entry.pilot_name}'s flight` : "Map of the flight"}
+        trail={underPilot(
+          urlId,
+          ready?.comp.name,
+          taskId,
+          ready?.task.name,
+          pilotId,
+          ready?.entry.pilot_name
+        )}
+      />
+    ) : (
+      <PageBar
+        title={ready?.entry.pilot_name ?? "Pilot"}
+        trail={underTask(compId, ready?.comp.name, taskId, ready?.task.name)}
+        related={
+          // One row for every other pilot, which opens a page with a search
+          // field. The menu listed them all, one row each: 43 on the sample
+          // task (#870).
+          ready && ready.field.length > 1
+            ? {
+                as: "siblings",
+                items: [
+                  {
+                    label: ready.entry.pilot_name,
+                    to: pilotPath(
+                      urlId,
+                      ready.comp.name,
+                      taskId,
+                      ready.task.name,
+                      pilotId,
+                      ready.entry.pilot_name
+                    ),
+                    current: true,
+                  },
+                  {
+                    label: "Another pilot…",
+                    to: taskPilotsPath(urlId, ready.comp.name, taskId, ready.task.name, pilotId),
+                  },
+                ],
+              }
+            : undefined
+        }
+        actions={actions}
+      />
+    );
 
   if (state.kind === "loading") {
     return (
@@ -502,6 +531,51 @@ export function PilotScoreDetail() {
       setScrubIndex(nearestFixIndexByTime(fixes, event.time.getTime()));
     }
   };
+
+  const mapFallback = (
+    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      Loading map…
+    </div>
+  );
+  const map = (
+    <Suspense fallback={mapFallback}>
+      <ScoreDetailMap
+        task={data.mapTask}
+        fixes={fixes}
+        events={markerEvents}
+        focus={focus}
+        scrubIndex={scrubIndex}
+        openDistanceLine={data.openDistanceLine}
+        bestProgressRoute={data.bestProgressRoute}
+      />
+    </Suspense>
+  );
+  const scrubber =
+    fixes && fixes.length > 1 ? (
+      <TrackScrubber
+        fixes={fixes}
+        scrubIndex={scrubIndex}
+        timezone={data.comp.timezone}
+        onScrub={setScrubIndex}
+      />
+    ) : null;
+
+  if (view === "map") {
+    return (
+      <Page fill bar={bar}>
+        {/* The rest of the screen: Mapbox renders nothing into an unsized
+            container, and `min-h-0 flex-1` inside the fill page is a size. */}
+        <section
+          aria-label="Track map"
+          className="relative min-h-0 w-full flex-1 overflow-hidden border-y border-border sm:rounded-xl sm:border"
+        >
+          {map}
+        </section>
+        {/* The page's last row, in its flow: nothing is fixed to the bottom. */}
+        {scrubber ? <div className="shrink-0 px-4 py-2">{scrubber}</div> : null}
+      </Page>
+    );
+  }
 
   // The map answers the steps that are anchored to it, which today are all in
   // the Flight section. Those sections stay beside the map; the rest of the
@@ -615,85 +689,46 @@ export function PilotScoreDetail() {
           // The pane's content is deliberately fixed-height (the map sizes
           // itself, the scrubber is one row), so it needs neither the pane's
           // stacked cap nor a scrollbar of its own — exactly as before.
-          paneClassName={
-            mapExpanded
-              ? "fixed inset-0 z-50 flex flex-col rounded-none border-0 bg-background p-0 max-h-none @5xl:max-h-none overflow-y-visible"
-              : // No card chrome: the map div carries its own rounded border,
-                // and a pane border around it would double it. The wrapper's
-                // bleed still paints the background the stuck pane needs.
-                "rounded-none border-0 bg-transparent max-h-none @5xl:max-h-none overflow-y-visible"
-          }
-          // The wrapper is a sticky z-10 stacking context, so the expanded
-          // overlay above would be trapped under the page bar's z-40 header
-          // without this. Raising the wrapper rather than moving the pane
-          // keeps the map mounted — a move would re-initialise Mapbox.
-          paneWrapClassName={mapExpanded ? "z-50" : undefined}
+          // No card chrome: the map div carries its own rounded border, and
+          // a pane border around it would double it. The wrapper's bleed
+          // still paints the background the stuck pane needs.
+          paneClassName="rounded-none border-0 bg-transparent max-h-none @5xl:max-h-none overflow-y-visible"
           detail={
             <>
               <div
                 ref={mapRef}
-                className={`relative overflow-hidden ${
-                  mapExpanded
-                    ? "min-h-0 w-full flex-1"
-                    : "h-56 rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)]"
-                }`}
+                className="relative h-56 overflow-hidden rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)]"
               >
-                {!mapInView ? (
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    Loading map…
-                  </div>
-                ) : (
-                <Suspense
-                  fallback={
-                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                      Loading map…
-                    </div>
-                  }
-                >
-                  <ScoreDetailMap
-                    task={data.mapTask}
-                    fixes={fixes}
-                    events={markerEvents}
-                    focus={focus}
-                    scrubIndex={scrubIndex}
-                    openDistanceLine={data.openDistanceLine}
-                    bestProgressRoute={data.bestProgressRoute}
-                  />
-                </Suspense>
-                )}
+                {!mapInView ? mapFallback : map}
                 {/* The map's own control, styled like the providers' controls
                     (white regardless of theme) and kept clear of them:
-                    bottom-right, above the attribution line. Opening this
-                    track in the analysis viewer is in the bar's ⋯ menu. */}
-                <button
-                  type="button"
-                  onClick={() => setMapExpanded((v) => !v)}
-                  title={mapExpanded ? "Restore map (Esc)" : "Expand map"}
-                  aria-label={mapExpanded ? "Restore map" : "Expand map"}
+                    bottom-right, above the attribution line. It opens the
+                    map's own page (#870). Opening this track in the analysis
+                    viewer is in the bar's ⋯ menu. */}
+                <Link
+                  to={pilotMapPath(
+                    urlId,
+                    data.comp.name,
+                    taskId,
+                    data.task.name,
+                    pilotId,
+                    entry.pilot_name
+                  )}
+                  title="Expand map"
+                  aria-label="Expand map"
                   className="absolute bottom-8 right-2 z-20 flex size-10 pointer-coarse:size-11 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
                 >
-                  {mapExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
-                </button>
+                  <MaximizeIcon />
+                </Link>
               </div>
-              {fixes && fixes.length > 1 ? (
-                <div className={mapExpanded ? "border-t px-4 py-2" : "mt-1.5"}>
-                  <TrackScrubber
-                    fixes={fixes}
-                    scrubIndex={scrubIndex}
-                    timezone={data.comp.timezone}
-                    onScrub={setScrubIndex}
-                  />
-                </div>
-              ) : null}
-              {mapExpanded ? null : (
-                <p className="mt-1 hidden text-xs text-muted-foreground @5xl:block">
-                  Click any highlighted step in the explanation to see where it
-                  happened.
-                  {fixes && fixes.length > 1
-                    ? " Drag the slider to trace the flight up to any moment."
-                    : ""}
-                </p>
-              )}
+              {scrubber ? <div className="mt-1.5">{scrubber}</div> : null}
+              <p className="mt-1 hidden text-xs text-muted-foreground @5xl:block">
+                Click any highlighted step in the explanation to see where it
+                happened.
+                {fixes && fixes.length > 1
+                  ? " Drag the slider to trace the flight up to any moment."
+                  : ""}
+              </p>
             </>
           }
           master={

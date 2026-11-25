@@ -195,7 +195,7 @@ test("Copy pilots from another competition adds only the pilots not already here
     timeout: 20_000,
   });
 
-  await page.getByRole("button", { name: "Copy 1 pilot" }).click();
+  await page.getByRole("button", { name: "Add 1 pilot" }).click();
   await expect(page).toHaveURL(/\/pilots$/, { timeout: 20_000 });
   const rows = page.getByRole("grid", { name: "Pilots" }).getByRole("row");
   await expect(rows.filter({ hasText: "Ana Müller" })).toHaveCount(1);

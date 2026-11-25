@@ -226,9 +226,9 @@ function CopyReview({ page, from }: { page: ReadyPage; from: string }) {
             onCancel={page.leave}
             // "Copy 12 pilots" while there is somebody to copy; the bare word,
             // not live, when there is nobody.
-            commit={canCopy ? `Copy ${pilots(n)}` : "Copy"}
+            commit={canCopy ? `Add ${pilots(n)}` : "Add"}
             canCommit={canCopy}
-            pendingLabel="Copying"
+            pendingLabel="Adding"
           />
         }
         className="flex flex-col gap-6"

@@ -600,7 +600,7 @@ test("an import says what it will add, update and remove before it does any of i
 
   // Apply writes exactly what the review said, and returns to the list.
   review = await importFile(page, "roster.csv", csv);
-  await review.getByRole("button", { name: "Apply" }).click();
+  await review.getByRole("button", { name: "Import", exact: true }).click();
   await backOnList(page);
   await expect.poll(() => names(page)).toEqual(["Dee New", "Tom Smith"]);
   const after = await rosterOf(compId);
@@ -622,7 +622,7 @@ test("an exported roster re-imports as the same pilots", async ({ page }) => {
   const review = await importFile(page, "exported.csv", Buffer.concat(csv));
   await expect(review).toContainText("0 updated · 0 new · 0 removed");
   // Nothing to apply: Apply is in the bar, and not live.
-  await expect(review.getByRole("button", { name: "Apply" })).toBeDisabled();
+  await expect(review.getByRole("button", { name: "Import", exact: true })).toBeDisabled();
 });
 
 test("the page never scrolls sideways, its targets are thumb-sized, and the search bar stays in reach", async ({

@@ -604,6 +604,37 @@ export function pilotPath(
 }
 
 /**
+ * The report card's map at full size: a page of its own (#870), where it was
+ * a fixed layer over the report card.
+ */
+export function pilotMapPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  pilotId: string,
+  pilotName?: string | null
+): string {
+  return `${pilotPath(compId, compName, taskId, taskName, pilotId, pilotName)}/map`;
+}
+
+/**
+ * Choosing another pilot's report card for the same task (#870): what the
+ * report card's title menu opens, where it listed every pilot of the class.
+ * `from` is the pilot the reader came from, ticked in the list.
+ */
+export function taskPilotsPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  from?: string
+): string {
+  const base = `${taskPath(compId, compName, taskId, taskName)}/pilots`;
+  return from ? `${base}?from=${encodeURIComponent(from)}` : base;
+}
+
+/**
  * One pilot on one task, as an organiser manages them: their status, their
  * track, a manual flight. What a row of the task page's "Manage pilots &
  * tracks" opens. Beside the report card, which is the public page about the
