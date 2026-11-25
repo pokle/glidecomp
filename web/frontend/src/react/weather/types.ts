@@ -21,7 +21,7 @@ export {
   levelNearestHeight,
 } from "@glidecomp/engine";
 
-import type { TaskWeather } from "@glidecomp/engine";
+import type { TaskWeather, WeatherSource } from "@glidecomp/engine";
 
 /** GET /api/comp/:comp_id/task/:task_id/weather */
 export interface TaskWeatherData {
@@ -54,6 +54,15 @@ export interface TaskWeatherData {
  * launch. They were not: they are a grid cell, kilometres wide, and the
  * organizer's notes are the only local ground truth on the page.
  */
+/**
+ * The provider a chart's source stamp names: the model name's first word,
+ * "Open-Meteo" for "Open-Meteo best-match (ECMWF/regional)" and "ERA5" for
+ * "ERA5 reanalysis". The whole model name is in the credit under the charts.
+ */
+export function sourceShortName(source: Pick<WeatherSource, "model">): string {
+  return source.model.trim().split(/\s+/)[0] || source.model;
+}
+
 export function sourceKindLabel(kind: string): string {
   switch (kind) {
     case "model":

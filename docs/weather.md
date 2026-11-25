@@ -9,15 +9,18 @@ Together, in two prominent places, **notes first**:
 
 1. **The task page's "Weather" section** — under the route, above the results.
    Modelled charts only, via `src/react/weather/TaskWeatherPanel.tsx`.
-2. **A top-level "What the weather did" section on the task task-analysis
-   page** — placed *before* the separation ranking, because the conditions decide
-   which metrics matter.
+2. **Task analysis → Weather** (`/comp/:id/task/:id/analysis/weather`) — the
+   organiser's notes in a card of their own, then
+   `charts/day-profile/DayProfilePanel.tsx`: two cards, "From the weather
+   model" and "From the pilots' tracks", stacked on ONE shared time axis so
+   the predicted day reads against the day the field actually flew.
 
-That second section's body is `charts/day-profile/DayProfilePanel.tsx`: the
-flown, track-derived day charts and the modelled charts stacked on ONE shared
-time axis under explicit "From the pilots' tracks" / "From the weather model"
-group labels, so the predicted day reads against the day the field actually
-flew. (The day metric family below it keeps only its tables.)
+That page is the charts. What each day metric measures is behind the ⓘ on
+the chart it draws, not prose between the cards; the same text is printed in
+full on "How this was measured", and the day metric family on "Metric
+details" keeps the exact tables, which a link under the charts opens. The
+axis runs from an hour before the field's first flying to an hour after its
+last.
 
 ### How the day's charts are drawn
 
@@ -28,12 +31,18 @@ page, and the same three above the three track-derived charts on the
 task-analysis page.
 
 - **The frame is in CSS pixels.** The viewBox is as wide as the chart is
-  drawn, and labels are 13 px at every width. Chart heights are multiples of
-  that type size, so they do not grow with the page. Before issue #860 the
-  charts were a fixed 560-unit drawing scaled to the page, which painted
-  their labels at 5 px on a phone.
-- **What does not fit in the plot is text above it**: the title, the source
-  stamp (modelled charts) and the legend (`ChartHeader`, `MetLegend`). The y
+  drawn, and labels are 13 px at every width. Chart margins are multiples of
+  that type size. A plot's height is too, plus `plotExtra`: a tenth of the
+  width, held between 2.5 and 6 ems, so a plot is about 33 px taller on a
+  phone and 78 px on a desktop than the type alone would make it. Before
+  issue #860 the charts were a fixed 560-unit drawing scaled to the page,
+  which painted their labels at 5 px on a phone.
+- **What does not fit in the plot is text above it** (`ChartHeader`,
+  `MetLegend`): a one-word title, the source stamp ("Open-Meteo · modelled",
+  or "37 tracks · measured" on a track chart) and the legend. On a phone the
+  title and stamp share a line and the legend wraps beneath; from `sm` up the
+  legend joins the title line. The full model name, licence and grid cell are
+  in the credit under the charts. The y
   ticks are bare numbers with the unit printed once. Time labels thin to
   every second tick when neighbours would touch (`tickLabelStride`); the
   gridlines do not.
@@ -41,7 +50,8 @@ task-analysis page.
   drag on a phone, the pointer on a desktop, arrow keys from a keyboard. The
   hour is a band through every chart. Each chart prints its own figures for
   that hour in its legend row, beside the line they belong to, and the hour
-  beside its title. Nothing floats over a plot, and nothing is hover-only.
+  at the head of that row — not beside the title, so that the title line
+  holds still under a finger. Nothing floats over a plot, and nothing is hover-only.
   Each hour column is also named with its figures in a sentence
   (`met-readout.ts` for the modelled charts).
 - **Wind by leg is rows, not one drawing.** A leg's name and wind are a line

@@ -18,7 +18,8 @@ import type { ChartFrame } from "./frame";
 import { MetWindChart } from "./MetWindChart";
 import { MetSkyChart } from "./MetSkyChart";
 import { MetThermalChart } from "./MetThermalChart";
-import { sampleProvenance } from "./met-shared";
+import { Explain } from "@/react/rac/explain";
+import { sampleOffset, sampleProvenance } from "./met-shared";
 
 export function MetChartsGroup({
   weather,
@@ -46,7 +47,7 @@ export function MetChartsGroup({
 }) {
   const shared = { hours, source: weather.source, axis, frame, timeZone, selectedMs, onSelect };
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <MetWindChart {...shared} terrainElevationM={weather.resolved.elevationM} />
       {/* Cloud sits ABOVE the ceiling chart, and its lanes run high at the
           top — so the stack reads the way the sky is stacked: cirrus, then
@@ -60,8 +61,17 @@ export function MetChartsGroup({
 /** Full credit, once per surface. CC BY 4.0 requires the attribution; the
  * grid point requires the caveat, because a reader comparing these numbers
  * against the tracklogs deserves to know the weather was sampled kilometres
- * away and possibly hundreds of metres off in elevation. */
+ * away and possibly hundreds of metres off in elevation.
+ *
+ * The sentence says how far away; the coordinates, the cell size and its
+ * elevation are behind the ⓘ, and printed in its place on paper. */
 export function MetAttribution({ weather }: { weather: TaskWeather }) {
+  const { distanceKm } = sampleOffset(weather);
+  const cell =
+    distanceKm !== null && distanceKm >= 0.1
+      ? `A grid cell ${distanceKm.toFixed(1)} km from the task centre`
+      : "A grid cell";
+  const where = `Sampled at ${weather.source.pointLat.toFixed(3)}, ${weather.source.pointLon.toFixed(3)}${sampleProvenance(weather)}`;
   return (
     <p className="text-xs text-muted-foreground">
       Weather charts: {sourceKindLabel(weather.source.kind)} data from{" "}
@@ -73,10 +83,12 @@ export function MetAttribution({ weather }: { weather: TaskWeather }) {
       >
         {weather.source.attribution}
       </a>{" "}
-      ({weather.source.model}, {weather.source.license}). Sampled at{" "}
-      {weather.source.pointLat.toFixed(3)}, {weather.source.pointLon.toFixed(3)}
-      {sampleProvenance(weather)} A grid cell, not a reading at launch — the
-      organiser&rsquo;s notes are the local ground truth.
+      ({weather.source.model}, {weather.source.license}). {cell}, not a reading
+      at launch — the organiser&rsquo;s notes are the local ground truth.
+      <Explain label="The grid cell" className="ml-0.5 align-middle">
+        <p>{where}</p>
+      </Explain>
+      <span className="hidden print:inline"> {where}</span>
     </p>
   );
 }

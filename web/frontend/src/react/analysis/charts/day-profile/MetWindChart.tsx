@@ -35,7 +35,7 @@ import type { TimeAxis } from "./time-axis";
 import type { ChartFrame } from "./frame";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
 import { ChartHeader, sourceSentence } from "./MetSourceTag";
-import { MetLegend, type LegendEntry } from "./MetLegend";
+import type { LegendEntry } from "./MetLegend";
 import { HourColumns, columnAt, hourRange, useHourPointer, type HourColumn } from "./HourColumns";
 import { flyingHeightLabel, windReading } from "./met-readout";
 import { degToCompass, windArrowPath, windArrowTransform } from "./shared";
@@ -135,7 +135,7 @@ export function MetWindChart({
   // row for the time labels.
   const em = frame.fontSize;
   const laneY = em * 0.95;
-  const plot = { top: em * 2.5, bottom: em * 10 };
+  const plot = { top: em * 2.5, bottom: em * 10 + frame.plotExtra };
   const H = plot.bottom + em * 2;
   const columnWidth = Math.abs(axis.x(points[0].tMs + HOUR_MS) - axis.x(points[0].tMs));
   const arrowLen = Math.max(7, Math.min(em * 1.3, columnWidth * 0.75));
@@ -211,16 +211,17 @@ export function MetWindChart({
 
   return (
     <div className="space-y-0.5" data-met-chart="wind">
-      <ChartHeader
-        title="Weather: wind"
-        when={sel ? hourRange(sel.tMs, timeZone) : null}
-        source={source}
-      />
       {/* A legend row rather than labels on the lines: at a readable size
           the labels cover the lines they name. Each entry carries a sample of
           its own stroke, since the two lines are the same colour and only
           the dash tells them apart — and the selected hour's figure. */}
-      <MetLegend entries={legend} lines={3} />
+      <ChartHeader
+        title="Wind"
+        when={sel ? hourRange(sel.tMs, timeZone) : null}
+        source={source}
+        legend={legend}
+        lines={3}
+      />
       <svg
         viewBox={`0 0 ${frame.width} ${H}`}
         className="h-auto w-full select-none"

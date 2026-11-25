@@ -34,7 +34,7 @@ import type { TimeAxis } from "./time-axis";
 import type { ChartFrame } from "./frame";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
 import { ChartHeader, sourceSentence } from "./MetSourceTag";
-import { MetLegend, type LegendEntry } from "./MetLegend";
+import type { LegendEntry } from "./MetLegend";
 import { HourColumns, columnAt, hourRange, useHourPointer, type HourColumn } from "./HourColumns";
 import { heightReading } from "./met-readout";
 import { usableCeilingM } from "./met-shared";
@@ -103,7 +103,7 @@ export function MetThermalChart({
   // Heights in ems of the label size: room for the unit stamp, the plot, and
   // a row for the time labels.
   const em = frame.fontSize;
-  const plot = { top: em * 1.5, bottom: em * 10 };
+  const plot = { top: em * 1.5, bottom: em * 10 + frame.plotExtra };
   const H = plot.bottom + em * 2;
 
   const yMax = Math.max(...values) * 1.1;
@@ -181,11 +181,12 @@ export function MetThermalChart({
   return (
     <div className="space-y-0.5" data-met-chart="height">
       <ChartHeader
-        title="Weather: height"
+        title="Thermal ceiling"
         when={sel ? hourRange(sel.tMs, timeZone) : null}
         source={source}
+        legend={legend}
+        lines={2}
       />
-      <MetLegend entries={legend} lines={2} />
       <svg
         viewBox={`0 0 ${frame.width} ${H}`}
         className="h-auto w-full select-none"
