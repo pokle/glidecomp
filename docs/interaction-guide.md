@@ -400,6 +400,10 @@ WCAG 2.1.1, 2.1.2.
 - **No click-only handlers.** Use `<button>`, `<a>` or the kit component, not
   a `div` with `onClick`. A custom widget needs the role, the `tabindex` and
   the keys of its APG pattern.
+- **In a list or a tree of rows, the arrow keys move between rows and Tab
+  moves through the links and buttons in a row.** The next Tab after the last
+  one leaves the list. A reader never needs the Right arrow to reach a link
+  they can see. `rac/grid-list.tsx` and `rac/tree.tsx` set this.
 - On the map and the replay, pan, zoom, layer toggles and playback have
   keyboard equivalents.
 
@@ -872,6 +876,7 @@ A pattern is safe when one place in the code owns it or a test holds it.
 | A refused save ([5.6](#56-forms)) | `rac/form.tsx` | `rac/form.test.ts`, `e2e/forms.spec.ts` |
 | One kit ([3.12](#312-name-role-value-and-status)) | `src/react/rac/` | `src/react/one-kit.test.ts` |
 | A row's body ([5.7](#57-lists)) | `RowContent` in `rac/grid-list.tsx` | `src/react/interaction-guide.test.ts` |
+| Tab reaches a row's controls ([3.5](#35-keyboard)) | `rac/grid-list.tsx`, `rac/tree.tsx` | `e2e/user-files-upload.spec.ts` for the tree |
 | No editable grid ([5.7](#57-lists)) | No component exists to build one, and no grid library is installed | `src/react/interaction-guide.test.ts`: no grid library is installed or imported |
 | Waiting ([5.8](#58-waiting)) | `rac/progress.tsx` | `rac/progress.test.ts` |
 | Typed altitudes ([5.9](#59-units)) | `AltitudeField` in `comp/fields.tsx` | `lib/units.test.ts` |
