@@ -142,9 +142,6 @@ const TaskRouteQuickPage = lazy(() =>
 const TaskRouteXContestPage = lazy(() =>
   import("./pages/TaskRouteXContestPage").then((m) => ({ default: m.TaskRouteXContestPage }))
 );
-const TaskRouteMapPage = lazy(() =>
-  import("./pages/TaskRouteMapPage").then((m) => ({ default: m.TaskRouteMapPage }))
-);
 const TaskRouteAddWaypointPage = lazy(() =>
   import("./pages/TaskRouteAddWaypointPage").then((m) => ({
     default: m.TaskRouteAddWaypointPage,
@@ -405,9 +402,12 @@ export function AppRoutes() {
               path="/comp/:compId/task/:taskId/route/add-waypoint"
               element={<TaskRouteAddWaypointPage />}
             />
+            {/* The route's map at full size: the route editor's own page
+                again, so the router keeps it across the two routes and it is
+                the same map (see pages/TaskRoutePage.tsx). */}
             <Route
               path="/comp/:compId/task/:taskId/route/map"
-              element={<TaskRouteMapPage />}
+              element={<TaskRoutePage view="map" />}
             />
             <Route
               path="/comp/:compId/task/:taskId/route/copy"

@@ -75,8 +75,8 @@ export default function RouteMap({
   placeSearch?: boolean;
   /**
    * The search box goes UNDER the map. For a map whose top right corner
-   * carries the size buttons of a floating detail (the waypoints page,
-   * components/FloatingWindow.tsx): above, the field would sit under them,
+   * carries the size buttons of a floating detail (the waypoints page, the
+   * route editor; components/FloatingWindow.tsx): above, the field would sit under them,
    * and under the window's grabber.
    */
   searchBelow?: boolean;

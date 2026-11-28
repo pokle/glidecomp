@@ -5,7 +5,9 @@
  *
  * It replaces {@link MasterDetail}'s PINNED pane where a caller opts in. A
  * pinned map held half of a phone's screen for as long as the reader was in
- * its section, and the only way out was to hide it altogether. The window
+ * its section, and the only way out was to hide it altogether. (A page with
+ * no MasterDetail, whose map was a block in its flow, opts in with
+ * {@link useFloatOnNarrowScreen}: the route editor.) The window
  * covers a corner instead, and the reader decides which:
  *
  * - It is held by the GRABBER at its top (and, large, by its last row
@@ -235,6 +237,38 @@ export function useFloatingDetail(storageKey: string): FloatingDetail {
     [mode, reveal, state, active, typing, host, slots, slotRef, update]
   );
 }
+
+/**
+ * For a page whose detail has no {@link MasterDetail} to sit in: the route
+ * editor's map, a block under its list at every width. MasterDetail says when
+ * to float (stacked, under its `@5xl` container); this says it for such a
+ * page, by the SCREEN's width. Such a page is in the narrow column, whose
+ * measure is fixed (48rem at most), so its own container never reaches 64rem
+ * and cannot say whether this is a phone. The screen is the measure, at the
+ * width where a wide page's content reaches MasterDetail's 64rem: 64rem and
+ * the page's 1rem gutter each side. So the map floats on the same screens as
+ * the report card's and the waypoints map, and is in the page on the others.
+ *
+ * Put the detail's `flow` slot in a box with {@link FLOW_WHEN_WIDE}: hidden
+ * by the same width in CSS, so a phone never paints the block and then
+ * takes it away.
+ */
+export function useFloatOnNarrowScreen(float: FloatingDetail): void {
+  const { setActive } = float.internal;
+  useEffect(() => {
+    const wide = window.matchMedia(WIDE_SCREEN);
+    const apply = () => setActive(!wide.matches);
+    apply();
+    wide.addEventListener("change", apply);
+    return () => wide.removeEventListener("change", apply);
+  }, [setActive]);
+}
+
+/** {@link useFloatOnNarrowScreen}'s width, as a media query. */
+const WIDE_SCREEN = "(min-width: 66rem)";
+/** The `flow` slot's box for {@link useFloatOnNarrowScreen}: the same width,
+ * in CSS. A whole class string: Tailwind reads the source. */
+export const FLOW_WHEN_WIDE = "hidden min-[66rem]:block print:block";
 
 /**
  * A place the detail can be shown: `flow` is the pane's place in the page,

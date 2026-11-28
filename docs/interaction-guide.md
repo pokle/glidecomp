@@ -182,10 +182,11 @@ something a page does by itself.
   never shows it. `no-overlays.test.ts` names it and fails on another.
 - **A page fetches what it needs.** State goes in the URL or is fetched. It
   is never handed over in memory from the page underneath.
-  - One thing is carried as well as fetched: the report card's map
-    (owner's decision, 28 November 2026). Its full-size page loads alone
-    from its URL, as any page does. Reached from the report card, it shows
-    the same map the reader was looking at, with its view and what they
+  - One thing is carried as well as fetched: a floating map, the report
+    card's, the waypoints editor's or the route editor's (owner's decision,
+    28 November 2026). Its full-size page loads alone
+    from its URL, as any page does. Reached from the page it belongs to, it
+    shows the same map the reader was looking at, with its view and what they
     drew on it, and gives it back on the way out
     ([2.8](#28-the-keyboard-and-the-screens-edges)).
 - Worked example: the pilot editor, `pages/CompPilotPage.tsx`.
@@ -347,8 +348,10 @@ broke on an iPhone.
   - When a live map is off the flight it was showing, a button on it puts
     the whole flight back in view. It is there only then.
   - The report card's map and the waypoints map use it (`floating` on
-    `MasterDetail`); the route editor's map is next (owner's decision, 28
-    November 2026). Nothing else floats without the owner's decision.
+    `MasterDetail`), and so does the route editor's map (owner's decision, 28
+    November 2026), which has no `MasterDetail`: it floats on the screens
+    where those two do (`useFloatOnNarrowScreen`), and is a block under the
+    list on the others. Nothing else floats without the owner's decision.
 - The app runs edge to edge. A surface that touches an edge keeps its content
   clear of the notch with the `pt-safe`, `pb-safe` and `px-gutter-safe`
   utilities in `react/globals.css`.
@@ -931,7 +934,7 @@ A pattern is safe when one place in the code owns it or a test holds it.
 | Scroll on Back ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/scroll-restoration.ts` | `lib/scroll-restoration.test.ts`, `e2e/task-thermal-map.spec.ts` |
 | Focus on arrival ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/route-focus.ts` | `e2e/page-bar.spec.ts` |
 | Nothing fixed to an edge ([2.8](#28-the-keyboard-and-the-screens-edges)) | `rac/page-bar.tsx` | `e2e/page-bar.spec.ts` |
-| A map floats on a phone ([2.8](#28-the-keyboard-and-the-screens-edges)) | `components/FloatingWindow.tsx` (`useFloatingDetail`, `FloatingContent`, `FloatSlot`), with its rules in `components/floating-window.ts`; for a map inside it, `comp/float-map.ts` | `components/floating-window.test.ts`, `e2e/report-card.spec.ts`, `e2e/comp-waypoints.spec.ts`, `e2e/kit-touch-targets.spec.ts` on a phone |
+| A map floats on a phone ([2.8](#28-the-keyboard-and-the-screens-edges)) | `components/FloatingWindow.tsx` (`useFloatingDetail`, `FloatingContent`, `FloatSlot`), with its rules in `components/floating-window.ts`; for a map inside it, `comp/float-map.ts` | `components/floating-window.test.ts`, `e2e/report-card.spec.ts`, `e2e/comp-waypoints.spec.ts`, `e2e/task-settings-pages.spec.ts`, `e2e/kit-touch-targets.spec.ts` on a phone |
 | Colour as text ([3.2](#32-colour-and-contrast)) | The tokens in `react/globals.css` | `src/react/accent-text.test.ts` |
 | No sideways scroll ([3.3](#33-text-and-zoom)) | Each page | The `mobile` Playwright project, for the pages in `e2e/fixtures/mobile.ts` |
 | A tab strip that does not fit ([3.3](#33-text-and-zoom)) | `rac/tabs.tsx`; on the analysis page, `analysis/tab-overflow.ts` | `e2e/analysis-bar.spec.ts` for the analysis page. None for the kit's fades |

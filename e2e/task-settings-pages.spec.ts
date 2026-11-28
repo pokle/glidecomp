@@ -19,7 +19,8 @@
  * - the route editor as a real route, with its unsaved-changes guard, and
  *   its actions in the page's bar (issue #863): Save live only while the
  *   draft differs, the rest under ⋯, Reorder as a mode of the bar, and the
- *   map at full size on a page of its own;
+ *   map at full size on a page of its own, showing the same map; on a phone
+ *   the map floats in a window (components/FloatingWindow.tsx);
  * - the route editor's own pages (#812) — a turnpoint, Quick entry, Load
  *   from XContest, Add waypoint, each a sheet or a dialog until then — over
  *   one draft of the route that survives going between them, Back and a
@@ -559,8 +560,11 @@ test("a turnpoint is edited on its own page, and reordered in a mode", async ({
   await page.keyboard.press("Escape");
 
   // Reorder is a MODE: at rest the rows carry no per-row chrome at all. The
-  // bar names the mode, and its commit button is Done where Save was.
-  await expect(page.getByRole("button", { name: /^Move / })).toHaveCount(0);
+  // bar names the mode, and its commit button is Done where Save was. (The
+  // rows', not the page's: on a phone the map's window has "Move or hide
+  // map".)
+  const moveButtons = page.getByRole("grid", { name: /^Turnpoints/ }).getByRole("button", { name: /^Move / });
+  await expect(moveButtons).toHaveCount(0);
   await barAction(page, "Reorder turnpoints");
   await expect(page.getByRole("heading", { level: 1, name: "Reorder" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
@@ -574,7 +578,7 @@ test("a turnpoint is edited on its own page, and reordered in a mode", async ({
   await expect(page.getByRole("button", { name: "Move CHARL up" })).toBeFocused();
 
   await page.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByRole("button", { name: /^Move / })).toHaveCount(0);
+  await expect(moveButtons).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1, name: "Route" })).toBeVisible();
 
   // A row id follows its turnpoint through the reorder: CHARL is still 3.
@@ -906,33 +910,210 @@ test("Load from XContest is a page, and refuses a code under its field", async (
   await expect.poll(() => routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL"]);
 });
 
-test("the route's map has a page of its own, with Back and no Done", async ({ page }) => {
-  // Issue #863, decision 12. What it shows is the route's draft, so there is
-  // nothing to finish: Back is the way out, and Save stays on the route.
+/**
+ * On a phone the route's map floats (components/FloatingWindow.tsx): small,
+ * in the middle of the foot, as a picture, where it was a block under the
+ * list that a finger panned instead of scrolling the page. What is this
+ * page's: placing a point needs a LIVE map, so "New waypoint from the map"
+ * brings the window up large, put away or not; and the place search in the
+ * window does not put the window away, as a field of the page does while a
+ * keyboard is up. None of it touches the draft.
+ */
+test("on a phone the route's map floats, and placing a waypoint brings it up large", { tag: PHONE_ONLY }, async ({
+  page,
+}) => {
   await devLogin(page, ADMIN_USER);
   await seedRoute(page);
   await page.goto(`/comp/${compId}/task/${taskId}/route`);
-  await page.getByRole("link", { name: "Map at full size" }).click();
+  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL"]);
+
+  const map = page.getByRole("region", { name: "Route map" });
+  await expect(map).toHaveAttribute("data-floating", "small", { timeout: 20_000 });
+  await expect(map).toHaveAttribute("data-corner", "bottom-centre");
+  // The block under the list went with the window, and so did its link.
+  await expect(page.getByRole("link", { name: "Map at full size" })).toHaveCount(0);
+  await expect(page.locator("section[aria-label='Map']")).toHaveCount(0);
+  await expectNoSidewaysScroll(page, "the route editor with its map floating");
+  // Small, it is a picture, which takes no input: no place search on it.
+  await expect(map.getByRole("combobox", { name: "Search for a place" })).toHaveCount(0);
+
+  // The next tap places a point, so the map must take a tap.
+  await barAction(page, "New waypoint from the map");
+  await expect(map).toHaveAttribute("data-floating", "large");
+  await expect(map.getByText("Tap the map to place a new waypoint")).toBeVisible();
+  // Under the map, in the window's last row, where nothing sits on the
+  // size buttons. The window grows by an animation; a box read during it is
+  // scaled.
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[data-floating="large"]');
+    return el != null && el.getAnimations().length === 0;
+  });
+  const cancel = map.getByRole("button", { name: "Cancel", exact: true });
+  const button = (await cancel.boundingBox())!;
+  expect(button.width, "Cancel is a finger wide").toBeGreaterThanOrEqual(44);
+  expect(button.height, "Cancel is a finger tall").toBeGreaterThanOrEqual(44);
+  const win = (await map.boundingBox())!;
+  expect(win.y + win.height - (button.y + button.height), "Cancel is in the last row").toBeLessThan(8);
+  await cancel.click();
+  await expect(page.getByText("Tap the map to place a new waypoint")).toHaveCount(0);
+  await expect(map).toHaveAttribute("data-floating", "large");
+
+  // The place search is in the large window. A keyboard puts the window
+  // away, but not a field inside it: that would take the field away too.
+  const search = map.getByRole("combobox", { name: "Search for a place" });
+  await search.click();
+  await expect(search).toBeFocused();
+  await expect(map).toHaveAttribute("data-floating", "large");
+  // A field of the page does put it away, and it comes back afterwards.
+  await page.getByRole("button", { name: /^Start Speed Section \(SSS\)/ }).click();
+  const gates = page.getByRole("main").getByRole("textbox").first();
+  await gates.click();
+  await expect(map).toBeHidden();
+  await gates.blur();
+  await expect(map).toHaveAttribute("data-floating", "large");
+
+  // Put away, "New waypoint from the map" brings it back large too.
+  await page.getByRole("button", { name: "Move or hide map" }).click();
+  await page.getByRole("menuitem", { name: "Hide" }).click();
+  await expect(map).toBeHidden();
+  await expect(page.getByRole("button", { name: "Show map" })).toBeVisible();
+  await barAction(page, "New waypoint from the map");
+  await expect(map).toHaveAttribute("data-floating", "large");
+  await expect(map.getByText("Tap the map to place a new waypoint")).toBeVisible();
+  await map.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  // Through all of that, the route is as it was, and nothing was saved.
+  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL"]);
+  await expect(page.getByText("This is the saved route.")).toBeVisible();
+});
+
+/**
+ * The map at full size is a page (guide 2.1; issue #863, decision 12), and
+ * the SAME map: the route and it are one component, so the router keeps the
+ * map's element, with its view and whether it is armed to place a point.
+ * What it shows is the route's draft, so there is nothing to finish there:
+ * Back is the way out, Save stays on the route, and the draft goes there and
+ * back and is saved from the route after the trip.
+ */
+test("Expand map opens the route's map page with the SAME map, and the draft goes with it", async ({
+  page,
+  isMobile,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await seedRoute(page);
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL"]);
+
+  // A draft to carry: the start type, from the Start disclosure.
+  await page.getByRole("button", { name: /^Start Speed Section \(SSS\)/ }).click();
+  await page.getByText("Elapsed time — timed from each pilot's crossing").click();
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  const map = page.getByRole("region", { name: "Route map" });
+  const expand = page.getByRole("link", { name: "Expand map" });
+  if (isMobile) {
+    // The way to the full-size page is on the large window.
+    await expect(map).toHaveAttribute("data-floating", "small", { timeout: 20_000 });
+    await expect(expand).toBeHidden();
+    await page.getByRole("button", { name: "Enlarge map" }).click();
+    await expect(map).toHaveAttribute("data-floating", "large");
+  } else {
+    // On a wide screen there is no window: the map is a block under the
+    // list, with the same "larger" in its corner.
+    await expect(page.locator("[data-floating]")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Map at full size" })).toHaveCount(0);
+    // Mapbox waits until the block nears the screen.
+    await expand.scrollIntoViewIfNeeded();
+  }
+  await expect(expand).toBeVisible({ timeout: 20_000 });
+  // Mark the map's element: the page that opens must show THIS map.
+  const mark = () =>
+    page.evaluate(() => {
+      const c = document.querySelector(".mapboxgl-canvas") as (HTMLElement & { __mark?: string }) | null;
+      if (!c) return null;
+      c.__mark ??= String(Math.random());
+      return c.__mark;
+    });
+  await expect.poll(mark, { timeout: 30_000 }).not.toBeNull();
+  const before = await mark();
+
+  // Armed on the route, the full-size page opens armed: it is the same map.
+  await barAction(page, "New waypoint from the map");
+  await expect(page.getByText("Tap the map to place a new waypoint")).toBeVisible();
+  await expand.click();
   await expect(page).toHaveURL(/\/route\/map$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Route map" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Route map" })).toBeVisible({
+    timeout: 20_000,
+  });
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(map).toBeVisible();
+  expect(await mark(), "the same map element").toBe(before);
+  await expect(page.getByText("Tap the map to place a new waypoint")).toBeVisible();
+  await expect(
+    page.getByText("3 turnpoints. Tap a waypoint to add it to the route. Unsaved: Save is on Route.")
+  ).toBeVisible();
+  // Nothing to finish here: no Done, and Save is on the route.
   await expect(page.getByRole("button", { name: "Done" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
-  await expect(page.getByText("3 turnpoints. Tap a waypoint to add it to the route.")).toBeVisible();
 
-  // ⋯ holds the one thing to do here: arm a tap on the map.
+  // The page is the bar and the map, edge to edge: it does not scroll.
+  const box = (await map.boundingBox())!;
+  expect(box.width, "the map is as wide as the screen").toBe(page.viewportSize()!.width);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollHeight - document.documentElement.clientHeight
+    ),
+    "the map page does not scroll"
+  ).toBeLessThanOrEqual(1);
+  await expectNoSidewaysScroll(page, "the route map");
+
+  // Its own Cancel, and the bar's row, disarm it; the bar's row arms it.
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByText("Tap the map to place a new waypoint")).toHaveCount(0);
   await barAction(page, "New waypoint from the map");
   await expect(page.getByText("Tap the map to place a new waypoint")).toBeVisible();
   await barAction(page, "Stop placing a waypoint");
   await expect(page.getByText("Tap the map to place a new waypoint")).toHaveCount(0);
 
-  // A reload keeps the page, and it is inside the editor: nothing asks.
+  // "Smaller", in the map's top right corner, goes back to the route: the
+  // same map again, and the draft.
+  const shrink = page.getByRole("button", { name: "Shrink map" });
+  const at = (await shrink.boundingBox())!;
+  expect(box.x + box.width - (at.x + at.width), "against the right edge").toBeLessThan(12);
+  expect(at.y - box.y, "against the top of the map").toBeLessThan(12);
+  await shrink.click();
+  await expect(page).toHaveURL(ROUTE_URL);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  expect(await mark(), "still the same map element").toBe(before);
+  if (isMobile) await expect(map).toHaveAttribute("data-floating", "large");
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  // A reload stands on the full-size page, inside the editor: nothing asks,
+  // and the bar's Back returns to the route, draft and all.
+  await expand.click();
+  await expect(page).toHaveURL(/\/route\/map$/);
+  // The bar has named the page behind it (lib/leave.ts), which is what a
+  // reload remembers.
+  const backToRoute = page.getByRole("link", { name: "Back to Route" });
+  await expect(backToRoute).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("heading", { level: 1, name: "Route map" })).toBeVisible();
-  await page.getByRole("link", { name: "Back to Route" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Route map" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(map).toBeVisible();
+  await backToRoute.click();
   await expect(page).toHaveURL(ROUTE_URL);
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL"]);
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  // Save in the route's bar still works after the trip, and sends the draft.
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: TASK_NAME })).toBeVisible();
+  const task = await page.request.get(`/api/comp/${compId}/task/${taskId}`);
+  expect(
+    ((await task.json()) as { xctsk: { sss?: { type?: string } } }).xctsk.sss?.type
+  ).toMatch(/ELAPSED/);
 });
 
 test("a waypoint added from the route's map is a page, and is saved with the route", async ({

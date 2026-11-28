@@ -27,6 +27,18 @@
  * to one of them and back, or reloading, finds the route as it was left; see
  * comp/use-route-editor.ts for what asks before the work is lost.
  *
+ * **The map is one map** (comp/RouteMapPane.tsx). On a wide screen it is a
+ * block under the list; on a phone it FLOATS over the page in a window the
+ * reader moves, sizes and puts away (components/FloatingWindow.tsx;
+ * docs/interaction-guide.md 2.8). It was a block there too until 28 November
+ * 2026, and a finger on it panned the map instead of scrolling the page. The
+ * full-size page (/route/map, `view="map"`) is THIS component, so the map on
+ * it is the same map, with its view and whether it is armed to place a
+ * point, and goes back with them: the router keeps the instance because both
+ * routes render it, with its {@link FloatingContent} first in the tree. A
+ * small window is a picture of the map and takes no touch, so "New waypoint
+ * from the map" brings it up large.
+ *
  * **The page is for information, and every action is in the bar** (#863).
  * Save is the bar's commit button, live only while the draft differs from the
  * saved route; it was a bar stuck to the bottom of the screen. The row of
@@ -59,7 +71,7 @@ import {
   ImportIcon,
   KeyboardIcon,
   MapPinPlusIcon,
-  Maximize2Icon,
+  MapPinXIcon,
   MountainIcon,
   PlusIcon,
   Trash2Icon,
@@ -72,7 +84,7 @@ import {
   type XCTask,
 } from "@glidecomp/engine";
 import { Alert, AlertDescription } from "@/react/rac/alert";
-import { Button, LinkButton } from "@/react/rac/button";
+import { Button } from "@/react/rac/button";
 import { Disclosure } from "@/react/rac/disclosure";
 import {
   Form,
@@ -82,6 +94,13 @@ import {
   type SubmitResponse,
 } from "@/react/rac/form";
 import { Page, PageBar, commitClass, type BarAction } from "@/react/rac/page-bar";
+import {
+  FLOW_WHEN_WIDE,
+  FloatSlot,
+  FloatingContent,
+  useFloatOnNarrowScreen,
+  useFloatingDetail,
+} from "@/react/components/FloatingWindow";
 import { api } from "../../comp/api";
 import { useLeave } from "../lib/leave";
 import { fetchWithRetry } from "./types";
@@ -89,7 +108,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { downloadFile } from "../lib/format";
 import { slugify } from "./csv";
-import { underTask } from "../lib/crumbs";
+import { underTask, underTaskRoute } from "../lib/crumbs";
 import {
   taskPath,
   taskRouteCopyPath,
@@ -143,7 +162,24 @@ function assemble(editor: RouteEditorState, d: RouteDraft) {
   );
 }
 
-export function RouteEditor({ editor }: { editor: RouteEditorState }) {
+/**
+ * The name the map's window is remembered under: its place, its size and
+ * whether it is put away. Not the report card's ("score-map") nor the
+ * waypoints page's ("map"): a reader who put one away has not put this away.
+ */
+const MAP_KEY = "route-map";
+
+/**
+ * `view="map"` is the same page with the map alone, at full size
+ * (/route/map): see the note at the top.
+ */
+export function RouteEditor({
+  editor,
+  view = "list",
+}: {
+  editor: RouteEditorState;
+  view?: "list" | "map";
+}) {
   const confirm = useConfirm();
   const navigate = useNavigate();
   const leave = useLeave();
@@ -188,6 +224,11 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
   const [addMode, setAddMode] = useState(false);
   /** Said under the map: what the last tap on it did. */
   const [mapNote, setMapNote] = useState("");
+  // On a phone the map is a floating window. There is no MasterDetail on
+  // this page to say when: the screen's width does (see the hook).
+  const float = useFloatingDetail(MAP_KEY);
+  useFloatOnNarrowScreen(float);
+  const { mode, reveal } = float;
   const mapSection = useRef<HTMLElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -439,8 +480,14 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
       label: "New waypoint from the map",
       onAction: () => {
         setAddMode(true);
-        // After the menu has closed and given focus back.
-        setTimeout(() => mapSection.current?.scrollIntoView({ block: "start" }), 150);
+        // The next tap places a point, so a map must be on screen to take
+        // it. A small window is a picture, which takes no touch, so a window
+        // that is small or put away comes up large and live.
+        if (mode === "small" || mode === "tucked") reveal(null, "large");
+        // Under the list: after the menu has closed and given focus back.
+        else if (mode == null) {
+          setTimeout(() => mapSection.current?.scrollIntoView({ block: "start" }), 150);
+        }
       },
     },
     ...(showQuickTask
@@ -535,8 +582,86 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
       : []),
   ];
 
+  const mapPath = taskRouteMapPath(urlId, compName, taskId, taskName);
+  const turnpointCount = rows.filter((r) => !isBlankRow(r)).length;
+  // The map: ONE subtree for its place under the list, the floating window
+  // and the full-size page, so it is the same map in all three, with its
+  // view and whether it is armed to place a point. First in the tree on the
+  // route AND on the full-size page, so the router keeps it, and the map in
+  // it, when the reader goes between them.
+  const floatingContent = (
+    <FloatingContent
+      float={float}
+      label="map"
+      ariaLabel="Route map"
+      fullTo={mapPath}
+      // It leaves the page as the bar's Back does: the full-size map is a
+      // page (guide 2.1).
+      onLeaveFull={editor.leave}
+    >
+      <RouteMapPane
+        editor={editor}
+        mapTask={derived.mapTask}
+        addMode={addMode}
+        setAddMode={setAddMode}
+        onNote={setMapNote}
+        mode={mode}
+        footer={
+          // The full-size page's last row, in its flow: nothing is fixed to
+          // the bottom. What it shows is the route's draft, so Save is on the
+          // route, and there is no Done: Back is the way out.
+          <p
+            role="status"
+            className="shrink-0 border-t border-border px-gutter-safe py-2 text-sm text-muted-foreground"
+          >
+            {mapNote ||
+              `${turnpointCount} turnpoint${turnpointCount === 1 ? "" : "s"}. Tap a waypoint to add it to the route.`}
+            {editor.dirty ? " Unsaved: Save is on Route." : ""}
+          </p>
+        }
+      />
+    </FloatingContent>
+  );
+
+  if (view === "map") {
+    return (
+      <>
+        {floatingContent}
+        {/* The page is the bar and the map (#863): `fill`, so the page does
+            not scroll and every drag belongs to the map, which is as wide and
+            as tall as the screen under the bar. */}
+        <Page
+          fill="viewport"
+          bar={
+            <PageBar
+              title="Route map"
+              trail={underTaskRoute(urlId, compName, taskId, taskName)}
+              actions={[
+                {
+                  id: "new",
+                  icon: addMode ? MapPinXIcon : MapPinPlusIcon,
+                  label: addMode ? "Stop placing a waypoint" : "New waypoint from the map",
+                  onAction: () => setAddMode(!addMode),
+                },
+              ]}
+            />
+          }
+        >
+          <FloatSlot
+            float={float}
+            kind="full"
+            role="region"
+            aria-label="Route map"
+            className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-border"
+          />
+        </Page>
+      </>
+    );
+  }
+
   return (
     <>
+      {floatingContent}
       <Page
         className="flex flex-col gap-5"
         bar={
@@ -715,35 +840,27 @@ export function RouteEditor({ editor }: { editor: RouteEditorState }) {
         {/* Map preview — below the list, showing the optimised route as it's
             edited. Tap a waypoint to add it, or (with "New waypoint from the
             map" in ⋯) tap empty space to make a new one, added to the
-            competition when the route is saved. A drag on the map moves the
-            map; a drag beside it scrolls the page. `scroll-mt` is the bar's
-            height, for the scroll that ⋯ row makes. */}
-        <section ref={mapSection} aria-label="Map" className="flex scroll-mt-20 flex-col gap-2">
-          <RouteMapPane
-            editor={editor}
-            mapTask={derived.mapTask}
-            addMode={addMode}
-            setAddMode={setAddMode}
-            onNote={setMapNote}
-            className="flex h-80 flex-col overflow-hidden rounded-xl border border-border sm:h-96"
-          />
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {/* Here, not in ⋯: it is this map, made larger. */}
-            <LinkButton
-              href={taskRouteMapPath(urlId, compName, taskId, taskName)}
-              variant="outline"
-              className="h-11 gap-2 px-4"
-            >
-              <Maximize2Icon className="size-4" aria-hidden />
-              Map at full size
-            </LinkButton>
-            <p role="status" className="text-sm text-muted-foreground">
-              {mapNote ||
-                (pendingCount > 0
-                  ? `${pendingCount} new waypoint${pendingCount === 1 ? "" : "s"}, saved to the competition with the route.`
-                  : "Tap a waypoint to add it to the route.")}
-            </p>
-          </div>
+            competition when the route is saved. On a wide screen it is a
+            block here, with the way to the full-size page in its corner
+            (FloatingContent draws it). On a phone it is a window over the
+            page instead, which the reader moves, sizes and puts away: a block
+            here held a phone's screen, and a finger on it panned the map
+            rather than scrolling the page. Its place here is then hidden by
+            CSS (FLOW_WHEN_WIDE), and only the line under it stays.
+            `scroll-mt` is the bar's height, for the scroll that ⋯ row makes. */}
+        <section
+          ref={mapSection}
+          // A region only while the map is in it.
+          aria-label={mode == null ? "Map" : undefined}
+          className="flex scroll-mt-20 flex-col gap-2"
+        >
+          <FloatSlot float={float} kind="flow" className={FLOW_WHEN_WIDE} />
+          <p role="status" className="text-sm text-muted-foreground">
+            {mapNote ||
+              (pendingCount > 0
+                ? `${pendingCount} new waypoint${pendingCount === 1 ? "" : "s"}, saved to the competition with the route.`
+                : "Tap a waypoint to add it to the route.")}
+          </p>
         </section>
 
         {shownErrors.length > 0 ? (

@@ -264,7 +264,9 @@ five pages over one draft: the route (`/comp/:c/task/:t/route`), one
 turnpoint (`/route/:n`), Quick entry (`/route/quick`), Load from XContest
 (`/route/xcontest`) and Add waypoint (`/route/add-waypoint`).
 [#863](https://github.com/pokle/glidecomp/issues/863) added the map at full
-size (`/route/map`), as the waypoints editor has. The store is
+size (`/route/map`), as the waypoints editor has; since 28 November 2026 it
+is the route page's own component, so its map is the route page's map
+(`comp/RouteEditor.tsx`). The store is
 `routeDraft` in `comp/route-draft.ts`, keyed `[compId, taskId]` (the comp's
 bare id); every page reaches it through `useRouteEditor()`
 (`comp/use-route-editor.ts`). It follows the waypoints editor in every point
