@@ -7,7 +7,6 @@
  * via useDragAndDrop — keyboard-accessible row reordering. It still renders
  * native <table>/<tr>/<td> elements, so SSR/SEO output is unchanged.
  */
-import { useContext } from "react";
 import {
   Table as AriaTable,
   TableHeader as AriaTableHeader,
@@ -15,7 +14,6 @@ import {
   Column as AriaColumn,
   Row as AriaRow,
   Cell as AriaCell,
-  TableStateContext,
   type TableProps,
   type TableHeaderProps,
   type TableBodyProps,
@@ -120,37 +118,6 @@ export function Row<T extends object>({
       )}
       {...props}
     />
-  );
-}
-
-/**
- * Wrap a cell's inline editor (text field, number field, select) in this to
- * suspend the grid's arrow-key cell navigation while focus is inside it —
- * react-aria Table captures Arrow/Home/End at the cell level otherwise, so
- * the caret could never move within the editor. Uses the same
- * setKeyboardNavigationDisabled "edit mode" flag RAC's column resizer uses;
- * navigation resumes the moment focus leaves the zone (Tab, click, Esc).
- */
-export function CellEditZone({
-  className,
-  children,
-}: {
-  className?: string;
-  children: React.ReactNode;
-}) {
-  const state = useContext(TableStateContext);
-  return (
-    <div
-      className={className}
-      onFocus={() => state?.setKeyboardNavigationDisabled(true)}
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget)) {
-          state?.setKeyboardNavigationDisabled(false);
-        }
-      }}
-    >
-      {children}
-    </div>
   );
 }
 

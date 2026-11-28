@@ -6,8 +6,7 @@
  * cell navigation — see gotcha #2 in the RAC adoption guide), a GridList row is
  * a single stack item. With `keyboardNavigationBehavior="tab"` the arrow keys
  * move between rows while Tab moves through a row's focusable children, so
- * inline editors and per-row buttons keep their carets and their tab order with
- * no CellEditZone plumbing.
+ * inline editors and per-row buttons keep their carets and their tab order.
  *
  * Two looks, because both are wanted:
  *

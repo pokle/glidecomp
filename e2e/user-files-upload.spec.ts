@@ -187,6 +187,52 @@ test("delete an uploaded task", async ({ page, request }) => {
   await expect(page.locator('a[href*="storedTask="]')).toHaveCount(0);
 });
 
+test("Tab reaches the links in a competition flights row", async ({ page, request }) => {
+  // The tree is rac/tree.tsx, which sets keyboardNavigationBehavior="tab".
+  // RAC's default makes the tree one tab stop, and a row's links are then
+  // reachable only with the Right arrow. The flights are stubbed: the test is
+  // about the keyboard, and a real one needs a scored competition.
+  await page.route("**/api/comp/pilot/flights", (route) =>
+    route.fulfill({
+      json: {
+        flights: [
+          {
+            comp_id: "aaaa",
+            comp_name: "Alpha Cup",
+            task_id: "t1",
+            task_name: "Task 1",
+            task_date: "2026-01-02",
+            comp_pilot_id: "p1",
+            kind: "track",
+            rank: 3,
+            class_size: 40,
+            pilot_class: "open",
+          },
+        ],
+      },
+    })
+  );
+  const user = testUser("tree-keys");
+  await signInAndOnboard(request, page, user);
+
+  const tree = page.locator('[role="treegrid"][aria-label="Competition flights"]');
+  const rows = tree.locator('[role="row"]');
+  await expect(rows).toHaveCount(2);
+
+  await rows.first().focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(rows.nth(1)).toBeFocused();
+
+  await page.keyboard.press("Tab");
+  await expect(tree.getByRole("link", { name: "Task 1" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(tree.getByRole("link", { name: "3rd of 40" })).toBeFocused();
+
+  // The next Tab leaves the tree; it does not walk the remaining rows.
+  await page.keyboard.press("Tab");
+  await expect(tree.locator(":focus")).toHaveCount(0);
+});
+
 test("public-link viewer can read a track uploaded by another user", async ({
   browser,
   request,
