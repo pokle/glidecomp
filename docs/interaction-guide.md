@@ -352,6 +352,9 @@ broke on an iPhone.
     November 2026), which has no `MasterDetail`: it floats on the screens
     where those two do (`useFloatOnNarrowScreen`), and is a block under the
     list on the others. Nothing else floats without the owner's decision.
+  - The waypoints map's full-size page is for everyone, read-only for a
+    visitor (owner's decision, 28 November 2026). The route map's is the
+    organisers', as the route editor is.
 - The app runs edge to edge. A surface that touches an edge keeps its content
   clear of the notch with the `pt-safe`, `pb-safe` and `px-gutter-safe`
   utilities in `react/globals.css`.
@@ -743,6 +746,11 @@ this [More] menu if you really need it."
 - "Submit your track" is the first row of ⋯ on the competition and task
   pages.
 - Pass the bar only the actions this reader may use.
+- **A page whose work is adding shows its ways to add beside ⋯**, as
+  buttons of the bar: the waypoints editor's Add waypoint and Add from map
+  (owner's decision, 28 November 2026). A menu hid both, and adding is what
+  an organiser comes to that page to do. The bar's `add` takes more than
+  one, each with its own glyph; the plus is the first.
 - **An action stays on the page only when its place says something**: "Add
   turnpoint" under the list, and the one destructive action at the foot of a
   form. `SectionHeader` carries an action on the same condition.
