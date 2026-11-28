@@ -171,7 +171,7 @@ export interface MapProvider {
     destroy(): void;
 
     /** Tell the map to resize/redraw (call after container size changes) */
-    invalidateSize(): void;
+    invalidateSize(options?: { keepView?: boolean }): void;
 
     /** Whether this provider supports 3D track rendering */
     supports3D: boolean;

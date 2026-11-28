@@ -59,6 +59,8 @@ import type {
   TaskDetailData,
   TaskScoreData,
 } from "../comp/types";
+import { useFloatingDetail } from "../components/FloatingWindow";
+import { cn } from "@/react/lib/utils";
 import { TrackScrubber, nearestFixIndexByTime } from "../score-detail/TrackScrubber";
 import {
   TrackDataCleaningNote,
@@ -245,6 +247,10 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
   // Mapbox (764 KB) waits until the map panel nears the viewport — the page's
   // narrative is what the visitor came for. See lib/use-in-view.
   const [mapRef, mapInView] = useInView<HTMLDivElement>();
+  // On a phone the map is a floating window (see FloatingWindow.tsx). Held
+  // here because the page lays the map out for it, and brings it back when
+  // the reader picks a step it had been put away for.
+  const float = useFloatingDetail("score-map");
   // Time scrubber: draw the track only up to this fix (null = whole flight).
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   // Deep-link into the standalone analysis viewer. `pilotId` narrows it to
@@ -522,6 +528,9 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
     const event = data.eventsByItem.get(item.id);
     if (!event) return;
     setSelectedItem(item.id);
+    // A step is a question put to the map. If the map was put away, this is
+    // the moment it is wanted.
+    float.reveal();
     setFocus((prev) => ({ event, nonce: (prev?.nonce ?? 0) + 1 }));
     // Show the flight only up to the clicked moment — when a pilot crosses
     // the same cylinder repeatedly, the clipped track is what makes the
@@ -681,6 +690,7 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
           detailLabel="map"
           detailAriaLabel="Track map"
           storageKey="score-map"
+          floating={float}
           bleed="page"
           // 11fr/9fr, the split this page has always opened on.
           defaultMasterShare={11 / 20}
@@ -697,7 +707,19 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
             <>
               <div
                 ref={mapRef}
-                className="relative h-56 overflow-hidden rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)]"
+                className={
+                  float.mode
+                    ? // The window is the frame, and the map fills it.
+                      cn(
+                        "relative min-h-0 flex-1 overflow-hidden",
+                        // Small, it is a picture: the map's own controls
+                        // cannot be used and would cover a third of it.
+                        // The provider's logo and attribution stay.
+                        float.mode !== "large" &&
+                          "[&_.mapboxgl-ctrl-top-left]:hidden [&_.mapboxgl-ctrl-top-right]:hidden [&_.mapboxgl-ctrl-bottom-left>*:not(:has(.mapboxgl-ctrl-logo))]:hidden [&_.ann-toggle]:hidden"
+                      )
+                    : "relative h-56 overflow-hidden rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)]"
+                }
               >
                 {!mapInView ? mapFallback : map}
                 {/* The map's own control, styled like the providers' controls
@@ -705,7 +727,10 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
                     bottom-right, above the attribution line. It opens the
                     map's own page (#870). Opening this track in the analysis
                     viewer is in the bar's ⋯ menu. */}
+                {/* A small window is a picture, and its whole face is one
+                    button already. */}
                 <Link
+                  hidden={float.mode != null && float.mode !== "large"}
                   to={pilotMapPath(
                     urlId,
                     data.comp.name,
@@ -721,7 +746,14 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
                   <MaximizeIcon />
                 </Link>
               </div>
-              {scrubber ? <div className="mt-1.5">{scrubber}</div> : null}
+              {scrubber ? (
+                <div
+                  hidden={float.mode != null && float.mode !== "large"}
+                  className={float.mode ? "shrink-0 px-3 py-1" : "mt-1.5"}
+                >
+                  {scrubber}
+                </div>
+              ) : null}
               <p className="mt-1 hidden text-xs text-muted-foreground @5xl:block">
                 Click any highlighted step in the explanation to see where it
                 happened.

@@ -141,6 +141,7 @@ import {
   writeStoredCollapsed,
   writeStoredMasterShare,
 } from "./master-detail-split";
+import { FloatingWindow, type FloatingDetail } from "./FloatingWindow";
 
 /** The `@5xl` container query above, in pixels, for `onWideChange`. */
 const WIDE_PX = 64 * 16;
@@ -264,6 +265,7 @@ export function MasterDetail({
   storageKey,
   hideDetailInPrint = false,
   fold: foldProp,
+  floating,
   navigation,
   onWideChange,
   after,
@@ -320,6 +322,14 @@ export function MasterDetail({
    * `navigation`, whose stacked layout has a back control instead of a fold.
    */
   fold?: DetailFold;
+  /**
+   * Stacked, FLOAT the detail over the page instead of pinning it: a window
+   * the reader moves, sizes and puts away (see `FloatingWindow.tsx`). From
+   * `useFloatingDetail`, which the caller holds so it can lay the detail out
+   * for the window. Side by side nothing changes. There is no fold toggle:
+   * the window's own Hide is the fold. Not for `navigation`.
+   */
+  floating?: FloatingDetail;
   /** Opt the STACKED layout out of pinning and into one-pane-at-a-time (see
    * the file doc). The caller owns which one is showing — in the URL, so
    * Back is the way out of the detail — and this component only lays it out. */
@@ -388,6 +398,10 @@ export function MasterDetail({
   // of the observation, not a side effect inside a state updater (which
   // StrictMode would run twice).
   const wideRef = useRef<boolean | null>(null);
+  // A floating detail floats only while stacked, and only once that has
+  // been measured: until then it is where the server rendered it.
+  const setFloatActive = useRef(floating?.internal.setActive);
+  setFloatActive.current = floating?.internal.setActive;
   useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -396,6 +410,7 @@ export function MasterDetail({
       if (next === wideRef.current) return;
       wideRef.current = next;
       setWide(next);
+      setFloatActive.current?.(!next);
       wideCb.current?.(next);
     });
     ro.observe(el);
@@ -457,14 +472,19 @@ export function MasterDetail({
                 // prints whole, both halves, whichever one is on screen.
                 !showingDetail && "hidden @5xl:block print:block"
               )
-            : cn(
-                // Stacked, the pane pins to the top and the master pages
-                // beneath it, covered edge to edge by the bleed surface.
-                "sticky z-10 pb-3",
-                STACKED_TOP[stackedTop],
-                BLEED[bleed],
-                "@5xl:mx-0 @5xl:bg-transparent @5xl:px-0 @5xl:pb-0"
-              ),
+            : floating
+              ? // Stacked, the detail is in its window, not here. Hidden by
+                // the container query rather than by what was measured, so
+                // a phone never paints the pane and then takes it away.
+                "hidden @5xl:sticky @5xl:z-10 @5xl:block"
+              : cn(
+                  // Stacked, the pane pins to the top and the master pages
+                  // beneath it, covered edge to edge by the bleed surface.
+                  "sticky z-10 pb-3",
+                  STACKED_TOP[stackedTop],
+                  BLEED[bleed],
+                  "@5xl:mx-0 @5xl:bg-transparent @5xl:px-0 @5xl:pb-0"
+                ),
           // Side by side it becomes the sticky right-hand column, where it
           // pins against the Shell's 60px glass header and covers nothing.
           // order-3: list, handle, pane.
@@ -485,7 +505,7 @@ export function MasterDetail({
             stuck (~2.25rem), which is the safe direction for WCAG 2.4.11 —
             a focused row stops a little lower than it needs to, never
             behind the pane. */}
-        {navigation || !foldProp ? (
+        {navigation || !(foldProp || floating) ? (
           <div
             className={cn(
               "flex pb-1 @5xl:hidden print:hidden",
@@ -529,7 +549,17 @@ export function MasterDetail({
             paneClassName
           )}
         >
-          {detail}
+          {floating && !navigation ? (
+            <FloatingWindow
+              float={floating}
+              label={detailLabel}
+              ariaLabel={detailAriaLabel ?? detailLabel}
+            >
+              {detail}
+            </FloatingWindow>
+          ) : (
+            detail
+          )}
         </div>
       </div>
       <SplitHandle
@@ -573,7 +603,7 @@ export function MasterDetail({
                 // a selector built from parts compiles to nothing.
                 // Folded, only the toggle row is stuck, so the clearance
                 // shrinks with it rather than shoving rows mid-screen.
-                collapsed
+                collapsed || floating
                   ? "[&_tr]:scroll-mt-28 [&_td]:scroll-mt-28 [&_th]:scroll-mt-28 [&_button]:scroll-mt-28 [&_a]:scroll-mt-28"
                   : cn(
                       "[&_tr]:scroll-mt-[26rem] [&_td]:scroll-mt-[26rem] [&_th]:scroll-mt-[26rem] [&_button]:scroll-mt-[26rem] [&_a]:scroll-mt-[26rem]",

@@ -147,7 +147,10 @@ export default function ScoreDetailMap({
   useEffect(() => {
     const container = containerRef.current;
     if (!provider || !container) return;
-    const observer = new ResizeObserver(() => provider.invalidateSize());
+    // `keepView`: this map is evidence, framed on a flight. When its box
+    // changes size (the floating window going small or large, a phone being
+    // turned) it should go on showing that flight, not a crop of it.
+    const observer = new ResizeObserver(() => provider.invalidateSize({ keepView: true }));
     observer.observe(container);
     return () => observer.disconnect();
   }, [provider]);

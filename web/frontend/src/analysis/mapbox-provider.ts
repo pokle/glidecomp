@@ -2954,8 +2954,24 @@ export function createMapBoxProvider(
           map.remove();
         },
 
-        invalidateSize() {
+        invalidateSize(options?: { keepView?: boolean }) {
+          if (!options?.keepView) {
+            map.resize();
+            return;
+          }
+          // Mapbox keeps the centre and the ZOOM across a resize, so a
+          // container that shrinks shows a crop of what it showed. Scaling
+          // the zoom by the shorter side keeps the same ground in view, and
+          // is exactly undone by the resize back (a fit to the old bounds
+          // would creep outwards with every change of aspect).
+          const canvas = map.getCanvas();
+          const before = Math.min(canvas.clientWidth, canvas.clientHeight);
           map.resize();
+          const box = map.getContainer();
+          const after = Math.min(box.clientWidth, box.clientHeight);
+          if (before > 0 && after > 0 && after !== before) {
+            map.setZoom(map.getZoom() + Math.log2(after / before));
+          }
         },
 
         onTrackClick(callback: (fixIndex: number) => void) {
