@@ -100,9 +100,10 @@
  * there is no fold toggle, and rows clear only the page bar. Side by side
  * nothing changes. Today the report card's map is the one caller.
  *
- * The caller's `detail` is then a `FloatSlot`, the pane's place, and the
- * detail itself is rendered once by the caller in a `FloatingContent`, which
- * moves it between that place, the window and the detail's full-size page.
+ * The pane is then only the detail's place. The detail itself is rendered
+ * once by the caller in a `FloatingContent`, which moves it between that
+ * place, the window and the detail's full-size page, and draws the buttons
+ * that change its size.
  *
  * ## `navigation`: one pane at a time, stacked
  *
@@ -155,7 +156,7 @@ import {
   writeStoredCollapsed,
   writeStoredMasterShare,
 } from "./master-detail-split";
-import type { FloatingDetail } from "./FloatingWindow";
+import { FloatSlot, type FloatingDetail } from "./FloatingWindow";
 
 /** The `@5xl` container query above, in pixels, for `onWideChange`. */
 const WIDE_PX = 64 * 16;
@@ -285,8 +286,9 @@ export function MasterDetail({
   after,
 }: {
   master: ReactNode;
-  /** null renders the master alone (no pane, no toggle, no scroll margins). */
-  detail: ReactNode;
+  /** null renders the master alone (no pane, no toggle, no scroll margins).
+   * Left out with `floating`: the detail is the caller's `FloatingContent`. */
+  detail?: ReactNode;
   /** The noun on the fold toggle: "Hide chart" / "Show map" / "Hide diagram". */
   detailLabel: string;
   /** id of a heading INSIDE the detail, for the region's aria-labelledby.
@@ -339,9 +341,9 @@ export function MasterDetail({
   /**
    * Stacked, FLOAT the detail over the page instead of pinning it: a window
    * the reader moves, sizes and puts away (see `FloatingWindow.tsx`). From
-   * `useFloatingDetail`. The caller passes a `FloatSlot` as `detail` (the
-   * pane's place, side by side) and renders the detail itself once, in a
-   * `FloatingContent`. Side by side nothing changes. There is no fold
+   * `useFloatingDetail`. The pane is then only the detail's PLACE, side by
+   * side: the caller leaves `detail` out and renders the detail itself, once,
+   * in a `FloatingContent`. Side by side nothing changes. There is no fold
    * toggle: the window's own Hide is the fold. Not for `navigation`.
    */
   floating?: FloatingDetail;
@@ -456,7 +458,7 @@ export function MasterDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showingDetail, wide]);
 
-  if (detail === null) {
+  if (detail === null && !floating) {
     return (
       <>
         {master}
@@ -564,7 +566,7 @@ export function MasterDetail({
             paneClassName
           )}
         >
-          {detail}
+          {floating ? <FloatSlot float={floating} kind="flow" /> : detail}
         </div>
       </div>
       <SplitHandle

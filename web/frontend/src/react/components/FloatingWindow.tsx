@@ -63,6 +63,7 @@ import {
   MapIcon,
   Maximize2Icon,
   Minimize2Icon,
+  type LucideIcon,
 } from "lucide-react";
 import { Menu, MenuItem } from "@/react/rac/menu";
 import { cn } from "@/react/lib/utils";
@@ -295,6 +296,16 @@ interface Drag {
   samples: { x: number; y: number; t: number }[];
 }
 
+/**
+ * Mark a row of the detail as a place to hold the large window by, as its
+ * grabber is: `<div {...floatDragRow}>`. A control inside the row (a slider,
+ * a button, a link) keeps its own touch.
+ */
+export const floatDragRow = {
+  "data-float-drag": "",
+  className: "cursor-grab touch-none select-none",
+} as const;
+
 /** The window's own buttons, drawn like the map provider's: white in both
  * themes, because they sit on a map and not on the page. */
 const CONTROL =
@@ -310,16 +321,33 @@ export function FloatingContent({
   label,
   ariaLabel,
   fullTo,
+  onLeaveFull,
+  icon: TabIcon = MapIcon,
   children,
 }: {
   float: FloatingDetail;
-  /** The noun, lower case: "map". */
+  /** The noun, lower case: "map", "diagram", "chart". Every control is named
+   * with it: "Enlarge map", "Show map". */
   label: string;
   /** The window's name as a region. */
   ariaLabel: string;
-  /** The detail's own page, at full size. The large window links to it. */
+  /**
+   * The detail's own page, at full size: the top rung of the size ladder.
+   * Given one, "larger" on the large window and on the column links to it.
+   * Without one the ladder is small and large, and the column has no button.
+   */
   fullTo?: string;
-  children: ReactNode;
+  /** Leave the full-size page ("smaller", on that page). The page's own
+   * way out: `leave(...)` from `useLeave()`. */
+  onLeaveFull?: () => void;
+  /** What the tab shows when the window is put away. */
+  icon?: LucideIcon;
+  /**
+   * The detail. A function is given where it is, to lay itself out for it:
+   * null in the page's column, or the window's size, or "full". (A page
+   * that holds the controller can read `float.mode` as well.)
+   */
+  children: ReactNode | ((mode: FloatMode | null) => ReactNode);
 }) {
   const { state, active, typing, update, beforeChange, host: el, slots } = float.internal;
   const { mode } = float;
@@ -421,7 +449,8 @@ export function FloatingContent({
           )
         : want === "full"
           ? "relative flex min-h-0 flex-1 flex-col"
-          : "contents";
+          : // In the column. Positioned, for the size button in its corner.
+            "relative";
     el.inert = want === "window" && hidden;
     if (want === "window") {
       el.setAttribute("role", "region");
@@ -868,8 +897,31 @@ export function FloatingContent({
           : {})}
         className={floating || full ? "flex min-h-0 flex-1 flex-col" : "contents"}
       >
-        {children}
+        {typeof children === "function" ? children(mode) : children}
       </div>
+      {/* The same ladder outside the window: "larger" on the column, and
+          "smaller" on the full-size page, in the same top right corner. */}
+      {mode == null && fullTo ? (
+        <Link
+          to={fullTo}
+          title={`Expand ${label}`}
+          aria-label={`Expand ${label}`}
+          className={cn(CONTROL, "absolute top-1.5 right-1.5 z-20 print:hidden")}
+        >
+          <Maximize2Icon aria-hidden className="size-5" />
+        </Link>
+      ) : null}
+      {full && onLeaveFull ? (
+        <button
+          type="button"
+          title={`Shrink ${label}`}
+          aria-label={`Shrink ${label}`}
+          onClick={onLeaveFull}
+          className={cn(CONTROL, "absolute top-1.5 right-1.5 z-20 print:hidden")}
+        >
+          <Minimize2Icon aria-hidden className="size-5" />
+        </button>
+      ) : null}
     </>
   );
 
@@ -919,7 +971,7 @@ export function FloatingContent({
             ) : (
               <ChevronRightIcon aria-hidden className="size-4 text-muted-foreground" />
             )}
-            <MapIcon aria-hidden className="size-5" />
+            <TabIcon aria-hidden className="size-5" />
           </button>,
           document.body
         )

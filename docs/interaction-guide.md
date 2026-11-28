@@ -926,7 +926,7 @@ A pattern is safe when one place in the code owns it or a test holds it.
 | Scroll on Back ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/scroll-restoration.ts` | `lib/scroll-restoration.test.ts`, `e2e/task-thermal-map.spec.ts` |
 | Focus on arrival ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/route-focus.ts` | `e2e/page-bar.spec.ts` |
 | Nothing fixed to an edge ([2.8](#28-the-keyboard-and-the-screens-edges)) | `rac/page-bar.tsx` | `e2e/page-bar.spec.ts` |
-| A map floats on a phone ([2.8](#28-the-keyboard-and-the-screens-edges)) | `components/FloatingWindow.tsx`, with its rules in `components/floating-window.ts` | `components/floating-window.test.ts`, `e2e/report-card.spec.ts`, `e2e/kit-touch-targets.spec.ts` on a phone |
+| A map floats on a phone ([2.8](#28-the-keyboard-and-the-screens-edges)) | `components/FloatingWindow.tsx` (`useFloatingDetail`, `FloatingContent`, `FloatSlot`), with its rules in `components/floating-window.ts`; for a map inside it, `comp/float-map.ts` | `components/floating-window.test.ts`, `e2e/report-card.spec.ts`, `e2e/kit-touch-targets.spec.ts` on a phone |
 | Colour as text ([3.2](#32-colour-and-contrast)) | The tokens in `react/globals.css` | `src/react/accent-text.test.ts` |
 | No sideways scroll ([3.3](#33-text-and-zoom)) | Each page | The `mobile` Playwright project, for the pages in `e2e/fixtures/mobile.ts` |
 | A tab strip that does not fit ([3.3](#33-text-and-zoom)) | `rac/tabs.tsx`; on the analysis page, `analysis/tab-overflow.ts` | `e2e/analysis-bar.spec.ts` for the analysis page. None for the kit's fades |
