@@ -131,7 +131,7 @@ Every page renders its own bar (`rac/page-bar.tsx`, issue #863) inside
   menus, so the bar also renders them as real links in two visually hidden
   navs: `<nav aria-label="Breadcrumb">` (the ancestors, then the page as
   `aria-current`) and `<nav aria-label="Page actions">` (every ⋯ row that
-  opens a page — "Submit your track" on the competition and task pages). The
+  opens a page). The
   `BreadcrumbList` JSON-LD from `functions/comp/[[path]].ts` publishes the
   same trail; keep the two in step. `e2e/ssr.spec.ts` reads both.
 - **The back control is a link** to the page above, so it works before

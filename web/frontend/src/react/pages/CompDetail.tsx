@@ -10,7 +10,6 @@
 import { Fragment, useEffect } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import {
-  CloudUploadIcon,
   CopyIcon,
   EyeOffIcon,
   FileTextIcon,
@@ -36,6 +35,7 @@ import { Disclosure } from "@/react/rac/disclosure";
 import { NavList, NavRow } from "@/react/rac/nav-list";
 import { Page, PageBar, type BarAction } from "@/react/rac/page-bar";
 import { COMP_ANALYSIS_LABEL, compCrumbs, compPages } from "../lib/crumbs";
+import { submitTrackAction } from "../comp/submit-track";
 import {
   compUrlId,
   idFromSegment,
@@ -120,7 +120,20 @@ export function CompDetail() {
           title={comp?.name ?? "Competition"}
           trail={compCrumbs()}
           related={compPages(urlId, comp, isAdmin)}
-          actions={comp ? compActions(urlId, comp, isAdmin, mounted) : []}
+          actions={comp ? compActions(urlId, comp, isAdmin) : []}
+          // Submitting is the one thing a pilot comes to a live comp to DO,
+          // so it is the bar's labelled button and not a row of ⋯. It goes
+          // to /submit with the comp prefilled: from the comp page the task
+          // is still an open question, and that page is where it is
+          // answered. Mount-gated because the close date is read against the
+          // visitor's clock and this page is server-rendered. Not for a
+          // hidden comp's link visitors: the link is for reading a draft,
+          // and every write route refuses anyone but its admins.
+          primary={
+            comp && mounted && !isPastCloseDate(comp.close_date) && (!comp.test || isAdmin)
+              ? submitTrackAction(submitTrackPath(urlId))
+              : undefined
+          }
         />
       }
     >
@@ -142,30 +155,15 @@ export function CompDetail() {
 
 /**
  * The competition page's actions, under ⋯ (issue #863): the page is for
- * information, and every action goes in the bar.
+ * information, and every action goes in the bar. "Submit your track" is the
+ * bar's own button, beside ⋯.
  */
 function compActions(
   urlId: string,
   comp: CompDetailData,
-  isAdmin: boolean,
-  mounted: boolean
+  isAdmin: boolean
 ): BarAction[] {
   const actions: BarAction[] = [];
-  // Submitting is the one thing a pilot comes to a live comp to DO, so it
-  // leads. It goes to /submit with the comp prefilled: from the comp page the
-  // task is still an open question, and that page is where it is answered.
-  // Mount-gated because the close date is read against the visitor's clock
-  // and this page is server-rendered. Not for a hidden comp's link visitors:
-  // the link is for reading a draft, and every write route refuses anyone but
-  // its admins.
-  if (mounted && !isPastCloseDate(comp.close_date) && (!comp.test || isAdmin)) {
-    actions.push({
-      id: "submit",
-      icon: CloudUploadIcon,
-      label: "Submit your track",
-      to: submitTrackPath(urlId),
-    });
-  }
   // The results record is every task's scores: with no task there is nothing
   // to keep.
   if (comp.tasks.length > 0) {

@@ -3,10 +3,9 @@
  * (#820, the overlays rule in docs/interaction-guide.md).
  *
  * What this holds, on a phone and on a desktop:
- *  - the task page's "Submit your track" — the first row of the bar's ⋯ menu
- *    (issue #863), and the only one: the action row's button and the Scores
- *    section's went into it — goes to `/submit?comp=…&task=…`, and that page
- *    names the task;
+ *  - the task page's "Submit your track" — the bar's labelled button, after
+ *    ⋯ (it was the first row of ⋯ from #863 until 2026-11-28) — goes to
+ *    `/submit?comp=…&task=…`, and that page names the task;
  *  - a reload keeps the form on the same task, because the task is in the URL
  *    and not handed over in memory;
  *  - the browser's Back returns to the task page;
@@ -111,22 +110,25 @@ test.afterAll(async () => {
  * The task step, collapsed to the one line that names the linked task (and
  * its class, which the task's title does not).
  */
-/**
- * "Submit your track" with the bar's ⋯ menu closed: a real link in the
- * markup (the bar's "Page actions" list), so its href can be read.
- */
+/** "Submit your track": the bar's labelled button, a real link. */
 function submitLink(page: Page) {
-  return page
-    .getByRole("navigation", { name: "Page actions" })
-    .getByRole("link", { name: "Submit your track" });
+  return page.locator("header").getByRole("link", { name: "Submit your track" });
 }
 
-/** Press it: the FIRST row of the bar's ⋯ menu. */
+/** Press it. It is on screen without opening anything, and says "Submit". */
 async function pressSubmit(page: Page) {
-  await page.getByRole("button", { name: "More actions" }).click();
-  const row = page.getByRole("menuitem").first();
-  await expect(row).toHaveText("Submit your track");
-  await row.click();
+  const button = submitLink(page);
+  await expect(button).toBeVisible();
+  await expect(button).toHaveText("Submit");
+  // No longer a row of ⋯ as well: one way to do a thing. (A row that opens
+  // a page is a link in the bar's "Page actions" list; a task with no route
+  // has no ⋯ for a visitor at all.)
+  await expect(
+    page.getByRole("navigation", { name: "Page actions" }).getByRole("link", {
+      name: "Submit your track",
+    })
+  ).toHaveCount(0);
+  await button.click();
 }
 
 function linkedTaskLine(page: Page, f: Fixture) {
@@ -141,8 +143,8 @@ test("Submit track on the task page is a page of its own: URL, reload and Back",
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Linked Task", {
     timeout: 20_000,
   });
-  // One way to submit from this page: the first row of the bar's ⋯ menu, a
-  // link to the /submit page with this task chosen.
+  // One way to submit from this page: the bar's button, a link to the
+  // /submit page with this task chosen.
   // Mount-gated on a server-rendered page, so this waits for hydration.
   const link = submitLink(page);
   await expect(link).toHaveCount(1, { timeout: 20_000 });

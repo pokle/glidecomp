@@ -158,6 +158,7 @@ Object.assign(ICON_MEANINGS, {
   },
   ShareIcon: { means: "Sharing", labels: ["Share task"] },
   QrCodeIcon: { means: "Sharing, as a QR code", labels: ["QR code", 'showQR ? "Hide QR" : "QR code"'] },
+  // The bar's own button on an open competition and its tasks, not a ⋯ row.
   CloudUploadIcon: { means: "Submit your track", labels: ["Submit your track"] },
   PlusIcon: { means: "Make a new one", labels: ["New task"] },
   CopyIcon: {

@@ -872,8 +872,7 @@ test.describe("submitting a track without an account", () => {
       await expect(
         visitorPage.getByText("This task is closed for track submissions.")
       ).toBeVisible({ timeout: 20_000 });
-      // No "Submit your track" in the bar's ⋯ menu: with the menu closed its
-      // rows that open a page are real links in the markup.
+      // No "Submit your track" in the bar: its button is a link.
       await expect(
         visitorPage.getByRole("link", { name: "Submit your track" })
       ).toHaveCount(0);
@@ -891,9 +890,7 @@ test.describe("submitting a track without an account", () => {
 
       // The organiser still can — the stop is aimed at pilots, not at them.
       await expect(page.getByText("You can still upload as an organiser.")).toBeVisible();
-      await page.getByRole("button", { name: "More actions" }).click();
-      await expect(page.getByRole("menuitem").first()).toHaveText("Submit your track");
-      await page.keyboard.press("Escape");
+      await expect(page.locator("header").getByRole("link", { name: "Submit your track" })).toBeVisible();
 
       // Put it back so the rest of the file's expectations still hold — and
       // CHECK that it went back. This task is shared with the test below,
@@ -1007,14 +1004,7 @@ test.describe("submitting a track without an account", () => {
     // neighbouring assertion in this file already used 15-20s.
     //
     // A link to /submit, not a dialog (#820) — task-submit-link.spec.ts
-    // follows it. It is the first row of the bar's ⋯ menu (issue #863); with
-    // the menu closed it is a real link in the markup.
-    await expect(
-      page
-        .getByRole("navigation", { name: "Page actions" })
-        .getByRole("link", { name: "Submit your track" })
-    ).toHaveCount(1, { timeout: 20_000 });
-    await page.getByRole("button", { name: "More actions" }).click();
-    await expect(page.getByRole("menuitem").first()).toHaveText("Submit your track");
+    // follows it. It is the bar's labelled button, after ⋯.
+    await expect(page.locator("header").getByRole("link", { name: "Submit your track" })).toHaveCount(1, { timeout: 20_000 });
   });
 });

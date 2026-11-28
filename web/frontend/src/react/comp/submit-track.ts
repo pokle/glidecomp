@@ -8,6 +8,8 @@
  * and so the same rules hold on the /submit page and its compact dialog on a
  * task page.
  */
+import { CloudUploadIcon } from "lucide-react";
+import type { BarPrimary } from "@/react/rac/page-bar";
 import {
   formatAltitude,
   formatDistance,
@@ -681,4 +683,12 @@ export function formatTrackAltitude(
 ): string {
   if (metres === null) return "—";
   return formatAltitude(metres, { prefs }).withUnit;
+}
+
+/**
+ * "Submit your track" as the bar's main action, on an open competition and on
+ * its tasks: one definition, so the two pages cannot word it differently.
+ */
+export function submitTrackAction(to: string): BarPrimary {
+  return { label: "Submit your track", word: "Submit", to, icon: CloudUploadIcon };
 }

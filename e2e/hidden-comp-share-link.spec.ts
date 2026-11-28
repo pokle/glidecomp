@@ -82,9 +82,8 @@ test("the organiser's address bar is the share link", async ({ page }) => {
   await expect.poll(() => urlCompId(page)).toBe(`${fixture.compId}_${shareKey}`);
   // The organiser can still submit to their own hidden comp — which is what
   // makes the visitor's missing button below a real finding.
-  // It is the first row of the bar's ⋯ menu (issue #863).
-  await page.getByRole("button", { name: "More actions" }).click();
-  await expect(page.getByRole("menuitem").first()).toHaveText("Submit your track");
+  // It is the bar's own button, after ⋯.
+  await expect(page.locator("header").getByRole("link", { name: "Submit your track" })).toBeVisible();
 });
 
 test("a visitor with the link reads the comp signed out and keeps the key", async ({
@@ -96,23 +95,22 @@ test("a visitor with the link reads the comp signed out and keeps the key", asyn
     await page.goto(`/comp/${fixture.compId}_${shareKey}`);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("share link");
     await expect(page.getByText(VISITOR_NOTE)).toBeVisible();
-    // The link is for reading a draft: no "Submit your track" in the bar's ⋯
-    // menu, which every write route would refuse. (The organiser sees it on
+    // The link is for reading a draft: no "Submit your track" in the bar,
+    // which every write route would refuse. (The organiser sees it on
     // this same page — see the test above.) The menu is still there: the
     // results record is anyone's to download.
     await page.getByRole("button", { name: "More actions" }).click();
     await expect(
       page.getByRole("menuitem", { name: "Download the results record (PDF)" })
     ).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Submit your track" })).toHaveCount(0);
     await page.keyboard.press("Escape");
+    await expect(page.getByRole("link", { name: "Submit your track" })).toHaveCount(0);
 
     // Into a task: the key rides along in the id, so the page still opens.
     await page.getByRole("link", { name: "Task 4" }).first().click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Task 4");
     expect(urlCompId(page)).toBe(`${fixture.compId}_${shareKey}`);
-    // Nor on the task page: with its ⋯ menu closed, a row that opens a page
-    // is a real link in the markup, and this one is not there.
+    // Nor on the task page: the bar's button is a link, and it is not there.
     await expect(page.getByRole("link", { name: "Submit your track" })).toHaveCount(0);
 
     // The id alone opens nothing.

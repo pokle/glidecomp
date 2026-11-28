@@ -16,11 +16,11 @@ signed-out visitor was a button reading "Sign in to submit your track".
 every page through the bar (issue #863): it is one of the three top-level
 places in the main menu and in "Elsewhere" under every title
 (`rac/page-bar.tsx`, and `SiteHeader.astro` on the content pages), and
-**Submit your track** is the first row of ⋯ on the competition and task
-pages, which link here with `submitTrackPath()`. Those two pages used to
-carry it as a button; the owner found that it distracted from the page. A
-closed menu puts no link in the server's HTML, so the bar also renders the
-row as a real link in a visually hidden `<nav aria-label="Page actions">`.
+**Submit your track** is a labelled button of the bar ("Submit", after ⋯) on
+the competition and task pages while the reader may submit, and it links
+here with `submitTrackPath()`. It was a button on those pages, then the
+first row of ⋯ from #863 until 28 November 2026: pilots who did not know the
+app did not find it in a menu (docs/interaction-guide.md 5.4).
 The form's own button is **Submit**, in the bar's right slot, live once a
 file is chosen; the result appears on the page. The homepage hero deliberately
 does **not** carry it:

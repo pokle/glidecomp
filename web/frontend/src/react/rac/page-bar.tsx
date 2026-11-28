@@ -12,7 +12,8 @@
  *                              down to the pages beside or under this one, and
  *                              out to the other top-level places
  *   trailing  what you can do  a form's commit button · or ⋯ for the page's
- *                              actions, with + and a status beside it
+ *                              actions, with + and a status beside it, and
+ *                              the page's one main action as a labelled link
  *
  * It is `sticky`, never `fixed` (docs/interaction-guide.md 2.8): the keyboard
  * comes up from the bottom, so a bar at the top is never under it. On an iPhone the screen pans when the keyboard opens, and the bar
@@ -30,8 +31,8 @@
  * the server's HTML. Two visually hidden `<nav>`s carry them as real links:
  * "Breadcrumb" (the pages above, then this page as `aria-current`; the
  * accessibility standard §4.3, and the `BreadcrumbList` structured data the
- * SSR Function publishes) and "Page actions" (every ⋯ row that opens a page —
- * "Submit your track" above all). The back control is a real link to the page
+ * SSR Function publishes) and "Page actions" (every ⋯ row that opens a page).
+ * The back control is a real link to the page
  * above, so it works with JavaScript off.
  *
  * ## Server rendering
@@ -141,6 +142,19 @@ export interface BarAdd {
   glyph?: LucideIcon;
 }
 
+/**
+ * The page's one main action that is not a form's commit: see `primary` on
+ * {@link PageBar}.
+ */
+export interface BarPrimary {
+  /** The action in full: the link's accessible name. */
+  label: string;
+  /** The word on the button. It must be part of `label` (WCAG 2.5.3). */
+  word: string;
+  to: string;
+  icon: LucideIcon;
+}
+
 /** Classes for a form's commit button in the trailing slot. */
 // Narrower padding on a phone: a top-level title beside + and Sign in has
 // 360 px to share, and "Competitions" was cut short there.
@@ -171,6 +185,7 @@ function Bar({
   add,
   status,
   commit,
+  primary,
   below,
 }: {
   /** The page's name: one line, and the page's `<h1>`. */
@@ -196,6 +211,15 @@ function Bar({
   status?: ReactNode;
   /** A form's commit button: a `SubmitButton` or `Button` with {@link commitClass}. */
   commit?: ReactNode;
+  /**
+   * The one thing a reader comes to this page to DO, where that is not a
+   * form's commit: a labelled link after ⋯, drawn as the commit button is.
+   * "Submit your track" on an open competition and its tasks is the one
+   * there is (owner's decision, 28 November 2026): a pilot who does not know
+   * the app did not find it as a row of ⋯. Not with `commit`: a bar has one
+   * main action.
+   */
+  primary?: BarPrimary;
   /** A second layer that sticks with the bar: a search field, tabs. Nothing else. */
   below?: ReactNode;
 }) {
@@ -406,6 +430,18 @@ function Bar({
         </div>
       ) : null}
       {commit}
+      {primary && !commit ? (
+        <LinkButton
+          href={primary.to}
+          aria-label={primary.label}
+          // On the narrowest phones it is the glyph alone, so the title
+          // keeps some room; its name is the same either way.
+          className={cn(commitClass, "pointer-events-auto gap-1.5 max-[359px]:w-11 max-[359px]:px-0")}
+        >
+          <primary.icon className="size-4" aria-hidden />
+          <span className="max-[359px]:hidden">{primary.word}</span>
+        </LinkButton>
+      ) : null}
       {/* Signed out, a top-level page has Sign in where a page's main action is. */}
       {!cancel && !parent && !commit && !user && !loading ? (
         <Button className={commitClass} onPress={() => goToSignIn(here)}>

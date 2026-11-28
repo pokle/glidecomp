@@ -84,6 +84,7 @@ export function TaskScoresPublic({
   timezone,
   isOpenDistance,
   isAuthenticated,
+  submitHref,
   refresh,
   onReplayAvailable,
   initialScore,
@@ -96,6 +97,8 @@ export function TaskScoresPublic({
   timezone: string | null;
   isOpenDistance: boolean;
   isAuthenticated: boolean;
+  /** The /submit form for this task, while this reader may submit to it. */
+  submitHref?: string;
   /** Parent bump to refetch scores (route edits, admin mutations). */
   refresh: number;
   onReplayAvailable: (available: boolean) => void;
@@ -200,9 +203,9 @@ export function TaskScoresPublic({
 
   return (
     <Card id="scores" className="scroll-mt-20">
-      {/* No Submit here: "Submit your track" is the first row of the task
-          page's ⋯ (#863), and a second one on the page would be a second way
-          to do one thing. */}
+      {/* No Submit button here: "Submit your track" is the bar's button. The
+          sentence below that says a track is missing carries the link to the
+          same form, because that is where a pilot reads that it is. */}
       <SectionHeader title="Scores" />
 
       {mounted && mySubmission?.registered ? (
@@ -216,7 +219,20 @@ export function TaskScoresPublic({
               .
             </>
           ) : (
-            <>You haven't submitted a track for this task yet.</>
+            <>
+              You haven't submitted a track for this task yet.
+              {submitHref ? (
+                <>
+                  {" "}
+                  <AriaLink
+                    href={submitHref}
+                    className="text-foreground underline underline-offset-4 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+                  >
+                    Submit your track
+                  </AriaLink>
+                </>
+              ) : null}
+            </>
           )}
         </p>
       ) : null}
