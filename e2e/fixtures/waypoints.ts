@@ -113,11 +113,16 @@ export async function barAction(page: Page, name: string | RegExp): Promise<void
   const direct = bar
     .getByRole("button", { name, exact: true })
     .or(bar.getByRole("link", { name, exact: true }));
+  const more = page.getByRole("button", { name: "More actions" });
+  // Wait for the bar before asking which it has: a page that has only just
+  // been opened has neither yet, and "not there" would send this to a ⋯ the
+  // page may not have at all (the full-size map's bar has only the button).
+  await direct.or(more).first().waitFor();
   if ((await direct.count()) > 0) {
     await direct.first().click();
     return;
   }
-  await page.getByRole("button", { name: "More actions" }).click();
+  await more.click();
   await page.getByRole("menuitem", { name, exact: true }).click();
 }
 

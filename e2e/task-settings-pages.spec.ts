@@ -458,11 +458,15 @@ async function routeCodes(page: Page): Promise<string[]> {
 async function barAction(page: Page, name: string | RegExp, behind?: string) {
   // "New waypoint from the map" is a button of the bar itself, beside ⋯.
   const direct = page.locator("header").first().getByRole("button", { name, exact: true });
+  const more = page.getByRole("button", { name: "More actions" });
+  // Wait for the bar before asking which it has: a page that has only just
+  // been opened has neither yet.
+  await direct.or(more).first().waitFor();
   if (!behind && (await direct.count()) > 0) {
     await direct.first().click();
     return;
   }
-  await page.getByRole("button", { name: "More actions" }).click();
+  await more.click();
   if (behind) await page.getByRole("menuitem", { name: behind, exact: true }).click();
   await page.getByRole("menuitem", { name }).click();
 }
