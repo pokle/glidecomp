@@ -25,7 +25,7 @@ Each line is a rule. The number is the section that explains it.
 - Put what the reader chose to look at in the URL. ([2.4](#24-the-url-holds-the-view))
 - A reload and a shared link show the same page. Unsaved work that must survive is a draft. ([2.5](#25-reload-a-shared-link-and-drafts))
 - Anything that opens a page is a real link, built with the path helpers. ([2.6](#26-links-are-links))
-- Nothing is fixed to an edge of the screen, and nothing sticks to the bottom. ([2.8](#28-the-keyboard-and-the-screens-edges))
+- Nothing is fixed to an edge of the screen, and nothing sticks to the bottom. One thing floats: a map on a phone, in a window the reader moves. ([2.8](#28-the-keyboard-and-the-screens-edges))
 - Nothing needs a hover or a drag. ([2.9](#29-the-pointer))
 - An organiser's page sends anyone else on to the public page. ([2.10](#210-a-page-the-reader-may-not-use))
 
@@ -182,6 +182,13 @@ something a page does by itself.
   never shows it. `no-overlays.test.ts` names it and fails on another.
 - **A page fetches what it needs.** State goes in the URL or is fetched. It
   is never handed over in memory from the page underneath.
+  - One thing is carried as well as fetched: a floating map, the report
+    card's, the waypoints editor's or the route editor's (owner's decision,
+    28 November 2026). Its full-size page loads alone
+    from its URL, as any page does. Reached from the page it belongs to, it
+    shows the same map the reader was looking at, with its view and what they
+    drew on it, and gives it back on the way out
+    ([2.8](#28-the-keyboard-and-the-screens-edges)).
 - Worked example: the pilot editor, `pages/CompPilotPage.tsx`.
 - `src/react/no-overlays.test.ts` fails if a full-screen overlay comes back.
 
@@ -287,9 +294,67 @@ broke on an iPhone.
 
 - The page bar is `sticky` at the top of the page's flow, never `fixed`.
 - An iPhone pans the screen when the keyboard opens. The bar follows the pan
-  with one transform (`useKeepOnScreen` in `rac/page-bar.tsx`). That is the
-  only place the app positions anything from script. Do not add a second.
+  with one transform (`useKeepOnScreen` in `rac/page-bar.tsx`). That and
+  the floating map below are the only places the app positions anything
+  from script. Do not add a third.
 - **Nothing sticks to the bottom.**
+- **One thing floats: a map on a phone** (`components/FloatingWindow.tsx`,
+  owner's decision, 28 November 2026). A map pinned under the bar held half
+  of a phone's screen, and the only way out was to hide it. Stacked, the map
+  is a window over the page, as a video is in picture-in-picture. Side by
+  side it is a column of the page, as before.
+  - It starts small, in the middle of the bottom edge, where neither thumb
+    scrolls. The reader carries it and it rests in the nearest of six
+    places: the left, the middle or the right of the top or the bottom. Dragged or
+    flicked off a side, it is put away, and a tab on that edge brings it
+    back. Its place, its size and whether it is put away are remembered.
+  - Its sizes are a ladder: small, large, and the map's own page at full
+    size. Two glyphs walk it, in the top right corner of the map at every
+    size: arrows inward for one step smaller, arrows outward for one step
+    larger, in that order. The top rung has no "larger" and the bottom no
+    "smaller". The column, side by side, has the same "larger".
+  - Small, it is a picture of the map alone: a finger anywhere on it
+    carries the window, and a tap, or two fingers spread on it, makes it
+    large. (A live map that small was too hard to work, and a thumb that
+    meant to scroll the page moved it.) Large, the map is live. It keeps
+    the map's style and drawing controls, and its last row holds the window
+    too, anywhere but a control.
+  - The large window links to the map's own page, at full size
+    ([2.1](#21-a-screen-is-a-page)). That page shows the SAME map: its
+    view, and what the reader drew on it, go there and come back. The map
+    is edge to edge under the bar, and its "smaller" leaves the page as the
+    bar's back does.
+  - It puts itself away while the reader types, and comes back afterwards.
+    It does not follow the keyboard. A field inside the window (the
+    waypoints map's place search) does not put it away: the field would go
+    with it.
+  - At rest it is placed by CSS alone: a place is `top` or `bottom`, and
+    `left` or `right`, with the safe-area insets. Script moves it only
+    under a finger. This is why it may exist where the fixed bars could
+    not.
+  - Every drag has a control that is not a drag
+    ([2.9](#29-the-pointer)): a tap on the grabber opens the size, Hide and
+    the moves as a menu, the arrow keys on it move the window between
+    places, and the tab is a button.
+  - A page that asks the map a question brings a put-away window back,
+    small, on the half of the screen away from what was pressed
+    (`reveal()`). A question only a live map can answer, such as Add from
+    map's tap to place a point, brings it back large, or makes a small one
+    large (`reveal(pressed, "large")`).
+  - Resting at the bottom, it makes the page longer by its own height, so
+    it never covers the page's last lines for good. Wherever it rests, the
+    page's scroll padding on that edge is the window, so a control that
+    takes focus stops clear of it.
+  - When a live map is off the flight it was showing, a button on it puts
+    the whole flight back in view. It is there only then.
+  - The report card's map and the waypoints map use it (`floating` on
+    `MasterDetail`), and so does the route editor's map (owner's decision, 28
+    November 2026), which has no `MasterDetail`: it floats on the screens
+    where those two do (`useFloatOnNarrowScreen`), and is a block under the
+    list on the others. Nothing else floats without the owner's decision.
+  - The waypoints map's full-size page is for everyone, read-only for a
+    visitor (owner's decision, 28 November 2026). The route map's is the
+    organisers', as the route editor is.
 - The app runs edge to edge. A surface that touches an edge keeps its content
   clear of the notch with the `pt-safe`, `pb-safe` and `px-gutter-safe`
   utilities in `react/globals.css`.
@@ -302,7 +367,9 @@ broke on an iPhone.
   ([3.9](#39-targets)).
 - **A drag is never the only way to do a thing.** HTML drag does not fire on
   touch without a long press. Reordering a route is a mode with Move up and
-  Move down on each row (`comp/TurnpointList.tsx`).
+  Move down on each row (`comp/TurnpointList.tsx`). The floating map's
+  grabber is a button as well as a handle: a tap opens its moves as a menu
+  ([2.8](#28-the-keyboard-and-the-screens-edges)).
 
 ### 2.10 A page the reader may not use
 
@@ -406,6 +473,10 @@ WCAG 2.1.1, 2.1.2.
   they can see. `rac/grid-list.tsx` and `rac/tree.tsx` set this.
 - On the map and the replay, pan, zoom, layer toggles and playback have
   keyboard equivalents.
+- The floating map's large window has no zoom buttons (owner's decision, 28
+  November 2026: the window is too small to spend on them). There the map
+  is zoomed by its gestures and, focused, by the keyboard. The buttons are
+  one press away, on the map's full-size page.
 
 ### 3.6 Focus
 
@@ -419,6 +490,11 @@ WCAG 2.4.3, 2.4.7, 2.4.11.
   `scroll-mt-*` at least that tall. A refused Save moves focus to the field,
   and the field comes to rest below the bar (`e2e/page-bar.spec.ts`). A
   toast must not cover the focused element either.
+- The floating map covers a corner of the page, and can cover a focused
+  control there. The reader moves it or puts it away, and it follows the
+  page bar in the focus order, so it is never far to reach. Resting at the
+  bottom, it makes the page longer, so the last control can always be
+  scrolled clear of it.
 - **Focus order follows reading order.** A dialog takes focus when it opens
   and returns it to its trigger when it closes. A page gives focus to its
   `<h1>` ([2.7](#27-scroll-and-focus-follow-the-navigation)).
@@ -670,6 +746,12 @@ this [More] menu if you really need it."
 - "Submit your track" is the first row of ⋯ on the competition and task
   pages.
 - Pass the bar only the actions this reader may use.
+- **A page whose work is adding shows its ways to add beside ⋯**, as
+  buttons of the bar: the waypoints editor's Add waypoint and Add from map,
+  and the route editor's New waypoint from the map (owner's decisions, 28
+  November 2026). A menu hid both, and adding is what
+  an organiser comes to that page to do. The bar's `add` takes more than
+  one, each with its own glyph; the plus is the first.
 - **An action stays on the page only when its place says something**: "Add
   turnpoint" under the list, and the one destructive action at the foot of a
   form. `SectionHeader` carries an action on the same condition.
@@ -861,6 +943,7 @@ A pattern is safe when one place in the code owns it or a test holds it.
 | Scroll on Back ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/scroll-restoration.ts` | `lib/scroll-restoration.test.ts`, `e2e/task-thermal-map.spec.ts` |
 | Focus on arrival ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/route-focus.ts` | `e2e/page-bar.spec.ts` |
 | Nothing fixed to an edge ([2.8](#28-the-keyboard-and-the-screens-edges)) | `rac/page-bar.tsx` | `e2e/page-bar.spec.ts` |
+| A map floats on a phone ([2.8](#28-the-keyboard-and-the-screens-edges)) | `components/FloatingWindow.tsx` (`useFloatingDetail`, `FloatingContent`, `FloatSlot`), with its rules in `components/floating-window.ts`; for a map inside it, `comp/float-map.ts` | `components/floating-window.test.ts`, `e2e/report-card.spec.ts`, `e2e/comp-waypoints.spec.ts`, `e2e/task-settings-pages.spec.ts`, `e2e/kit-touch-targets.spec.ts` on a phone |
 | Colour as text ([3.2](#32-colour-and-contrast)) | The tokens in `react/globals.css` | `src/react/accent-text.test.ts` |
 | No sideways scroll ([3.3](#33-text-and-zoom)) | Each page | The `mobile` Playwright project, for the pages in `e2e/fixtures/mobile.ts` |
 | A tab strip that does not fit ([3.3](#33-text-and-zoom)) | `rac/tabs.tsx`; on the analysis page, `analysis/tab-overflow.ts` | `e2e/analysis-bar.spec.ts` for the analysis page. None for the kit's fades |

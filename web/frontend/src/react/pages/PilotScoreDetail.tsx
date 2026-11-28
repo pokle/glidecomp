@@ -21,7 +21,11 @@
  * inputs — so the page renders without downloading the tracklog. The
  * IGC is fetched separately, only to draw the track on the map.
  */
-import { ClipboardPenIcon, MapIcon } from "lucide-react";
+import {
+  ClipboardPenIcon,
+  FocusIcon,
+  MapIcon,
+} from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "../lib/use-in-view";
 import { Link, useParams } from "react-router-dom";
@@ -59,6 +63,14 @@ import type {
   TaskDetailData,
   TaskScoreData,
 } from "../comp/types";
+import {
+  FloatSlot,
+  FloatingContent,
+  floatDragRow,
+  useFloatingDetail,
+} from "../components/FloatingWindow";
+import { floatMapClass } from "../comp/float-map";
+import { cn } from "@/react/lib/utils";
 import { TrackScrubber, nearestFixIndexByTime } from "../score-detail/TrackScrubber";
 import {
   TrackDataCleaningNote,
@@ -66,7 +78,7 @@ import {
   TrackValidityDocLink,
 } from "../score-detail/TrackNotes";
 import { ExplanationSection } from "../score-detail/Explanation";
-import { MaximizeIcon } from "../score-detail/icons";
+import { useLeave } from "../lib/leave";
 import { ScoringGlossary } from "../components/ScoringGlossary";
 import { MasterDetail } from "../components/MasterDetail";
 import { TaskInCompScores } from "../comp/TaskInCompScores";
@@ -193,6 +205,14 @@ async function loadDetail(
 // ---------------------------------------------------------------------------
 
 /**
+ * The map's own controls where it is part of a page, styled like the
+ * provider's (white regardless of theme). The size button has the top right
+ * corner, as the window's own size buttons do (FloatingContent).
+ */
+const MAP_CONTROL =
+  "absolute z-20 flex size-10 pointer-coarse:size-11 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md print:hidden";
+
+/**
  * `view="map"` is the same page with the map alone, at full size
  * (`/pilot/:id/map`, #870). It is this component rather than a second one
  * because the map is drawn from what the report card loads: the task, the
@@ -245,6 +265,15 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
   // Mapbox (764 KB) waits until the map panel nears the viewport — the page's
   // narrative is what the visitor came for. See lib/use-in-view.
   const [mapRef, mapInView] = useInView<HTMLDivElement>();
+  // On a phone the map is a floating window (see FloatingWindow.tsx). Held
+  // here because the page lays the map out for it, and brings it back when
+  // the reader picks a step it had been put away for.
+  const float = useFloatingDetail("score-map");
+  // Whether the map is on the whole flight, or the reader has moved it, or
+  // a step has flown it to a point. Off it, a button puts it back.
+  const [mapFramed, setMapFramed] = useState(true);
+  const [refitNonce, setRefitNonce] = useState(0);
+  const leave = useLeave();
   // Time scrubber: draw the track only up to this fix (null = whole flight).
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   // Deep-link into the standalone analysis viewer. `pilotId` narrows it to
@@ -468,9 +497,15 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
 
   if (state.kind === "loading") {
     return (
+      <>
+        {/* The map's place in the tree, empty here: see `floatingContent`.
+            Keeping the place keeps the PAGE at its own place, so the bar
+            is not mounted again when the data arrives. */}
+        {null}
       <Page width="wide" bar={bar}>
         <Loading>Loading score card…</Loading>
       </Page>
+      </>
     );
   }
 
@@ -480,6 +515,11 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
     // upload, so "no score found" would read as "your track did not go in".
     const gaveUp = pendingAttempt >= PENDING_MAX_ATTEMPTS;
     return (
+      <>
+        {/* The map's place in the tree, empty here: see `floatingContent`.
+            Keeping the place keeps the PAGE at its own place, so the bar
+            is not mounted again when the data arrives. */}
+        {null}
       <Page width="wide" bar={bar}>
         <div>
           {gaveUp ? (
@@ -498,6 +538,7 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
           </p>
         </div>
       </Page>
+      </>
     );
   }
 
@@ -509,19 +550,28 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
       return <NotFound title="Page not found" message={`${state.message}.`} />;
     }
     return (
+      <>
+        {/* The map's place in the tree, empty here: see `floatingContent`.
+            Keeping the place keeps the PAGE at its own place, so the bar
+            is not mounted again when the data arrives. */}
+        {null}
       <Page width="wide" bar={bar}>
         <p className="text-muted-foreground">{state.message}</p>
       </Page>
+      </>
     );
   }
 
   const { data } = state;
   const { entry, explanation } = data;
 
-  const onItemClick = (item: ScoreExplanationItem) => {
+  const onItemClick = (item: ScoreExplanationItem, pressed: Element) => {
     const event = data.eventsByItem.get(item.id);
     if (!event) return;
     setSelectedItem(item.id);
+    // A step is a question put to the map. If the map was put away, this is
+    // the moment it is wanted, and away from the step that was pressed.
+    float.reveal(pressed);
     setFocus((prev) => ({ event, nonce: (prev?.nonce ?? 0) + 1 }));
     // Show the flight only up to the clicked moment — when a pilot crosses
     // the same cylinder repeatedly, the clipped track is what makes the
@@ -547,6 +597,8 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
         scrubIndex={scrubIndex}
         openDistanceLine={data.openDistanceLine}
         bestProgressRoute={data.bestProgressRoute}
+        refitNonce={refitNonce}
+        onFramingChange={setMapFramed}
       />
     </Suspense>
   );
@@ -560,20 +612,117 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
       />
     ) : null;
 
+  const mapPath = pilotMapPath(
+    urlId,
+    data.comp.name,
+    taskId,
+    data.task.name,
+    pilotId,
+    entry.pilot_name
+  );
+  const cardPath = pilotPath(
+    urlId,
+    data.comp.name,
+    taskId,
+    data.task.name,
+    pilotId,
+    entry.pilot_name
+  );
+  // The map and its slider: ONE subtree for the report card's column, the
+  // floating window and the full-size page, so the map (its camera, what the
+  // reader drew on it) is the same map in all three. `float.mode` says which
+  // it is in, and the layout follows.
+  const mode = float.mode;
+  const detail = (
+    <>
+      <div
+        ref={mapRef}
+        className={cn(
+          mode == null
+            ? "relative h-56 overflow-hidden rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)]"
+            : // The window, or the page, is the frame: the map fills it.
+              "relative min-h-0 flex-1 overflow-hidden",
+          floatMapClass(mode)
+        )}
+      >
+        {mode == null && !mapInView ? mapFallback : map}
+        {/* Off the flight: one press puts the whole of it back in view. Not
+            on the small window, whose map takes no touch. */}
+        {mapFramed || mode === "small" || mode === "tucked" ? null : (
+          <button
+            type="button"
+            title="Show the whole flight"
+            aria-label="Show the whole flight"
+            onClick={() => setRefitNonce((n) => n + 1)}
+            className={cn(
+              MAP_CONTROL,
+              mode === "large"
+                ? // Under the window's own buttons.
+                  "top-12 right-1.5 pointer-coarse:top-14"
+                : // In the foot's right corner, above the attribution.
+                  "right-2 bottom-8"
+            )}
+          >
+            <FocusIcon aria-hidden className="size-5" />
+          </button>
+        )}
+      </div>
+      {!scrubber || mode === "small" || mode === "tucked" ? null : mode === "large" ? (
+        // The window can be held by its last row, as by its grabber:
+        // anywhere but the slider (FloatingContent reads the mark).
+        <div {...floatDragRow} className={cn(floatDragRow.className, "min-h-11 shrink-0 px-3")}>
+          {scrubber}
+        </div>
+      ) : mode === "full" ? (
+        // The page's last row, in its flow: nothing is fixed to the bottom.
+        <div className="shrink-0 px-4 py-2">{scrubber}</div>
+      ) : (
+        <div className="mt-1.5">{scrubber}</div>
+      )}
+      {mode == null ? (
+        <p className="mt-1 hidden text-xs text-muted-foreground @5xl:block">
+          Click any highlighted step in the explanation to see where it
+          happened.
+          {fixes && fixes.length > 1
+            ? " Drag the slider to trace the flight up to any moment."
+            : ""}
+        </p>
+      ) : null}
+    </>
+  );
+  // First in the tree on the report card AND on the map's page, so the
+  // router keeps it, and the map in it, when the reader goes between them.
+  const floatingContent = (
+    <FloatingContent
+      float={float}
+      label="map"
+      ariaLabel="Track map"
+      // The map's own page (#870). Opening this track in the analysis viewer
+      // is in the bar's ⋯ menu.
+      fullTo={mapPath}
+      // It leaves the page as the bar's Back does: the full-size map is a
+      // page (guide 2.1).
+      onLeaveFull={() => leave(cardPath)}
+    >
+      {detail}
+    </FloatingContent>
+  );
+
   if (view === "map") {
     return (
-      <Page fill bar={bar}>
-        {/* The rest of the screen: Mapbox renders nothing into an unsized
-            container, and `min-h-0 flex-1` inside the fill page is a size. */}
-        <section
-          aria-label="Track map"
-          className="relative min-h-0 w-full flex-1 overflow-hidden border-y border-border sm:rounded-xl sm:border"
-        >
-          {map}
-        </section>
-        {/* The page's last row, in its flow: nothing is fixed to the bottom. */}
-        {scrubber ? <div className="shrink-0 px-4 py-2">{scrubber}</div> : null}
-      </Page>
+      <>
+        {floatingContent}
+        {/* The map under the bar, as wide and as tall as the screen. */}
+        <Page fill="viewport" bar={bar}>
+          <FloatSlot
+            float={float}
+            kind="full"
+            role="region"
+            aria-label="Track map"
+            className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-border"
+          />
+        </Page>
+      </>
     );
   }
 
@@ -602,6 +751,8 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
   );
 
   return (
+    <>
+    {floatingContent}
     <Page width="wide" bar={bar}>
       {/* The pilot's name is the bar's title, and the page's <h1>. */}
       <div>
@@ -659,20 +810,17 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
         ) : null}
       </div>
 
-      {/* Explanation and map, paired by the shared MasterDetail in its PINNED
-          mode — the map is evidence read ALONGSIDE the explanation, so a step
-          must change a map that is on screen, never navigate to one. What the
-          hand-rolled layout this replaces could not do is get out of the way:
-          on a phone the map held a third of the viewport for the whole read
-          with no way to dismiss it, and a focused step could stop behind it
-          (WCAG 2.4.11). The component brings the "Hide map" fold — remembered,
-          so a reader who reads the words says so once — and the scroll-margin
-          clearance that keeps focus clear of the stuck pane.
+      {/* Explanation and map, paired by the shared MasterDetail: the map is
+          evidence read ALONGSIDE the explanation, so a step must change a map
+          that is on screen, never navigate to one.
 
-          The pane stays only beside the sections whose steps it can show;
-          the rest of the page is `after`, so on a phone the map scrolls off
-          once the reader is past them, rather than covering a third of the
-          screen for the glossary.
+          Side by side the map is the sticky right-hand column. On a phone it
+          FLOATS (`floating`): a pinned map held half the screen for the whole
+          read, and the fold that replaced that was all or nothing. The window
+          covers a corner the reader chooses, and can be put away.
+
+          The sections whose steps the map can show are the `master`; the
+          rest of the page is `after`.
 
           `storageKey`: the noun is "map" here and on the waypoints page, and
           those are different decisions on very different pages. */}
@@ -681,6 +829,7 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
           detailLabel="map"
           detailAriaLabel="Track map"
           storageKey="score-map"
+          floating={float}
           bleed="page"
           // 11fr/9fr, the split this page has always opened on.
           defaultMasterShare={11 / 20}
@@ -693,44 +842,9 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
           // a pane border around it would double it. The wrapper's bleed
           // still paints the background the stuck pane needs.
           paneClassName="rounded-none border-0 bg-transparent max-h-none @5xl:max-h-none overflow-y-visible"
-          detail={
-            <>
-              <div
-                ref={mapRef}
-                className="relative h-56 overflow-hidden rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)]"
-              >
-                {!mapInView ? mapFallback : map}
-                {/* The map's own control, styled like the providers' controls
-                    (white regardless of theme) and kept clear of them:
-                    bottom-right, above the attribution line. It opens the
-                    map's own page (#870). Opening this track in the analysis
-                    viewer is in the bar's ⋯ menu. */}
-                <Link
-                  to={pilotMapPath(
-                    urlId,
-                    data.comp.name,
-                    taskId,
-                    data.task.name,
-                    pilotId,
-                    entry.pilot_name
-                  )}
-                  title="Expand map"
-                  aria-label="Expand map"
-                  className="absolute bottom-8 right-2 z-20 flex size-10 pointer-coarse:size-11 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
-                >
-                  <MaximizeIcon />
-                </Link>
-              </div>
-              {scrubber ? <div className="mt-1.5">{scrubber}</div> : null}
-              <p className="mt-1 hidden text-xs text-muted-foreground @5xl:block">
-                Click any highlighted step in the explanation to see where it
-                happened.
-                {fixes && fixes.length > 1
-                  ? " Drag the slider to trace the flight up to any moment."
-                  : ""}
-              </p>
-            </>
-          }
+          // No `detail`: the pane is the map's place, side by side. The map
+          // itself is rendered once, above, and is moved there, into its
+          // window or onto its own page (FloatingContent).
           master={
             <div className="space-y-4">
               <TrackQualityNote
@@ -768,6 +882,7 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
         />
       </div>
     </Page>
+    </>
   );
 }
 

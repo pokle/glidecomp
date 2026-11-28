@@ -30,6 +30,8 @@ export default function ScoreDetailMap({
   scrubIndex,
   openDistanceLine,
   bestProgressRoute,
+  refitNonce = 0,
+  onFramingChange,
 }: {
   task: XCTask | null;
   fixes: IGCFix[] | null;
@@ -41,6 +43,10 @@ export default function ScoreDetailMap({
   openDistanceLine?: OpenDistanceLine | null;
   /** A landed-out pilot's routed distance-to-goal line, when applicable. */
   bestProgressRoute?: BestProgressRoute | null;
+  /** Bump to put the map back on the whole flight. */
+  refitNonce?: number;
+  /** Whether the map is showing its fit, or the reader has moved off it. */
+  onFramingChange?: (framed: boolean) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [provider, setProvider] = useState<MapProvider | null>(null);
@@ -143,11 +149,24 @@ export default function ScoreDetailMap({
     provider.panToEvent(focus.event);
   }, [provider, focus]);
 
+  const framingCb = useRef(onFramingChange);
+  framingCb.current = onFramingChange;
+  useEffect(() => {
+    provider?.onFramingChange((framed) => framingCb.current?.(framed));
+  }, [provider]);
+
+  useEffect(() => {
+    if (provider && refitNonce > 0) provider.refit();
+  }, [provider, refitNonce]);
+
   // Keep the map painted correctly when the responsive layout resizes it.
   useEffect(() => {
     const container = containerRef.current;
     if (!provider || !container) return;
-    const observer = new ResizeObserver(() => provider.invalidateSize());
+    // `keepView`: this map is evidence, framed on a flight. When its box
+    // changes size (the floating window going small or large, a phone being
+    // turned) it should go on showing that flight, not a crop of it.
+    const observer = new ResizeObserver(() => provider.invalidateSize({ keepView: true }));
     observer.observe(container);
     return () => observer.disconnect();
   }, [provider]);

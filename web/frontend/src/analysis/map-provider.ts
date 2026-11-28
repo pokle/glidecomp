@@ -171,7 +171,14 @@ export interface MapProvider {
     destroy(): void;
 
     /** Tell the map to resize/redraw (call after container size changes) */
-    invalidateSize(): void;
+    invalidateSize(options?: { keepView?: boolean }): void;
+
+    /** Put the map back on its last fit (the whole flight, the whole task). */
+    refit(): void;
+
+    /** Told `false` when the reader moves the map off its fit, or a flight
+     * to a point leaves it, and `true` when a fit puts it back. */
+    onFramingChange(callback: (framed: boolean) => void): void;
 
     /** Whether this provider supports 3D track rendering */
     supports3D: boolean;

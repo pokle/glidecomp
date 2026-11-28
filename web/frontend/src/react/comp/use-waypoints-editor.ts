@@ -54,10 +54,12 @@ export const WAYPOINTS_DISCARD = {
 };
 
 /**
- * The last view of each comp's waypoints map, so the list's small map and the
- * full-size one open where the other was left (by bare comp id). A module
- * variable rather than storage: it only has to survive going between the two
- * pages, and Mapbox keeps its own last view across a reload.
+ * The last view of each comp's waypoints map (by bare comp id), so the map
+ * opens where it was left when it is mounted again: coming back from Add
+ * waypoint, or from a waypoint's page, which the map does not survive. (The
+ * list and its full-size page are one map: pages/CompWaypoints.tsx.) A
+ * module variable rather than storage: it only has to survive going between
+ * the editor's pages, and Mapbox keeps its own last view across a reload.
  */
 export const waypointCameras = new Map<string, MapCamera>();
 

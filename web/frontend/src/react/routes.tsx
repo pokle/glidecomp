@@ -119,9 +119,6 @@ const CompWaypointPage = lazy(() =>
 const CompWaypointNewPage = lazy(() =>
   import("./pages/CompWaypointNewPage").then((m) => ({ default: m.CompWaypointNewPage }))
 );
-const CompWaypointsMapPage = lazy(() =>
-  import("./pages/CompWaypointsMapPage").then((m) => ({ default: m.CompWaypointsMapPage }))
-);
 const CompAltitudeReviewPage = lazy(() =>
   import("./pages/CompAltitudeReviewPage").then((m) => ({ default: m.CompAltitudeReviewPage }))
 );
@@ -144,9 +141,6 @@ const TaskRouteQuickPage = lazy(() =>
 );
 const TaskRouteXContestPage = lazy(() =>
   import("./pages/TaskRouteXContestPage").then((m) => ({ default: m.TaskRouteXContestPage }))
-);
-const TaskRouteMapPage = lazy(() =>
-  import("./pages/TaskRouteMapPage").then((m) => ({ default: m.TaskRouteMapPage }))
 );
 const TaskRouteAddWaypointPage = lazy(() =>
   import("./pages/TaskRouteAddWaypointPage").then((m) => ({
@@ -333,7 +327,9 @@ export function AppRoutes() {
                 dialog over the list (#811). Admin-only noindex shells in the
                 SSR Function. The static segments outrank :rowId by themselves. */}
             <Route path="/comp/:compId/waypoints/new" element={<CompWaypointNewPage />} />
-            <Route path="/comp/:compId/waypoints/map" element={<CompWaypointsMapPage />} />
+            {/* The map at full size: the list's own component, so the map on
+                it is the same map (see pages/CompWaypoints.tsx). */}
+            <Route path="/comp/:compId/waypoints/map" element={<CompWaypoints view="map" />} />
             <Route
               path="/comp/:compId/waypoints/altitudes"
               element={<CompAltitudeReviewPage />}
@@ -406,9 +402,12 @@ export function AppRoutes() {
               path="/comp/:compId/task/:taskId/route/add-waypoint"
               element={<TaskRouteAddWaypointPage />}
             />
+            {/* The route's map at full size: the route editor's own page
+                again, so the router keeps it across the two routes and it is
+                the same map (see pages/TaskRoutePage.tsx). */}
             <Route
               path="/comp/:compId/task/:taskId/route/map"
-              element={<TaskRouteMapPage />}
+              element={<TaskRoutePage view="map" />}
             />
             <Route
               path="/comp/:compId/task/:taskId/route/copy"

@@ -10,6 +10,11 @@
  *   full-screen sheet until #811. Add waypoint (/waypoints/new) and the map
  *   at full size (/waypoints/map) are pages too. Each is left by the
  *   browser's Back or the bar's, and a waypoint's Done returns to the list.
+ * - On a phone the map FLOATS over the list in a window
+ *   (docs/interaction-guide.md 2.8), as the report card's does;
+ *   report-card.spec.ts holds the window's own behaviour, and this file what
+ *   is this page's. The full-size page shows the SAME map, and the draft goes
+ *   there and back.
  * - Every action is in the page's bar (issue #863): Save is its commit
  *   button, and the rest are rows of ⋯ ("More actions").
  * - What they edit is a DRAFT of the whole file in sessionStorage (#811,
@@ -37,8 +42,9 @@
  * - `getByRole` matches an accessible name as a SUBSTRING: "Waypoints" also
  *   matches "Edit waypoints", so exact names are passed `exact: true`.
  */
-import { test, expect, DESKTOP_ONLY, type Page, type Locator } from "./fixtures/test";
+import { test, expect, DESKTOP_ONLY, PHONE_ONLY, type Page, type Locator } from "./fixtures/test";
 import { expectNoSidewaysScroll } from "./fixtures/layout";
+import { installMapbox } from "./fixtures/mapbox";
 import { FRONTEND_URL } from "./fixtures/stack";
 import { coordsFields, fillCoords } from "./fixtures/coords";
 import {
@@ -235,15 +241,15 @@ test("Back and Done leave a waypoint's page for the list, at its scroll", async 
   isMobile,
 }) => {
   const mutated = trackMutations(page);
-  // Short on a desktop, so the list scrolls there too. (A phone's pinned map
-  // pane already pushes the list well down the page.)
+  // Short on a desktop, so the list scrolls there too. (A phone's screen is
+  // shorter than the list already.)
   if (!isMobile) {
     const size = page.viewportSize()!;
     await page.setViewportSize({ width: size.width, height: 600 });
   }
 
   // The last row, scrolled to the MIDDLE of the screen, clear of the bar and
-  // the sticky map pane above it.
+  // of the map's window at the foot.
   const index = waypoints.length - 1;
   const lastCode = waypoints[index].code;
   const centre = async () => {
@@ -464,37 +470,102 @@ test("device export: the QR section carries the swap toggle", async ({ page }) =
   expect(mutated()).toBe(false);
 });
 
-test("the map folds away while it is stacked over the list", async ({ page, isMobile }) => {
-  // Stacked only: side by side there is no fold and DetailFoldButton hides
-  // itself, with the same `@5xl:` container query MasterDetail splits on.
+/**
+ * On a phone the map floats (FloatingWindow.tsx): small, in the middle of the
+ * foot, as a picture. What is this page's: placing a point needs a LIVE map,
+ * so Add from map brings the window up large; a row's pin is a question put
+ * to the map, so it brings a window that was put away back, clear of the row;
+ * and the place search in the window does not put the window away, as the
+ * bar's filter does while a keyboard is up. None of it touches the draft.
+ */
+test("on a phone the map floats; Add from map brings it up large, and a row's pin brings it back", { tag: PHONE_ONLY }, async ({
+  page,
+  context,
+}) => {
+  // The place search is disabled until the map is ready, and a map is ready
+  // only when its style has loaded: on a runner with no route to Mapbox it
+  // never is. So this test gives the map its recorded answers, and loads the
+  // page again so the map asks for them.
+  await installMapbox(context);
+  await page.reload();
   const mutated = trackMutations(page);
-  const fold = page.getByRole("button", { name: "Hide map" });
+  await editWaypoint(page, await firstWaypointRow(page), waypoints[0].code, "Name", "E2E Window");
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
 
-  if (!isMobile) {
-    await expect(fold).toBeHidden();
-    expect(mutated()).toBe(false);
-    return;
-  }
-
-  await expect(fold).toHaveAttribute("aria-expanded", "true");
-  await fold.click();
-  const unfold = page.getByRole("button", { name: "Show map" });
-  await expect(unfold).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeHidden();
+  const map = page.getByRole("region", { name: "Waypoint map" });
+  await expect(map).toHaveAttribute("data-floating", "small", { timeout: 20_000 });
+  await expect(map).toHaveAttribute("data-corner", "bottom-centre");
+  // The pinned pane's fold, and its Maximise, went with the pane.
+  await expect(page.getByRole("button", { name: "Hide map", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Maximise map" })).toHaveCount(0);
   await expectNoSidewaysScroll(page);
+  // Small, it is a picture, which takes no input: no place search on it.
+  await expect(map.getByRole("combobox", { name: "Search for a place" })).toHaveCount(0);
 
-  await unfold.click();
-  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible();
-
-  // Add from map needs the map: armed with the map folded away, it unfolds.
-  await fold.click();
-  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeHidden();
+  // Add from map: the next tap places a point, so the map must take a tap.
   await barAction(page, "Add from map");
-  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible();
-  await expect(page.getByText("Tap the map to place…")).toBeVisible();
-  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(map).toHaveAttribute("data-floating", "large");
+  await expect(map.getByText("Tap the map to place…")).toBeVisible();
+  const stop = map.getByRole("button", { name: "Stop", exact: true });
+  // The window grows by an animation; a box read during it is scaled.
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[data-floating="large"]');
+    return el != null && el.getAnimations().length === 0;
+  });
+  await expectBigEnoughToTap(stop);
+  await stop.click();
   await expect(page.getByText("Tap the map to place…")).toHaveCount(0);
+  await expect(map).toHaveAttribute("data-floating", "large");
 
+  // The place search is in the large window. A keyboard puts the window
+  // away, but not a field inside it: that would take the field away too.
+  const search = map.getByRole("combobox", { name: "Search for a place" });
+  await search.click();
+  await expect(search).toBeFocused();
+  await expect(map).toHaveAttribute("data-floating", "large");
+  await expect(search).toBeVisible();
+  // The bar's filter does put it away, and it comes back afterwards.
+  const filter = page.getByRole("searchbox", { name: "Filter waypoints" });
+  await filter.click();
+  await expect(map).toBeHidden();
+  await filter.blur();
+  await expect(map).toHaveAttribute("data-floating", "large");
+
+  // Put away, Add from map brings it back large too.
+  await page.getByRole("button", { name: "Move or hide map" }).click();
+  await page.getByRole("menuitem", { name: "Hide" }).click();
+  await expect(map).toBeHidden();
+  await expect(page.getByRole("button", { name: "Show map" })).toBeVisible();
+  await barAction(page, "Add from map");
+  await expect(map).toHaveAttribute("data-floating", "large");
+  await map.getByRole("button", { name: "Stop", exact: true }).click();
+
+  // A row's pin asks the map a question: a window that was put away comes
+  // back, small, on the half of the screen away from the row.
+  await page.getByRole("button", { name: "Move or hide map" }).click();
+  await page.getByRole("menuitem", { name: "Hide" }).click();
+  await expect(map).toBeHidden();
+  // A row in the lower half of the screen, so the window has to come back
+  // at the top.
+  const row = editorRows(page).nth(8);
+  await row.evaluate((el) => {
+    window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - window.innerHeight * 0.65);
+  });
+  const before = (await row.boundingBox())!;
+  expect(before.y, "the row is in the lower half").toBeGreaterThan(page.viewportSize()!.height / 2);
+  await row.getByRole("button", { name: /Show .* on the map/ }).click();
+  await expect(map).toHaveAttribute("data-floating", "small");
+  await page.waitForFunction(() => {
+    const el = document.querySelector("[data-floating]");
+    return el != null && el.getAnimations().length === 0;
+  });
+  const w = (await map.boundingBox())!;
+  const r = (await row.boundingBox())!;
+  expect(w.y + w.height, "the window is above the row that was pressed").toBeLessThan(r.y);
+
+  // Through all of that, the draft is as it was.
+  await expect(await firstWaypointRow(page)).toContainText("E2E Window");
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
   expect(mutated()).toBe(false);
 });
 
@@ -643,20 +714,62 @@ test("Back leaves the editor without asking, and the draft waits for Forward", a
   expect(mutated()).toBe(false);
 });
 
-test("the map opens at full size on a page of its own, with its own Add from map", async ({
+/**
+ * The map at full size is a page (guide 2.1), and the SAME map: the list and
+ * it are one component, so the router keeps the map's element, with its view
+ * and whether it is armed to place a point. The draft goes there and back.
+ */
+test("Expand map opens the map's own page with the SAME map, and the draft goes with it", async ({
   page,
+  isMobile,
 }) => {
   const mutated = trackMutations(page);
+  await editWaypoint(page, await firstWaypointRow(page), waypoints[0].code, "Name", "E2E Full");
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
 
-  await page.getByRole("link", { name: "Maximise map" }).click();
-  await expect(page).toHaveURL(/\/waypoints\/map$/);
+  const map = page.getByRole("region", { name: "Waypoint map" });
+  const expand = page.getByRole("link", { name: "Expand map" });
+  if (isMobile) {
+    // The way to the full-size page is on the large window.
+    await expect(map).toHaveAttribute("data-floating", "small", { timeout: 20_000 });
+    await expect(expand).toBeHidden();
+    await page.getByRole("button", { name: "Enlarge map" }).click();
+    await expect(map).toHaveAttribute("data-floating", "large");
+  } else {
+    // Side by side there is no window and no fold: the map is a column of
+    // the page, with the same "larger" in its corner.
+    await expect(page.locator("[data-floating]")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Hide map", exact: true })).toHaveCount(0);
+  }
+  await expect(expand).toBeVisible({ timeout: 20_000 });
+  // Mark the map's element: the page that opens must show THIS map.
+  const mark = () =>
+    page.evaluate(() => {
+      const c = document.querySelector(".mapboxgl-canvas") as (HTMLElement & { __mark?: string }) | null;
+      if (!c) return null;
+      c.__mark ??= String(Math.random());
+      return c.__mark;
+    });
+  await expect.poll(mark, { timeout: 30_000 }).not.toBeNull();
+  const before = await mark();
+
+  // Armed on the list, the full-size page opens armed: in the URL, so coming
+  // back from Add waypoint finds it armed.
+  await barAction(page, "Add from map");
+  await expect(page.getByText("Tap the map to place…")).toBeVisible();
+  await expand.click();
+  await expect(page).toHaveURL(/\/waypoints\/map\?add=1$/);
+  await expect(h1(page, "Waypoint map")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible({ timeout: 20_000 });
+  await expect(map).toBeVisible();
+  expect(await mark(), "the same map element").toBe(before);
+  await expect(page.getByText("Tap the map to place…")).toBeVisible();
   await expect(page.getByText(`${waypoints.length} waypoints · nothing is saved`)).toBeVisible();
-  await expectNoSidewaysScroll(page);
 
-  // The page is the bar and the map: it does not scroll, and there is no
-  // Done — the bar's Back does that.
+  // The page is the bar and the map, edge to edge: it does not scroll, and
+  // there is no Done — the bar's Back does that.
+  const box = (await map.boundingBox())!;
+  expect(box.width, "the map is as wide as the screen").toBe(page.viewportSize()!.width);
   await expect(page.getByRole("button", { name: "Done" })).toHaveCount(0);
   expect(
     await page.evaluate(
@@ -664,23 +777,45 @@ test("the map opens at full size on a page of its own, with its own Add from map
     ),
     "the map page does not scroll"
   ).toBeLessThanOrEqual(1);
+  await expectNoSidewaysScroll(page);
 
-  // Armed is in the URL, so coming back from Add waypoint finds it armed.
-  await barAction(page, "Add from map");
-  await expect(page.getByText("Tap the map to place…")).toBeVisible();
-  await expect(page).toHaveURL(/\/waypoints\/map\?add=1$/);
-  await barAction(page, "Stop adding from map");
+  // Its own Stop, and the bar's row, disarm it; the bar's row arms it again.
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByText("Tap the map to place…")).toHaveCount(0);
   await expect(page).toHaveURL(/\/waypoints\/map$/);
-
-  // The bar's Back goes back to the list.
-  await page.getByRole("link", { name: "Back to Waypoints" }).click();
-  await onEditorList(page, waypoints.length);
-
-  // And so does Back.
-  await page.getByRole("link", { name: "Maximise map" }).click();
+  await barAction(page, "Add from map");
+  await expect(page).toHaveURL(/\/waypoints\/map\?add=1$/);
+  await barAction(page, "Stop adding from map");
   await expect(page).toHaveURL(/\/waypoints\/map$/);
+
+  // "Smaller", in the map's top right corner, goes back to the list: the
+  // same map again, and the draft. The arming stayed on the page it went to.
+  const shrink = page.getByRole("button", { name: "Shrink map" });
+  const at = (await shrink.boundingBox())!;
+  expect(box.x + box.width - (at.x + at.width), "against the right edge").toBeLessThan(12);
+  expect(at.y - box.y, "against the top of the map").toBeLessThan(12);
+  await shrink.click();
+  await onEditorList(page, waypoints.length);
+  expect(await mark(), "still the same map element").toBe(before);
+  if (isMobile) await expect(map).toHaveAttribute("data-floating", "large");
+  await expect(page.getByText("Tap the map to place…")).toHaveCount(0);
+  await expect(await firstWaypointRow(page)).toContainText("E2E Full");
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  // A reload stands on the full-size page, and Back returns, draft and all.
+  await expand.click();
+  await expect(page).toHaveURL(/\/waypoints\/map$/);
+  await page.reload();
+  await expect(h1(page, "Waypoint map")).toBeVisible({ timeout: 20_000 });
+  await expect(map).toBeVisible();
   await page.goBack();
+  await onEditorList(page, waypoints.length);
+  await expect(await firstWaypointRow(page)).toContainText("E2E Full");
+
+  // And so does the bar's Back.
+  await expand.click();
+  await expect(page).toHaveURL(/\/waypoints\/map$/);
+  await page.getByRole("link", { name: "Back to Waypoints" }).click();
   await onEditorList(page, waypoints.length);
 
   expect(mutated()).toBe(false);
@@ -744,7 +879,10 @@ test("waypoints that fail to load are said to, not shown as none, and offer no S
   await expect(page.getByText("No waypoints")).toHaveCount(0);
 });
 
-test("anonymous visitors get the same list, read-only, and no editor pages", async ({ page }) => {
+test("anonymous visitors get the same list, read-only, and no editor pages", async ({
+  page,
+  isMobile,
+}) => {
   await page.context().clearCookies();
   await page.reload();
   await expect(h1(page, "Waypoints")).toBeVisible();
@@ -776,14 +914,29 @@ test("anonymous visitors get the same list, read-only, and no editor pages", asy
   expect(labels[1]).toBe("QR code");
   await expect(page.getByRole("link", { name: "Add waypoint" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+  // The map at full size is everyone's, read-only for a visitor.
+  if (isMobile) await page.getByRole("button", { name: "Enlarge map" }).click();
+  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Expand map" })).toBeVisible();
   await expect(page.locator(".tabulator")).toHaveCount(0);
   // The filter is in the bar for a visitor too.
   await expect(page.getByRole("searchbox", { name: "Filter waypoints" })).toBeVisible();
 
   // The editor's pages are the organisers': a visitor is sent to the list.
-  for (const sub of ["1", "new", "map", "altitudes"]) {
+  for (const sub of ["1", "new", "altitudes"]) {
     await page.goto(`/comp/${compId}/waypoints/${sub}`);
     await expect(page).toHaveURL(/\/waypoints$/, { timeout: 20_000 });
     await expect(page.getByRole("grid", { name: "Waypoints", exact: true })).toBeVisible();
   }
+
+  // The map's own page is not one of those: a visitor reads it, with no way
+  // to add a point, and its "smaller" goes to the list.
+  await page.goto(`/comp/${compId}/waypoints/map`);
+  await expect(page.getByRole("heading", { level: 1, name: "Waypoint map" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add from map" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Shrink map" }).click();
+  await expect(page).toHaveURL(/\/waypoints$/);
 });

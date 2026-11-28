@@ -159,7 +159,7 @@ Object.assign(ICON_MEANINGS, {
   ShareIcon: { means: "Sharing", labels: ["Share task"] },
   QrCodeIcon: { means: "Sharing, as a QR code", labels: ["QR code", 'showQR ? "Hide QR" : "QR code"'] },
   CloudUploadIcon: { means: "Submit your track", labels: ["Submit your track"] },
-  PlusIcon: { means: "Make a new one", labels: ["New task", "Add waypoint"] },
+  PlusIcon: { means: "Make a new one", labels: ["New task"] },
   CopyIcon: {
     means: "Copy between competitions",
     labels: ["Copy from another competition…", "Copy to a new competition…"],
@@ -184,7 +184,6 @@ Object.assign(ICON_MEANINGS, {
     means: "Anything about altitudes",
     labels: ["Check altitudes", "fillingAlts", "`Use the map’s altitude for all ${acceptable.length}`"],
   },
-  MapPinPlusIcon: { means: "Start placing on the map", labels: ["New waypoint from the map"] },
   FlaskConicalIcon: { means: "Test data", labels: ["Add test pilots", "Create test IGC"] },
   RefreshCwIcon: {
     means: "Recompute or rebuild",
@@ -307,8 +306,7 @@ const PAGE_BUTTONS: Record<string, { count: number; why: string }> = {};
 Object.assign(PAGE_BUTTONS, {
   "pages/CompAltitudeReviewPage.tsx": { count: 1, why: "Check altitudes, where the review has not been run: the page's one act" },
   "pages/CompWaypointPage.tsx": { count: 2, why: "The radius chips, and the destructive action at the foot of the form" },
-  "pages/CompWaypoints.tsx": { count: 1, why: "Stop, beside the map, while placing a waypoint on it" },
-  "pages/CompWaypointsMapPage.tsx": { count: 1, why: "Stop, over the map, while placing a waypoint on it" },
+  "pages/CompWaypoints.tsx": { count: 1, why: "Stop, beside the map, while placing a waypoint on it (the list and the full-size map are this one page)" },
   "pages/Dashboard.tsx": { count: 4, why: "Download and Remove on each stored flight and task: actions on a row" },
   "pages/NewCompPage.tsx": { count: 1, why: "Sign in to start a competition, for a signed-out reader" },
   "pages/OAuthConsent.tsx": { count: 2, why: "No bar: Allow and Deny" },

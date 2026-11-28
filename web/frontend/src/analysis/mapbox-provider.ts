@@ -228,6 +228,84 @@ export function createMapBoxProvider(
         localFontFamily: MAP_FONT_FAMILY,
       });
 
+      // What an embedded map is framed on, for `invalidateSize({ keepView })`.
+      // A fit is remembered until the reader moves the map themselves or the
+      // page flies it to a point: until then, "the same view" at a new size
+      // means the same fit, landed at once. Re-fitting is right even while
+      // the first fit is still animating, which is when a reader who taps a
+      // small map straight away resizes it.
+      type Fit = { bounds: mapboxgl.LngLatBoundsLike; options?: mapboxgl.EasingOptions };
+      let framedOn: Fit | null = null;
+      // The last fit, kept after the reader has moved off it, so the map can
+      // be put back on what it was showing (`refit`). Told to whoever asked
+      // (`onFramingChange`) each time the map goes on or off its fit.
+      let lastFit: Fit | null = null;
+      let framingCallback: ((framed: boolean) => void) | null = null;
+      const setFramedOn = (fit: Fit | null) => {
+        const was = framedOn != null;
+        framedOn = fit;
+        if (fit) lastFit = fit;
+        if (was !== (fit != null)) framingCallback?.(fit != null);
+      };
+      let framedSide = 0;
+      // Mapbox makes an animated fit BY flying, through the public method,
+      // so a flight inside a fit is the fit and not a flight to a point.
+      let fitting = false;
+      const rawFitBounds = map.fitBounds.bind(map);
+      map.fitBounds = ((bounds, options, eventData) => {
+        fitting = true;
+        try {
+          return rawFitBounds(bounds, options, eventData);
+        } finally {
+          fitting = false;
+          setFramedOn({ bounds, options });
+        }
+      }) as typeof map.fitBounds;
+      const rawFlyTo = map.flyTo.bind(map);
+      // A flight to a point that is under way: where it is going, and the
+      // zoom it left from. A resize in mid-flight has to send it again,
+      // because Mapbox aims a flight at the centre of the box as it was when
+      // the flight began.
+      let flight: { options: mapboxgl.EasingOptions; fromZoom: number } | null = null;
+      map.flyTo = ((options, eventData) => {
+        if (!fitting) {
+          setFramedOn(null);
+          flight = { options, fromZoom: map.getZoom() };
+        }
+        return rawFlyTo(options, eventData);
+      }) as typeof map.flyTo;
+      map.on('moveend', () => {
+        if (!map.isMoving()) flight = null;
+      });
+      map.on('movestart', (e) => {
+        const cause = (e as { originalEvent?: { type?: string } }).originalEvent;
+        // Mapbox's own handler for a window resize reports the window's
+        // event as the cause. That is not the reader moving the map.
+        if (cause && cause.type !== 'resize' && cause.type !== 'orientationchange') {
+          setFramedOn(null);
+          flight = null;
+        }
+      });
+      // A map this small is a picture. The route's labels are sized for a
+      // map a reader can pan, and at this size one clipped name covers the
+      // flight, so they are painted out until the box is large again.
+      const COMPACT_BELOW_PX = 240;
+      const applyCompact = () => {
+        // Only a map that is resized with `keepView` has a size on record.
+        // Every other map in the app is left exactly as it was.
+        if (framedSide <= 0) return;
+        const opacity = framedSide > 0 && framedSide < COMPACT_BELOW_PX ? 0 : 1;
+        for (const id of ['task-labels', 'task-segment-labels']) {
+          if (!map.getLayer(id)) continue;
+          if ((map.getPaintProperty(id, 'text-opacity') ?? 1) !== opacity) {
+            map.setPaintProperty(id, 'text-opacity', opacity);
+          }
+        }
+      };
+      // The layers arrive after the first resize; `idle` follows them.
+      map.on('idle', applyCompact);
+
+
       // State
       let boundsChangeCallback: (() => void) | null = null;
       let currentFixes: IGCFix[] = [];
@@ -2954,8 +3032,54 @@ export function createMapBoxProvider(
           map.remove();
         },
 
-        invalidateSize() {
+        refit() {
+          if (!lastFit) return;
+          map.fitBounds(lastFit.bounds, { ...lastFit.options, duration: 500 });
+        },
+
+        onFramingChange(callback: (framed: boolean) => void) {
+          framingCallback = callback;
+        },
+
+        invalidateSize(options?: { keepView?: boolean }) {
+          if (!options?.keepView) {
+            map.resize();
+            return;
+          }
+          // Mapbox keeps the centre and the ZOOM across a resize, so a
+          // container that shrinks shows a crop of what it showed.
+          const flying = map.isMoving();
           map.resize();
+          const box = map.getContainer();
+          const side = Math.min(box.clientWidth, box.clientHeight);
+          // Our own record of the last size: Mapbox may have resized the
+          // canvas itself already (it follows the window), and then the
+          // canvas no longer says what the size WAS.
+          const before = framedSide;
+          framedSide = side;
+          if (side <= 0) return;
+          applyCompact();
+          if (framedOn) {
+            // Still framed on a fit: make the same fit, for this size.
+            // Through the wrapper, which knows a fit's own flight from a
+            // flight to a point and so keeps the fit remembered.
+            map.fitBounds(framedOn.bounds, { ...framedOn.options, duration: 0 });
+            return;
+          }
+          // The reader's own view, or a flight to a point. Scaling the zoom
+          // by the shorter side keeps the same ground in view and is undone
+          // exactly by the resize back.
+          if (before <= 0 || side === before) return;
+          const scale = Math.log2(side / before);
+          if (flight) {
+            // In mid-flight: send it again, aimed at this box's centre, to
+            // the zoom it was going to as this box would show it.
+            const { options, fromZoom } = flight;
+            map.stop();
+            map.flyTo({ ...options, zoom: (options.zoom ?? fromZoom) + scale });
+          } else if (!flying) {
+            map.setZoom(map.getZoom() + scale);
+          }
         },
 
         onTrackClick(callback: (fixIndex: number) => void) {

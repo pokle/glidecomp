@@ -132,6 +132,15 @@ const GLASS =
   "border border-border/70 bg-card/75 shadow-card backdrop-blur-xl backdrop-saturate-150 dark:bg-card/60";
 const ICON = "pointer-events-auto size-11 rounded-full";
 
+/** One "add" button of the bar: see `add` on {@link PageBar}. */
+export interface BarAdd {
+  label: string;
+  to?: string;
+  onAction?: () => void;
+  /** Drawn in place of the plus. */
+  glyph?: LucideIcon;
+}
+
 /** Classes for a form's commit button in the trailing slot. */
 // Narrower padding on a phone: a top-level title beside + and Sign in has
 // 360 px to share, and "Competitions" was cut short there.
@@ -176,8 +185,13 @@ function Bar({
   cancel?: () => void;
   /** The page's actions, under ⋯. Pass only the ones this reader may use. */
   actions?: BarAction[];
-  /** "Add one", beside ⋯: a page it opens, or something it does here. */
-  add?: { label: string; to?: string; onAction?: () => void };
+  /**
+   * "Add one", beside ⋯: a page it opens, or something it does here. A page
+   * whose work IS adding may show a second way to add beside the first (the
+   * waypoints editor: by typing, and from the map), each with its own
+   * `glyph` (owner's decision, 28 November 2026). The plus is the default.
+   */
+  add?: BarAdd | BarAdd[];
   /** Something in flight, beside ⋯: a spinner. */
   status?: ReactNode;
   /** A form's commit button: a `SubmitButton` or `Button` with {@link commitClass}. */
@@ -339,7 +353,8 @@ function Bar({
     </div>
   );
 
-  const hasGroup = !!status || !!add || actions.length > 0;
+  const adds = add == null ? [] : Array.isArray(add) ? add : [add];
+  const hasGroup = !!status || adds.length > 0 || actions.length > 0;
   const trailing = (
     <div className="pointer-events-auto flex shrink-0 items-center gap-2">
       {hasGroup ? (
@@ -347,27 +362,32 @@ function Bar({
           {status ? (
             <span className="flex size-11 items-center justify-center">{status}</span>
           ) : null}
-          {add?.to ? (
-            <LinkButton
-              href={add.to}
-              variant="ghost"
-              size="icon"
-              aria-label={add.label}
-              className="size-11 rounded-full"
-            >
-              <PlusIcon className="size-5" />
-            </LinkButton>
-          ) : add ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={add.label}
-              onPress={add.onAction}
-              className="size-11 rounded-full"
-            >
-              <PlusIcon className="size-5" />
-            </Button>
-          ) : null}
+          {adds.map((one) => {
+            const Glyph = one.glyph ?? PlusIcon;
+            return one.to ? (
+              <LinkButton
+                key={one.label}
+                href={one.to}
+                variant="ghost"
+                size="icon"
+                aria-label={one.label}
+                className="size-11 rounded-full"
+              >
+                <Glyph className="size-5" />
+              </LinkButton>
+            ) : (
+              <Button
+                key={one.label}
+                variant="ghost"
+                size="icon"
+                aria-label={one.label}
+                onPress={one.onAction}
+                className="size-11 rounded-full"
+              >
+                <Glyph className="size-5" />
+              </Button>
+            );
+          })}
           {actions.length > 0 ? (
             <MenuTrigger>
               <Button
@@ -711,7 +731,9 @@ export function Page({
 }: {
   bar: ReactNode;
   width?: PageWidth;
-  fill?: boolean;
+  /** `"viewport"`: as `fill`, and the content is as wide as the screen
+   * too. The bar keeps the page's width. For a map with the page to itself. */
+  fill?: boolean | "viewport";
   className?: string;
   children: ReactNode;
 }) {
@@ -719,10 +741,10 @@ export function Page({
     <PageWidthContext.Provider value={width}>
       {bar}
       <div
-        data-page-fill={fill || undefined}
+        data-page-fill={fill ? true : undefined}
         className={cn(
           "mx-auto w-full",
-          WIDTH[width],
+          fill !== "viewport" && WIDTH[width],
           fill
             ? // The bar's height (44 px and its padding), then the rest of the screen.
               "flex h-[calc(100dvh-3.75rem-env(safe-area-inset-top,0px))] flex-col pb-safe"
