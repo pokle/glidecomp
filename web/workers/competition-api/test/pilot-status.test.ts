@@ -296,6 +296,60 @@ describe("PATCH pilot-status (edit note)", () => {
   });
 });
 
+// ── Child ids are bound to the comp in the URL ──────────────────────────────
+
+describe("a status is only edited under its own competition", () => {
+  // Every status row is written with its task and pilot checked against one
+  // comp, so a cross-comp pair matches nothing today. These routes must not
+  // lean on that: the task in the URL is checked against the comp too.
+  async function crossCompStatus() {
+    const compA = await createComp({ name: "Comp A" });
+    const pilotA = await registerPilot(compA, { registered_pilot_name: "Alice A" });
+    const compB = await createComp({ name: "Comp B" });
+    const taskB = await createTask(compB);
+    const pilotB = await registerPilot(compB, { registered_pilot_name: "Bob B" });
+    const put = await authRequest(
+      "PUT",
+      `/api/comp/${compB}/task/${taskB}/pilot-status/${pilotB}`,
+      { status_key: "dnf", note: "original" }
+    );
+    expect(put.status).toBe(200);
+    // Re-point the row at comp A's pilot: a row no write path makes today.
+    await env.DB.prepare(
+      `UPDATE task_pilot_status SET comp_pilot_id =
+         (SELECT comp_pilot_id FROM comp_pilot WHERE registered_pilot_name = 'Alice A')`
+    ).run();
+    return { compA, pilotA, taskB };
+  }
+
+  test("PATCH with another comp's task answers 404 and changes nothing", async () => {
+    const { compA, pilotA, taskB } = await crossCompStatus();
+    const res = await authRequest(
+      "PATCH",
+      `/api/comp/${compA}/task/${taskB}/pilot-status/${pilotA}`,
+      { note: "rewritten" }
+    );
+    expect(res.status).toBe(404);
+    const row = await env.DB.prepare("SELECT note FROM task_pilot_status").first<{
+      note: string;
+    }>();
+    expect(row?.note).toBe("original");
+  });
+
+  test("DELETE with another comp's task answers 404 and keeps the row", async () => {
+    const { compA, pilotA, taskB } = await crossCompStatus();
+    const res = await authRequest(
+      "DELETE",
+      `/api/comp/${compA}/task/${taskB}/pilot-status/${pilotA}`
+    );
+    expect(res.status).toBe(404);
+    const rows = await env.DB.prepare("SELECT COUNT(*) AS n FROM task_pilot_status").first<{
+      n: number;
+    }>();
+    expect(rows?.n).toBe(1);
+  });
+});
+
 // ── DELETE pilot status ─────────────────────────────────────────────────────
 
 describe("DELETE pilot-status", () => {
