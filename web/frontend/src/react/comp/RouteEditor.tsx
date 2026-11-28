@@ -93,7 +93,7 @@ import {
   refusal,
   type SubmitResponse,
 } from "@/react/rac/form";
-import { Page, PageBar, commitClass, type BarAction } from "@/react/rac/page-bar";
+import { Page, PageBar, commitClass, type BarAction, type BarAdd } from "@/react/rac/page-bar";
 import {
   FLOW_WHEN_WIDE,
   FloatSlot,
@@ -471,25 +471,27 @@ export function RouteEditor({
   const extraErrors = errors.length - shownErrors.length;
   const pendingCount = draft.pendingWaypoints.length;
 
-  // The ⋯ menu: every action of the editor but Add turnpoint, which stays
-  // under the list, where the new turnpoint goes.
-  const actions: BarAction[] = [
-    {
-      id: "map",
-      icon: MapPinPlusIcon,
-      label: "New waypoint from the map",
-      onAction: () => {
-        setAddMode(true);
-        // The next tap places a point, so a map must be on screen to take
-        // it. A small window is a picture, which takes no touch, so a window
-        // that is small or put away comes up large and live.
-        if (mode === "small" || mode === "tucked") reveal(null, "large");
-        // Under the list: after the menu has closed and given focus back.
-        else if (mode == null) {
-          setTimeout(() => mapSection.current?.scrollIntoView({ block: "start" }), 150);
-        }
-      },
+  // A button of the bar, beside ⋯, and not a row inside it (owner's decision,
+  // 28 November 2026, as on the waypoints page): a menu hid it.
+  const newFromMap: BarAdd = {
+    label: "New waypoint from the map",
+    glyph: MapPinPlusIcon,
+    onAction: () => {
+      setAddMode(true);
+      // The next tap places a point, so a map must be on screen to take
+      // it. A small window is a picture, which takes no touch, so a window
+      // that is small or put away comes up large and live.
+      if (mode === "small" || mode === "tucked") reveal(null, "large");
+      // Under the list.
+      else if (mode == null) {
+        setTimeout(() => mapSection.current?.scrollIntoView({ block: "start" }), 150);
+      }
     },
+  };
+
+  // The ⋯ menu: every other action of the editor but Add turnpoint, which
+  // stays under the list, where the new turnpoint goes.
+  const actions: BarAction[] = [
     ...(showQuickTask
       ? [
           {
@@ -636,14 +638,11 @@ export function RouteEditor({
             <PageBar
               title="Route map"
               trail={underTaskRoute(urlId, compName, taskId, taskName)}
-              actions={[
-                {
-                  id: "new",
-                  icon: addMode ? MapPinXIcon : MapPinPlusIcon,
-                  label: addMode ? "Stop placing a waypoint" : "New waypoint from the map",
-                  onAction: () => setAddMode(!addMode),
-                },
-              ]}
+              add={{
+                label: addMode ? "Stop placing a waypoint" : "New waypoint from the map",
+                glyph: addMode ? MapPinXIcon : MapPinPlusIcon,
+                onAction: () => setAddMode(!addMode),
+              }}
             />
           }
         >
@@ -692,6 +691,7 @@ export function RouteEditor({
               fullTitle="Route"
               trail={underTask(urlId, compName, taskId, taskName)}
               actions={reordering ? [] : actions}
+              add={reordering ? undefined : newFromMap}
               commit={
                 reordering ? (
                   <Button

@@ -456,6 +456,12 @@ async function routeCodes(page: Page): Promise<string[]> {
  * `behind` names the row it sits behind, for the rare ones in a second menu.
  */
 async function barAction(page: Page, name: string | RegExp, behind?: string) {
+  // "New waypoint from the map" is a button of the bar itself, beside ⋯.
+  const direct = page.locator("header").first().getByRole("button", { name, exact: true });
+  if (!behind && (await direct.count()) > 0) {
+    await direct.first().click();
+    return;
+  }
   await page.getByRole("button", { name: "More actions" }).click();
   if (behind) await page.getByRole("menuitem", { name: behind, exact: true }).click();
   await page.getByRole("menuitem", { name }).click();

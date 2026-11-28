@@ -747,8 +747,9 @@ this [More] menu if you really need it."
   pages.
 - Pass the bar only the actions this reader may use.
 - **A page whose work is adding shows its ways to add beside ⋯**, as
-  buttons of the bar: the waypoints editor's Add waypoint and Add from map
-  (owner's decision, 28 November 2026). A menu hid both, and adding is what
+  buttons of the bar: the waypoints editor's Add waypoint and Add from map,
+  and the route editor's New waypoint from the map (owner's decisions, 28
+  November 2026). A menu hid both, and adding is what
   an organiser comes to that page to do. The bar's `add` takes more than
   one, each with its own glyph; the plus is the first.
 - **An action stays on the page only when its place says something**: "Add

@@ -184,7 +184,6 @@ Object.assign(ICON_MEANINGS, {
     means: "Anything about altitudes",
     labels: ["Check altitudes", "fillingAlts", "`Use the map’s altitude for all ${acceptable.length}`"],
   },
-  MapPinPlusIcon: { means: "Start placing on the map", labels: ["New waypoint from the map"] },
   FlaskConicalIcon: { means: "Test data", labels: ["Add test pilots", "Create test IGC"] },
   RefreshCwIcon: {
     means: "Recompute or rebuild",
