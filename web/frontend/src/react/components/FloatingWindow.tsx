@@ -14,13 +14,14 @@
  *   edge. The tab brings it back.
  * - TAP the small window and it becomes large. Small, it is a picture: every
  *   touch moves the window, none moves the map. Large, the map is live, and
- *   the window moves by its bar. Double-tap the bar to make it small again.
+ *   the window moves by the grabber at its top. The button in its corner
+ *   makes it small again.
  * - While the reader TYPES, it puts itself away, and comes back afterwards.
  *   That is how it stays clear of the on-screen keyboard without following
  *   the keyboard from script, which is what the fixed bars could not do.
  *
  * Every one of those has a control that is not a drag (guide 2.9, WCAG
- * 2.5.7): Move, Smaller and Hide on the large window's bar, and the tab.
+ * 2.5.7): a tap on the grabber opens them as a menu, and the tab is a button.
  *
  * ## How it is built
  *
@@ -53,15 +54,14 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MapIcon,
-  Maximize2Icon,
+  Minimize2Icon,
 } from "lucide-react";
 import { Button } from "@/react/rac/button";
-import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
+import { Menu, MenuItem } from "@/react/rac/menu";
 import { cn } from "@/react/lib/utils";
 import { readStoredCollapsed } from "./master-detail-split";
 import {
   DEFAULT_FLOAT,
-  DOUBLE_TAP_MS,
   DRAG_SLOP_PX,
   opensKeyboard,
   readStoredFloat,
@@ -189,13 +189,6 @@ const TUCKED: Record<FloatSide, string> = {
 /** z-30: over the page, under the page bar (z-40) and every popover (z-50). */
 const WINDOW =
   "fixed z-30 flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl print:hidden";
-
-const CORNERS: { id: string; label: string; edge: FloatEdge; side: FloatSide }[] = [
-  { id: "top-left", label: "Top left", edge: "top", side: "left" },
-  { id: "top-right", label: "Top right", edge: "top", side: "right" },
-  { id: "bottom-left", label: "Bottom left", edge: "bottom", side: "left" },
-  { id: "bottom-right", label: "Bottom right", edge: "bottom", side: "right" },
-];
 
 const MOVE_MS = 320;
 const MOVE_EASING = "cubic-bezier(0.22, 0.9, 0.3, 1)";
@@ -332,18 +325,18 @@ export function FloatingWindow({
   const drag = useRef<Drag | null>(null);
   /** A drag ends in a click on the element that held the pointer. */
   const suppressClick = useRef(false);
-  const lastBarTap = useRef(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const grabberRef = useRef<HTMLButtonElement>(null);
 
   const onPointerDown = (e: ReactPointerEvent<HTMLElement>) => {
     if (!el || e.button !== 0 || drag.current) return;
-    // The bar's own buttons are buttons, not a handle.
-    if (
-      e.target instanceof Element &&
-      e.target.closest("[data-float-control]") &&
-      e.target.closest("[data-float-control]") !== e.currentTarget
-    ) {
-      return;
+    // Inside the detail, only what the page marked as a place to hold the
+    // window by, and never a control that has a use for the touch itself.
+    if (e.currentTarget.hasAttribute("data-float-detail")) {
+      const t = e.target instanceof Element ? e.target : null;
+      if (!t?.closest("[data-float-drag]") || t.closest("input, button, a, select")) return;
     }
+    // The bar's own buttons are buttons, not a handle.
     suppressClick.current = false;
     drag.current = {
       pointerId: e.pointerId,
@@ -407,74 +400,71 @@ export function FloatingWindow({
   const tabDrag = useRef<{ id: number; x: number } | null>(null);
   const show = () => act({ ...state, tucked: false });
 
-  const chrome = active ? (
-    <>
-      {mode === "large" ? (
-        <div
+  // Large, the window has no bar: a bar spent a row of a small screen on
+  // three words. A grabber floats over the top of the map and a corner
+  // button makes the window small. The grabber is also a button: a tap opens
+  // the same moves as a menu, which is the way that is not a drag.
+  const chrome =
+    active && mode === "large" ? (
+      <>
+        <button
+          ref={grabberRef}
+          type="button"
           {...handle}
-          onPointerUp={(e) => {
-            if (endDrag(e, false) !== "tap") return;
-            // A tap on the bar itself, not on one of its buttons.
-            if (e.timeStamp - lastBarTap.current < DOUBLE_TAP_MS) {
-              lastBarTap.current = 0;
-              act({ ...state, size: "small" });
-            } else lastBarTap.current = e.timeStamp;
+          onPointerUp={(e) => void endDrag(e, false)}
+          onClick={() => {
+            // The click that ends a drag is not a tap.
+            if (suppressClick.current) suppressClick.current = false;
+            else setMenuOpen(true);
           }}
-          data-float-bar=""
-          className="relative flex h-11 shrink-0 cursor-grab touch-none items-center gap-1 border-b border-border bg-card pr-1 pl-3 select-none in-data-dragging:cursor-grabbing"
+          aria-label={`Move or hide ${label}`}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          data-float-handle=""
+          data-float-focus=""
+          className="absolute top-0 left-1/2 z-30 flex h-11 w-24 -translate-x-1/2 cursor-grab touch-none justify-center rounded-b-lg pt-1.5 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring in-data-dragging:cursor-grabbing"
         >
-          {/* The grabber a sheet has: it says "this part moves it". */}
           <span
             aria-hidden
-            className="pointer-events-none absolute top-1.5 left-1/2 h-1 w-9 -translate-x-1/2 rounded-full bg-muted-foreground/40"
+            className="h-1.5 w-12 rounded-full border border-black/30 bg-white shadow-md"
           />
-          <span className="flex-1" />
-          <MenuTrigger>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label={`Move ${label}`}
-              data-float-control=""
-            >
-              Move
-            </Button>
-            <Menu
-              placement="bottom end"
-              onAction={(id) => {
-                const corner = CORNERS.find((c) => c.id === id);
-                if (corner) act({ ...state, edge: corner.edge, side: corner.side }, null);
-              }}
-            >
-              {CORNERS.map((c) => (
-                <MenuItem key={c.id} id={c.id}>
-                  {c.label}
-                </MenuItem>
-              ))}
-            </Menu>
-          </MenuTrigger>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={`Smaller ${label}`}
-            data-float-control=""
-            data-float-focus=""
-            onPress={() => act({ ...state, size: "small" })}
-          >
-            Smaller
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={`Hide ${label}`}
-            data-float-control=""
-            onPress={() => act({ ...state, tucked: true }, "tab")}
-          >
-            Hide
-          </Button>
-        </div>
-      ) : null}
-    </>
-  ) : null;
+        </button>
+        <Menu
+          placement="bottom"
+          popover={{ triggerRef: grabberRef, isOpen: menuOpen, onOpenChange: setMenuOpen }}
+          autoFocus="first"
+          aria-label={`Move or hide ${label}`}
+          onAction={(id) => {
+            setMenuOpen(false);
+            if (id === "smaller") act({ ...state, size: "small" });
+            else if (id === "hide") act({ ...state, tucked: true }, "tab");
+            else if (id === "edge") {
+              act({ ...state, edge: state.edge === "top" ? "bottom" : "top" });
+            } else if (id === "side") {
+              act({ ...state, side: state.side === "left" ? "right" : "left" });
+            }
+          }}
+        >
+          <MenuItem id="smaller">Make smaller</MenuItem>
+          <MenuItem id="hide">Hide</MenuItem>
+          <MenuItem id="edge">
+            {state.edge === "top" ? "Move to the bottom" : "Move to the top"}
+          </MenuItem>
+          <MenuItem id="side">
+            {state.side === "left" ? "Keep on the right" : "Keep on the left"}
+          </MenuItem>
+        </Menu>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={`Make ${label} smaller`}
+          onPress={() => act({ ...state, size: "small" })}
+          className="absolute right-0 bottom-0 z-30 size-11"
+        >
+          <Minimize2Icon className="size-5" />
+        </Button>
+      </>
+    ) : null;
 
   const picture = active && mode !== "large";
 
@@ -486,6 +476,10 @@ export function FloatingWindow({
       <div
         key="detail"
         inert={picture}
+        data-float-detail=""
+        {...(active && mode === "large"
+          ? { ...handle, onPointerUp: (e) => void endDrag(e, false) }
+          : {})}
         className={active ? "flex min-h-0 flex-1 flex-col" : "contents"}
       >
         {children}
@@ -515,17 +509,9 @@ export function FloatingWindow({
             act({ ...state, ...next });
           }}
           aria-label={`Enlarge ${label}`}
-          data-float-control=""
           data-float-focus=""
           className="absolute inset-0 z-30 cursor-grab touch-none rounded-[inherit] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset in-data-dragging:cursor-grabbing"
-        >
-          <span
-            aria-hidden
-            className="absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
-          >
-            <Maximize2Icon className="size-4" />
-          </span>
-        </button>
+        />
       ) : null}
     </>
   );

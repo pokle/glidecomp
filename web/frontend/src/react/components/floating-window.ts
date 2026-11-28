@@ -72,8 +72,6 @@ export function writeStoredFloat(key: string, state: FloatState): void {
 
 /** A drag shorter than this is a tap. A fingertip is not still. */
 export const DRAG_SLOP_PX = 8;
-/** Two taps this close together are a double tap. */
-export const DOUBLE_TAP_MS = 320;
 
 /** How far ahead a flick carries the window, at its speed on release. */
 const PROJECT_MS = 180;

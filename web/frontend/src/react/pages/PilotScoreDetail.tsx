@@ -716,7 +716,7 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
                         // cannot be used and would cover a third of it.
                         // The provider's logo and attribution stay.
                         float.mode !== "large" &&
-                          "[&_.mapboxgl-ctrl-top-left]:hidden [&_.mapboxgl-ctrl-top-right]:hidden [&_.mapboxgl-ctrl-bottom-left>*:not(:has(.mapboxgl-ctrl-logo))]:hidden [&_.ann-toggle]:hidden"
+                          "[&_.mapboxgl-ctrl-top-left]:hidden [&_.mapboxgl-ctrl-top-right]:hidden [&_.mapboxgl-ctrl-bottom-left>*:not(:has(.mapboxgl-ctrl-logo))]:hidden [&_.ann-toggle]:hidden!"
                       )
                     : "relative h-56 overflow-hidden rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)]"
                 }
@@ -746,13 +746,21 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
                   <MaximizeIcon />
                 </Link>
               </div>
-              {scrubber ? (
+              {float.mode ? (
+                // The window's last row. Its right end is the window's own
+                // "smaller" button, so the row is there with or without a
+                // tracklog to scrub.
                 <div
-                  hidden={float.mode != null && float.mode !== "large"}
-                  className={float.mode ? "shrink-0 px-3 py-1" : "mt-1.5"}
+                  hidden={float.mode !== "large"}
+                  // The window can be held by this row, as by its grabber:
+                  // anywhere but the slider (FloatingWindow reads the mark).
+                  data-float-drag=""
+                  className="min-h-11 shrink-0 cursor-grab touch-none py-0 pr-12 pl-3 select-none"
                 >
                   {scrubber}
                 </div>
+              ) : scrubber ? (
+                <div className="mt-1.5">{scrubber}</div>
               ) : null}
               <p className="mt-1 hidden text-xs text-muted-foreground @5xl:block">
                 Click any highlighted step in the explanation to see where it

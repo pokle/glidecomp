@@ -30,14 +30,22 @@ import { popoverClass } from "./select";
 export function Menu<T extends object>({
   className,
   placement,
+  popover,
   ...props
 }: Omit<AriaMenuProps<T>, "className"> & {
   className?: string;
   /** Forwarded to the wrapping Popover — e.g. "bottom end" to right-align. */
   placement?: PopoverProps["placement"];
+  /**
+   * For a menu with no `MenuTrigger`: the caller holds whether it is open and
+   * names the element it hangs from. Only for a trigger that cannot be a kit
+   * button because a press on it means something else as well — the
+   * floating window's grabber, which is dragged. Close it in `onAction`.
+   */
+  popover?: Pick<PopoverProps, "triggerRef" | "isOpen" | "onOpenChange">;
 }) {
   return (
-    <Popover className={cn(popoverClass, "min-w-44")} placement={placement}>
+    <Popover className={cn(popoverClass, "min-w-44")} placement={placement} {...popover}>
       <AriaMenu className={cn("outline-none", className)} {...props} />
     </Popover>
   );
