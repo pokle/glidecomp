@@ -266,7 +266,7 @@ test.describe("the pilot report card", () => {
     await expect(map).toHaveAttribute("data-floating", "small");
     await settled(page);
 
-    // One button, in the window's top right corner at both sizes.
+    // The size buttons have the window's top right corner at every size.
     const sizeButton = page.getByRole("button", { name: "Enlarge map" });
     const at = (await sizeButton.boundingBox())!;
     expect(small.x + small.width - (at.x + at.width), "against the right edge").toBeLessThan(12);
@@ -275,10 +275,15 @@ test.describe("the pilot report card", () => {
     await expect(map).toHaveAttribute("data-floating", "large");
     const large = await settled(page);
     expect(large.width).toBeGreaterThan(340);
+    // Large is the middle rung: one step smaller, then one step larger, in
+    // the same corner. The larger one, the way to the full-size page, has
+    // the corner itself, where "Enlarge" was.
     const shrink = (await page.getByRole("button", { name: "Make map smaller" }).boundingBox())!;
-    expect(large.x + large.width - (shrink.x + shrink.width)).toBeLessThan(12);
-    expect(shrink.y - large.y).toBeLessThan(12);
-    await expect(page.getByRole("link", { name: "Expand map" })).toBeVisible();
+    const expandAt = (await page.getByRole("link", { name: "Expand map" }).boundingBox())!;
+    expect(large.x + large.width - (expandAt.x + expandAt.width)).toBeLessThan(12);
+    expect(expandAt.y - large.y).toBeLessThan(12);
+    expect(shrink.x + shrink.width, "smaller is left of larger").toBeLessThanOrEqual(expandAt.x);
+    expect(shrink.y).toBe(expandAt.y);
     await expect(page.getByRole("slider", { name: "Flight time" })).toBeVisible({
       timeout: 30_000,
     });
@@ -467,9 +472,13 @@ test.describe("the pilot report card", () => {
     expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(1);
     await expect(page.getByRole("link", { name: `Back to ${cardPilot.pilot_name}` })).toBeVisible();
 
-    // The map's own way back, where the way in was: the same map again, in
-    // the window it left.
-    await page.getByRole("button", { name: "Shrink map" }).click();
+    // The map's own way back, in the same top right corner: the same map
+    // again, in the window it left.
+    const back = page.getByRole("button", { name: "Shrink map" });
+    const backAt = (await back.boundingBox())!;
+    expect(390 - (backAt.x + backAt.width), "against the right edge").toBeLessThan(12);
+    expect(backAt.y - box!.y, "against the top of the map").toBeLessThan(12);
+    await back.click();
     await expect(page).toHaveURL(/\/pilot\/[^/]+$/);
     await expect(page.getByRole("region", { name: "Track map" })).toHaveAttribute(
       "data-floating",

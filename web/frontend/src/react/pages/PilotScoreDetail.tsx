@@ -25,8 +25,8 @@ import {
   ClipboardPenIcon,
   FocusIcon,
   MapIcon,
-  MaximizeIcon,
-  MinimizeIcon,
+  Maximize2Icon,
+  Minimize2Icon,
 } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "../lib/use-in-view";
@@ -202,8 +202,8 @@ async function loadDetail(
 
 /**
  * The map's own controls where it is part of a page, styled like the
- * provider's (white regardless of theme) and kept clear of them. In the
- * window, the window's own buttons sit in its top right corner.
+ * provider's (white regardless of theme). The size button has the top right
+ * corner, as the window's own size buttons do (FloatingContent).
  */
 const MAP_CONTROL =
   "absolute z-20 flex size-10 pointer-coarse:size-11 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md print:hidden";
@@ -635,10 +635,14 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
         ref={mapRef}
         className={
           mode == null
-            ? "relative h-56 overflow-hidden rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)]"
+            ? "relative h-56 overflow-hidden rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)] [&_.mapboxgl-ctrl-top-right]:top-11! pointer-coarse:[&_.mapboxgl-ctrl-top-right]:top-12!"
             : cn(
                 // The window, or the page, is the frame: the map fills it.
                 "relative min-h-0 flex-1 overflow-hidden",
+                // The size buttons have the top right corner at every size,
+                // so on the full page the provider's column starts under them.
+                mode === "full" &&
+                  "[&_.mapboxgl-ctrl-top-right]:top-11! pointer-coarse:[&_.mapboxgl-ctrl-top-right]:top-12!",
                 // Large, the window is not large: the provider's zoom,
                 // compass, locate and scale are dropped (a map is zoomed
                 // with two fingers), and the style and drawing stay.
@@ -661,23 +665,21 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
             to={mapPath}
             title="Expand map"
             aria-label="Expand map"
-            className={cn(MAP_CONTROL, "right-2 bottom-8")}
+            className={cn(MAP_CONTROL, "top-1.5 right-1.5")}
           >
-            <MaximizeIcon aria-hidden className="size-5" />
+            <Maximize2Icon aria-hidden className="size-5" />
           </Link>
         ) : mode === "full" ? (
-          // The way back, where the way in was. It leaves the page as the
+          // One step smaller, in the same corner. It leaves the page as the
           // bar's Back does: the full-size map is a page (guide 2.1).
           <button
             type="button"
             title="Shrink map"
             aria-label="Shrink map"
             onClick={() => leave(cardPath)}
-            // On a short screen the provider's own column of controls
-            // reaches this corner, so the button steps left of it.
-            className={cn(MAP_CONTROL, "right-2 bottom-8 [@media(max-height:500px)]:right-16")}
+            className={cn(MAP_CONTROL, "top-1.5 right-1.5")}
           >
-            <MinimizeIcon aria-hidden className="size-5" />
+            <Minimize2Icon aria-hidden className="size-5" />
           </button>
         ) : null}
         {/* Off the flight: one press puts the whole of it back in view. Not
@@ -693,8 +695,8 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
               mode === "large"
                 ? // Under the window's own buttons.
                   "top-12 right-1.5 pointer-coarse:top-14"
-                : // Above Expand or Shrink.
-                  "right-2 bottom-20 pointer-coarse:bottom-[5.25rem] [@media(max-height:500px)]:right-16"
+                : // In the foot's right corner, above the attribution.
+                  "right-2 bottom-8"
             )}
           >
             <FocusIcon aria-hidden className="size-5" />

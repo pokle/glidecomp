@@ -307,18 +307,22 @@ broke on an iPhone.
     places: the left, the middle or the right of the top or the bottom. Dragged or
     flicked off a side, it is put away, and a tab on that edge brings it
     back. Its place, its size and whether it is put away are remembered.
-  - One button in its top right corner makes it large or small. Small, it
-    is a picture of the map alone: a finger anywhere on it carries the
-    window, and a tap, or two fingers spread on it, makes it large. (A live
-    map that small was too hard to work, and a thumb that meant to scroll
-    the page moved it.) Large, the map is live. It keeps the map's style
-    and drawing controls, and its last row holds the window too, anywhere
-    but a control.
+  - Its sizes are a ladder: small, large, and the map's own page at full
+    size. Two glyphs walk it, in the top right corner of the map at every
+    size: arrows inward for one step smaller, arrows outward for one step
+    larger, in that order. The top rung has no "larger" and the bottom no
+    "smaller". The column, side by side, has the same "larger".
+  - Small, it is a picture of the map alone: a finger anywhere on it
+    carries the window, and a tap, or two fingers spread on it, makes it
+    large. (A live map that small was too hard to work, and a thumb that
+    meant to scroll the page moved it.) Large, the map is live. It keeps
+    the map's style and drawing controls, and its last row holds the window
+    too, anywhere but a control.
   - The large window links to the map's own page, at full size
     ([2.1](#21-a-screen-is-a-page)). That page shows the SAME map: its
     view, and what the reader drew on it, go there and come back. The map
-    is edge to edge under the bar, and its Shrink button leaves the page as
-    the bar's back does.
+    is edge to edge under the bar, and its "smaller" leaves the page as the
+    bar's back does.
   - It puts itself away while the reader types, and comes back afterwards.
     It does not follow the keyboard.
   - At rest it is placed by CSS alone: a place is `top` or `bottom`, and

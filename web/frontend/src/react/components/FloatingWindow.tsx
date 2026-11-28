@@ -62,8 +62,7 @@ import {
   ChevronRightIcon,
   MapIcon,
   Maximize2Icon,
-  MaximizeIcon,
-  PictureInPicture2Icon,
+  Minimize2Icon,
 } from "lucide-react";
 import { Menu, MenuItem } from "@/react/rac/menu";
 import { cn } from "@/react/lib/utils";
@@ -793,31 +792,52 @@ export function FloatingContent({
             <MenuItem id="right">Move to the right</MenuItem>
           ) : null}
         </Menu>
+        {/* The sizes are a ladder: small, large, the full page. Two glyphs
+            walk it, in the top right corner at every size: arrows inward
+            for one step smaller, arrows outward for one step larger, in
+            that order. The top has no "larger" and the bottom no "smaller".
+            The page draws the same pair on the column and on the full-size
+            page. */}
         <div className="absolute top-1.5 right-1.5 z-30 flex gap-1.5 print:hidden">
-          {!small && fullTo ? (
-            <Link to={fullTo} title={`Expand ${label}`} aria-label={`Expand ${label}`} className={CONTROL}>
-              {/* The four corners: the whole screen, on a page of its own. */}
-              <MaximizeIcon aria-hidden className="size-5" />
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            title={small ? `Enlarge ${label}` : `Make ${label} smaller`}
-            aria-label={small ? `Enlarge ${label}` : `Make ${label} smaller`}
-            data-float-focus=""
-            onClick={(e) => {
-              if (!clickIsDragEnd(e)) toggleSize();
-            }}
-            className={CONTROL}
-          >
-            {/* Arrows outward to make it bigger; the picture-in-picture
-                glyph to send it back to a small picture. */}
-            {small ? (
+          {small ? (
+            <button
+              type="button"
+              title={`Enlarge ${label}`}
+              aria-label={`Enlarge ${label}`}
+              data-float-focus=""
+              onClick={(e) => {
+                if (!clickIsDragEnd(e)) toggleSize();
+              }}
+              className={CONTROL}
+            >
               <Maximize2Icon aria-hidden className="size-5" />
-            ) : (
-              <PictureInPicture2Icon aria-hidden className="size-5" />
-            )}
-          </button>
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                title={`Make ${label} smaller`}
+                aria-label={`Make ${label} smaller`}
+                data-float-focus=""
+                onClick={(e) => {
+                  if (!clickIsDragEnd(e)) toggleSize();
+                }}
+                className={CONTROL}
+              >
+                <Minimize2Icon aria-hidden className="size-5" />
+              </button>
+              {fullTo ? (
+                <Link
+                  to={fullTo}
+                  title={`Expand ${label}`}
+                  aria-label={`Expand ${label}`}
+                  className={CONTROL}
+                >
+                  <Maximize2Icon aria-hidden className="size-5" />
+                </Link>
+              ) : null}
+            </>
+          )}
         </div>
       </>
     ) : null;
