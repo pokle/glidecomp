@@ -324,7 +324,9 @@ broke on an iPhone.
     is edge to edge under the bar, and its "smaller" leaves the page as the
     bar's back does.
   - It puts itself away while the reader types, and comes back afterwards.
-    It does not follow the keyboard.
+    It does not follow the keyboard. A field inside the window (the
+    waypoints map's place search) does not put it away: the field would go
+    with it.
   - At rest it is placed by CSS alone: a place is `top` or `bottom`, and
     `left` or `right`, with the safe-area insets. Script moves it only
     under a finger. This is why it may exist where the fixed bars could
@@ -335,15 +337,18 @@ broke on an iPhone.
     places, and the tab is a button.
   - A page that asks the map a question brings a put-away window back,
     small, on the half of the screen away from what was pressed
-    (`reveal()`).
+    (`reveal()`). A question only a live map can answer, such as Add from
+    map's tap to place a point, brings it back large, or makes a small one
+    large (`reveal(pressed, "large")`).
   - Resting at the bottom, it makes the page longer by its own height, so
     it never covers the page's last lines for good. Wherever it rests, the
     page's scroll padding on that edge is the window, so a control that
     takes focus stops clear of it.
   - When a live map is off the flight it was showing, a button on it puts
     the whole flight back in view. It is there only then.
-  - Today only the report card uses it (`floating` on `MasterDetail`). No
-    second floating thing is added without the owner's decision.
+  - The report card's map and the waypoints map use it (`floating` on
+    `MasterDetail`); the route editor's map is next (owner's decision, 28
+    November 2026). Nothing else floats without the owner's decision.
 - The app runs edge to edge. A surface that touches an edge keeps its content
   clear of the notch with the `pt-safe`, `pb-safe` and `px-gutter-safe`
   utilities in `react/globals.css`.
@@ -926,7 +931,7 @@ A pattern is safe when one place in the code owns it or a test holds it.
 | Scroll on Back ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/scroll-restoration.ts` | `lib/scroll-restoration.test.ts`, `e2e/task-thermal-map.spec.ts` |
 | Focus on arrival ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/route-focus.ts` | `e2e/page-bar.spec.ts` |
 | Nothing fixed to an edge ([2.8](#28-the-keyboard-and-the-screens-edges)) | `rac/page-bar.tsx` | `e2e/page-bar.spec.ts` |
-| A map floats on a phone ([2.8](#28-the-keyboard-and-the-screens-edges)) | `components/FloatingWindow.tsx` (`useFloatingDetail`, `FloatingContent`, `FloatSlot`), with its rules in `components/floating-window.ts`; for a map inside it, `comp/float-map.ts` | `components/floating-window.test.ts`, `e2e/report-card.spec.ts`, `e2e/kit-touch-targets.spec.ts` on a phone |
+| A map floats on a phone ([2.8](#28-the-keyboard-and-the-screens-edges)) | `components/FloatingWindow.tsx` (`useFloatingDetail`, `FloatingContent`, `FloatSlot`), with its rules in `components/floating-window.ts`; for a map inside it, `comp/float-map.ts` | `components/floating-window.test.ts`, `e2e/report-card.spec.ts`, `e2e/comp-waypoints.spec.ts`, `e2e/kit-touch-targets.spec.ts` on a phone |
 | Colour as text ([3.2](#32-colour-and-contrast)) | The tokens in `react/globals.css` | `src/react/accent-text.test.ts` |
 | No sideways scroll ([3.3](#33-text-and-zoom)) | Each page | The `mobile` Playwright project, for the pages in `e2e/fixtures/mobile.ts` |
 | A tab strip that does not fit ([3.3](#33-text-and-zoom)) | `rac/tabs.tsx`; on the analysis page, `analysis/tab-overflow.ts` | `e2e/analysis-bar.spec.ts` for the analysis page. None for the kit's fades |

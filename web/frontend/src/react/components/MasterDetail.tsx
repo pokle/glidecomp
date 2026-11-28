@@ -3,7 +3,7 @@
  *
  * A list (the MASTER) paired with the one thing it selects, locates or
  * highlights (the DETAIL): the separation ranking and its metric chart, the
- * thermal census and its rose, the waypoint table and its map, the turnpoint
+ * thermal census and its rose, the waypoint list and its map, the turnpoint
  * list and its route diagram, the report card's explanation and its track
  * map. Before this component each of those laid the pair out its own way, and
  * on a phone three of the four let the detail scroll away — so acting on a row
@@ -25,11 +25,7 @@
  *   page. A "Hide <noun>" toggle folds the
  *   pane away for readers who only want the list, and the answer is REMEMBERED
  *   (per `storageKey`, defaulting to `detailLabel`) — a reader who came for
- *   the words should not have to dismiss the same pane on every page. A caller
- *   whose page already has a row of buttons can take that toggle over with
- *   `fold` + {@link useDetailFold} and put it there instead of spending a row
- *   of its own on it; it then scrolls with the page rather than sticking with
- *   the pane, which is the trade the caller is making. The page
+ *   the words should not have to dismiss the same pane on every page. The page
  *   is the one scroll context (no inner scrollbox on the master — that was
  *   tried in #553 and one ordinary page scroll defeated it, which is also why
  *   there is no stacked drag handle: sizing the pane was never the problem,
@@ -98,7 +94,7 @@
  * moves, sizes and puts away: see `FloatingWindow.tsx`, and
  * docs/interaction-guide.md 2.8, which allows it. Nothing is pinned then, so
  * there is no fold toggle, and rows clear only the page bar. Side by side
- * nothing changes. Today the report card's map is the one caller.
+ * nothing changes. The report card's map and the waypoints map use it.
  *
  * The pane is then only the detail's place. The detail itself is rendered
  * once by the caller in a `FloatingContent`, which moves it between that
@@ -184,10 +180,9 @@ const BLEED = {
 
 /**
  * The stacked fold — whether the reader has put the detail pane away — plus
- * the pane's id, so a control outside {@link MasterDetail} can say what it
- * expands (`aria-controls`).
+ * the pane's id, which the toggle says it expands (`aria-controls`).
  */
-export interface DetailFold {
+interface DetailFold {
   collapsed: boolean;
   onToggle: () => void;
   /** The id MasterDetail gives the pane. Generated here, not by the pane. */
@@ -195,23 +190,14 @@ export interface DetailFold {
 }
 
 /**
- * Own a pane's fold from OUTSIDE MasterDetail, so its toggle can be put
- * somewhere the layout cannot reach — today the waypoints page, which spends
- * the toggle's whole row on a right-aligned "Hide map" and would rather put
- * that button on the end of the toolbar it already has.
+ * The pane's fold, remembered under `prefsKey`.
  *
- * Pass the result as MasterDetail's `fold` and render {@link DetailFoldButton}
- * wherever the button belongs; MasterDetail then renders no toggle row of its
- * own. `prefsKey` must be the one MasterDetail would have used (its
- * `storageKey`, defaulting to `detailLabel`) or the two remember the reader's
- * answer under different names.
- *
- * The stored answer is read in an EFFECT, not a `useState` initialiser, for
- * the reason MasterDetail's own copy is: localStorage does not exist on the
- * server, so seeding the first render from it would hydrate a tree that was
- * never sent. The pane opens, then folds on the reader's remembered answer.
+ * The stored answer is read in an EFFECT, not a `useState` initialiser:
+ * localStorage does not exist on the server, so seeding the first render
+ * from it would hydrate a tree that was never sent. The pane opens, then
+ * folds on the reader's remembered answer.
  */
-export function useDetailFold(prefsKey: string): DetailFold {
+function useDetailFold(prefsKey: string): DetailFold {
   const detailId = useId();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -231,17 +217,11 @@ export function useDetailFold(prefsKey: string): DetailFold {
 }
 
 /**
- * The fold toggle, for a caller placing it itself. Identical to the one
- * MasterDetail renders in its own row, including the container query that
- * hides it side by side — there is no screen to reclaim there, and the pane
- * does not fold at all.
- *
- * That query is why a caller must put this inside an `@container` whose width
- * tracks MasterDetail's own: a `@5xl:` utility with no container ancestor
- * never matches, so the button would survive into the side-by-side layout and
- * offer to fold a pane that ignores it.
+ * The fold toggle. Hidden side by side, by the same container query the
+ * split uses: there is no screen to reclaim there, and the pane does not
+ * fold at all.
  */
-export function DetailFoldButton({
+function DetailFoldButton({
   fold,
   detailLabel,
   className,
@@ -279,7 +259,6 @@ export function MasterDetail({
   paneWrapClassName,
   storageKey,
   hideDetailInPrint = false,
-  fold: foldProp,
   floating,
   navigation,
   onWideChange,
@@ -330,15 +309,6 @@ export function MasterDetail({
   /** Hide the pane on paper — for callers that print a fuller alternative. */
   hideDetailInPrint?: boolean;
   /**
-   * Hoist the stacked fold out of this component: from {@link useDetailFold},
-   * paired with a {@link DetailFoldButton} the caller places itself. Given
-   * one, the toggle ROW here is not rendered at all — which is the point, it
-   * is a whole row spent on one right-aligned button — and the caller owns
-   * where the button goes and what it sits beside. Ignored under
-   * `navigation`, whose stacked layout has a back control instead of a fold.
-   */
-  fold?: DetailFold;
-  /**
    * Stacked, FLOAT the detail over the page instead of pinning it: a window
    * the reader moves, sizes and puts away (see `FloatingWindow.tsx`). From
    * `useFloatingDetail`. The pane is then only the detail's PLACE, side by
@@ -375,12 +345,7 @@ export function MasterDetail({
   // and remembered per `detailLabel` (below) so a reader who does not want
   // the map is not made to say so again on the next report card.
   //
-  // Hooks run unconditionally, so the internal fold is always prepared; a
-  // caller that hoisted it with `fold` simply leaves this copy unread. It
-  // only ever READS storage on its own — writes happen on a toggle, and the
-  // toggle it belongs to is the one that is not being rendered.
-  const internalFold = useDetailFold(prefsKey);
-  const fold = foldProp ?? internalFold;
+  const fold = useDetailFold(prefsKey);
   const collapsed = fold.collapsed;
   const detailId = fold.detailId;
   const masterId = useId();
@@ -515,14 +480,9 @@ export function MasterDetail({
           paneWrapClassName
         )}
       >
-        {/* Nothing at all when the caller hoisted the fold: the row exists
-            to carry ONE right-aligned button, so leaving it empty would
-            spend the height this was meant to give back. The scroll
-            clearances below then over-clear by the row that is no longer
-            stuck (~2.25rem), which is the safe direction for WCAG 2.4.11 —
-            a focused row stops a little lower than it needs to, never
-            behind the pane. */}
-        {navigation || !(foldProp || floating) ? (
+        {/* Nothing at all for a floating detail: there is no pane to fold
+            stacked, and the window's own Hide is the fold. */}
+        {navigation || !floating ? (
           <div
             className={cn(
               "flex pb-1 @5xl:hidden print:hidden",

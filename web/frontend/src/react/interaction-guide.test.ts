@@ -307,8 +307,7 @@ const PAGE_BUTTONS: Record<string, { count: number; why: string }> = {};
 Object.assign(PAGE_BUTTONS, {
   "pages/CompAltitudeReviewPage.tsx": { count: 1, why: "Check altitudes, where the review has not been run: the page's one act" },
   "pages/CompWaypointPage.tsx": { count: 2, why: "The radius chips, and the destructive action at the foot of the form" },
-  "pages/CompWaypoints.tsx": { count: 1, why: "Stop, beside the map, while placing a waypoint on it" },
-  "pages/CompWaypointsMapPage.tsx": { count: 1, why: "Stop, over the map, while placing a waypoint on it" },
+  "pages/CompWaypoints.tsx": { count: 1, why: "Stop, beside the map, while placing a waypoint on it (the list and the full-size map are this one page)" },
   "pages/Dashboard.tsx": { count: 4, why: "Download and Remove on each stored flight and task: actions on a row" },
   "pages/NewCompPage.tsx": { count: 1, why: "Sign in to start a competition, for a signed-out reader" },
   "pages/OAuthConsent.tsx": { count: 2, why: "No bar: Allow and Deny" },

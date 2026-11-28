@@ -33,15 +33,32 @@
  *
  * The read-only content (heading, list, download links) is server-rendered
  * via loadCompWaypoints so the page has real content for crawlers; the map
- * (mapbox) stays client-only — the server streams its "Loading map…"
- * fallback — and so does the draft, which only the browser has.
+ * (mapbox) stays client-only — it is drawn into its place once the page has
+ * mounted (FloatingContent) — and so does the draft, which only the browser
+ * has.
  *
  * List and map are laid out by the shared {@link MasterDetail}: the map is
- * the pinned pane on a phone (so a row's locate pin flies a map that is on
- * screen) and the sticky right-hand column on a wide screen. The pane is a
- * few centimetres tall there, so the map also opens at full size, on a page
- * of its own (pages/CompWaypointsMapPage.tsx) — enough room to walk a valley
- * dropping points one after another.
+ * the sticky right-hand column on a wide screen, and on a phone it FLOATS
+ * over the list in a window the reader moves, sizes and puts away
+ * (components/FloatingWindow.tsx; docs/interaction-guide.md 2.8). It was
+ * pinned under the bar there until 28 November 2026, and held half the
+ * screen; a row's locate pin brings a window that was put away back, clear
+ * of the row.
+ *
+ * The map also opens at full size, on a page of its own
+ * (/comp/:id/waypoints/map, `view="map"`) — enough room to walk a valley
+ * dropping points one after another. That page is THIS component, so the
+ * map on it is the same map, with its view and its pick state, and goes back
+ * with them: the router keeps the instance because both routes render it,
+ * with its {@link FloatingContent} first in the tree. It is the organisers'
+ * (a visitor is sent to the list), as it was when it was a page of its own.
+ *
+ * Add from map: the next tap on the map opens Add waypoint on that point. On
+ * the list it disarms after one tap, because the map is small; on the
+ * full-size page it STAYS armed, to place several in a row, and armed is
+ * `?add=1` in the URL so that coming back from Add waypoint finds it armed.
+ * Armed on the list, the full-size page opens armed. A small window is a picture of the map and takes no touch, so arming it on
+ * a phone brings the window up large.
  *
  * **Every action is in the page's bar** (issue #863; rac/page-bar.tsx), and
  * the page is the waypoints. For an organiser the bar holds Save — live only
@@ -59,29 +76,31 @@
  * Nothing is saved until Save. Leaving the editor by a link with edits
  * outstanding asks first; Back and a reload keep the draft for later.
  */
-import { lazy, Suspense, useCallback, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/react/lib/utils";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useInView } from "../lib/use-in-view";
 import { NotFound } from "@/react/components/NotFound";
 import {
   ImportIcon,
   MapPinPlusIcon,
   MapPinXIcon,
-  Maximize2Icon,
   MountainIcon,
   PlusIcon,
   Undo2Icon,
 } from "lucide-react";
 import { cleanWaypointCodes, describeCodeChanges, parseWaypointFile } from "@glidecomp/engine";
 import type { MapWaypoint } from "../../analysis/map-provider";
-import { Button, LinkButton } from "@/react/rac/button";
+import { Button } from "@/react/rac/button";
 import { Alert, AlertDescription } from "@/react/rac/alert";
+import { MasterDetail } from "@/react/components/MasterDetail";
 import {
-  DetailFoldButton,
-  MasterDetail,
-  useDetailFold,
-} from "@/react/components/MasterDetail";
+  FloatSlot,
+  FloatingContent,
+  floatDragRow,
+  useFloatingDetail,
+} from "@/react/components/FloatingWindow";
+import { floatMapClass } from "../comp/float-map";
 import { Loading, Spinner } from "@/react/rac/progress";
 import { Page, PageBar, commitClass, type BarAction } from "@/react/rac/page-bar";
 import { SearchField } from "@/react/rac/field";
@@ -89,7 +108,7 @@ import { Form, FormErrorBanner, SubmitButton, refusal } from "@/react/rac/form";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { compPages, underComp } from "../lib/crumbs";
+import { compPages, underComp, underCompWaypoints } from "../lib/crumbs";
 import {
   compAltitudeReviewPath,
   compPath,
@@ -110,6 +129,7 @@ import {
   waypointCameras,
 } from "../comp/use-waypoints-editor";
 import { DraftNotices } from "../comp/DraftNotices";
+import { waypointsEditorGate } from "../comp/WaypointsEditorGate";
 import {
   cleanCodes,
   fromRow,
@@ -123,66 +143,73 @@ import { useLeave } from "../lib/leave";
 const RouteMap = lazy(() => import("../comp/RouteMap"));
 
 /**
- * The map pane's noun — on its fold toggle ("Hide map" / "Show map") and, as
- * MasterDetail's default `storageKey`, the name the reader's answer is
- * remembered under. One constant because the toggle is rendered by this page
- * and the pane by MasterDetail: two literals could drift apart, and the fold
- * would then be remembered under a name nothing reads back.
+ * The map's noun, and the name the map's state is remembered under: the
+ * floating window's place and size, and MasterDetail's split. It is the name
+ * the pinned pane's fold was remembered under, so a reader who had hidden
+ * that pane meets the window already put away.
  */
 const MAP_LABEL = "map";
 
 /**
- * Where the map pane sticks, over MasterDetail's own offsets, which are for a
- * bar with no second layer. The bar with the filter under it is 60 px, the
- * 48 px field and its 8 px, and the notch: 7.5rem clears it and its shadow.
- * Stacked, the pane sticks there; on a short screen the bar does not stick,
- * so the pane sticks at the top (the arbitrary variant sorts last, so it
- * wins). Side by side, the same, with a little air.
- * The bleed is the page's 1rem gutter at every width: MasterDetail's `page`
- * bleed is 1.5rem from `sm`, which would hang 8 px off each side of the
- * screen and scroll the page sideways.
+ * Where the map column sticks, side by side, over MasterDetail's own offset,
+ * which is for a bar with no second layer: this bar has the filter under it.
+ * Stacked there is no pane (the map floats).
  */
-const PANE_WRAP = cn(
-  // Whole class strings, because Tailwind scans for them.
-  "top-[calc(7.5rem+env(safe-area-inset-top,0px))] max-sm:top-[calc(7.5rem+env(safe-area-inset-top,0px))]",
-  "[@media(max-height:500px)]:top-0",
-  "@5xl:top-[calc(8rem+env(safe-area-inset-top,0px))]",
-  "sm:-mx-4 sm:px-4"
-);
+const PANE_WRAP = "@5xl:top-[calc(8rem+env(safe-area-inset-top,0px))]";
 
 /**
- * Focus must not stop behind the bar or the pinned map (WCAG 2.4.11). A row
- * of the list is a `role="row"`, which MasterDetail's own clearances do not
- * name, and its buttons are cleared there for a bar with no filter — hence
- * the `!`. Stacked with the map showing: the bar, then the pane's 19rem
- * (`sm`: 23rem) cap and its padding. Folded, or side by side: the bar alone.
- * Whole class strings, because Tailwind scans for them.
+ * Focus must not stop behind the bar (WCAG 2.4.11), which is about 7.25rem
+ * with the filter under it. A row of the list is a `role="row"`, which
+ * MasterDetail's own clearances do not name, and its buttons are cleared
+ * there for a bar with no filter — hence the `!`. The floating window clears
+ * itself, by the page's scroll padding (FloatingWindow.tsx). Whole class
+ * strings, because Tailwind scans for them.
  */
-const CLEAR_OPEN =
-  "[&_[role=row]]:scroll-mt-[28rem] [&_button]:scroll-mt-[28rem]! sm:[&_[role=row]]:scroll-mt-[32rem] sm:[&_button]:scroll-mt-[32rem]!";
-const CLEAR_FOLDED = "[&_[role=row]]:scroll-mt-36 [&_button]:scroll-mt-36!";
-const CLEAR_WIDE = "@5xl:[&_[role=row]]:scroll-mt-36 @5xl:[&_button]:scroll-mt-36!";
+const CLEAR = "[&_[role=row]]:scroll-mt-36 [&_button]:scroll-mt-36!";
 
-export function CompWaypoints() {
+/**
+ * `view="map"` is the same page with the map alone, at full size
+ * (/comp/:id/waypoints/map): see the note at the top.
+ */
+export function CompWaypoints({ view = "list" }: { view?: "list" | "map" } = {}) {
   const editor = useWaypointsEditor();
-  const { comp, compId, urlId, compName, isAdmin, draft, dirty } = editor;
+  const { comp, compId, urlId, compName, isAdmin, draft, dirty, bareId } = editor;
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const leave = useLeave();
   const confirm = useConfirm();
-  // The map's fold, owned here rather than by MasterDetail so its toggle can
-  // ride the line above the list instead of taking a row of its own.
-  const mapFold = useDetailFold(MAP_LABEL);
+  // On a phone the map is a floating window. Held here because the page lays
+  // the map out for where it is, and brings it back when a row asks it a
+  // question.
+  const float = useFloatingDetail(MAP_LABEL);
+  const { reveal } = float;
+  const mode = float.mode;
 
   // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
-  useCanonicalPath(compName ? compWaypointsPath(urlId, compName) : null);
+  useCanonicalPath(
+    compName ? (view === "map" ? compWaypointsMapPath : compWaypointsPath)(urlId, compName) : null
+  );
 
   const rows = draft.rows;
   const altitudeCheck = useAltitudeCheck(editor);
   // Mapbox (764 KB) waits until the panel nears the viewport — see use-in-view.
   const [mapRef, mapInView] = useInView<HTMLDivElement>();
-  // Armed by "Add from map": the next tap opens Add waypoint on that point,
-  // and disarms it — on a map this small, the tap after that should pan.
-  const [addMode, setAddMode] = useState(false);
+  // Armed by "Add from map": the next tap opens Add waypoint on that point.
+  // On the list it disarms — on a map this small, the tap after that should
+  // pan. On the full-size page it stays armed, in the URL (see the top).
+  const [listAddMode, setListAddMode] = useState(false);
+  const addMode = view === "map" ? searchParams.get("add") === "1" : listAddMode;
+  const setAddMode = (on: boolean) => {
+    if (view === "map") {
+      setSearchParams(on ? { add: "1" } : {}, { replace: true, state: location.state });
+    } else setListAddMode(on);
+  };
+  // Armed on the list, the full-size page opens armed (`fullTo`, below): the
+  // arming went there with the map, so the list does not keep it as well.
+  useEffect(() => {
+    if (view === "map") setListAddMode(false);
+  }, [view]);
   const [fitNonce, setFitNonce] = useState(0);
   // Fly-to-waypoint request from a row's pin (see `locate`).
   const [focus, setFocus] = useState<{ lat: number; lon: number; key: number } | null>(null);
@@ -196,12 +223,22 @@ export function CompWaypoints() {
   // the file's own order is the order, for a visitor as for an organiser.
   const [filter, setFilter] = useState("");
 
+  // The list, to find a row's element by its key (see `locate`).
+  const listRef = useRef<HTMLDivElement>(null);
+
   // Fly the map to a row's coordinates (bumping the key so a repeat press on
   // the same row re-centres). No-op when the row's coordinates aren't valid.
-  const locate = useCallback((r: Pick<WpRow, "coords">) => {
-    const c = parseCoords(r.coords);
-    if (c) setFocus({ lat: c.lat, lon: c.lon, key: ++focusSeq.current });
-  }, []);
+  // A row is a question put to the map: if the window was put away, this is
+  // the moment it is wanted, and away from the row that was pressed.
+  const locate = useCallback(
+    (r: Pick<WpRow, "id" | "coords">) => {
+      const c = parseCoords(r.coords);
+      if (!c) return;
+      reveal(listRef.current?.querySelector(`[role="row"][data-key="${r.id}"]`));
+      setFocus({ lat: c.lat, lon: c.lon, key: ++focusSeq.current });
+    },
+    [reveal]
+  );
 
   // The pilot's download + QR (issue #312 stage 2) — for everyone, and keyed
   // off the SAVED set rather than the editor's rows: a comp with nothing
@@ -297,9 +334,13 @@ export function CompWaypoints() {
     leave(compPath(urlId, compName));
   }
 
-  /** Arm the map for one tap, with the map on screen to take it. */
+  /**
+   * Arm the map for one tap, with a map on screen to take it. The small
+   * window is a picture, which takes no touch, so a window that is small or
+   * put away comes up large and live.
+   */
   function toggleAddFromMap() {
-    if (!addMode && mapFold.collapsed) mapFold.onToggle();
+    if (!addMode && (mode === "small" || mode === "tucked")) reveal(null, "large");
     setAddMode(!addMode);
   }
 
@@ -308,8 +349,6 @@ export function CompWaypoints() {
       Loading map…
     </div>
   );
-
-  const bareId = editor.bareId;
 
   // ⋯: the editing actions (an organiser's, once the waypoints are here),
   // then the device rows (everyone's), then the way to throw the draft away
@@ -365,7 +404,195 @@ export function CompWaypoints() {
       : []),
   ];
 
+  // The map and what goes with it: ONE subtree for the column, the floating
+  // window and the full-size page, so the map (its view, whether it is armed
+  // to place a point) is the same map in all three. `mode` says which it is
+  // in, and the layout follows: null in the column, then the window's size,
+  // or "full".
+  /** A map the reader can work: not the small window's picture. */
+  const live = mode !== "small" && mode !== "tucked";
+  const fullTo = editing ? compWaypointsMapPath(urlId, compName) : undefined;
+  const countLine = isAdmin
+    ? `${rows.length} waypoint${rows.length === 1 ? "" : "s"}${
+        invalidCount > 0 ? ` · ${invalidCount} need valid coordinates` : ""
+      }`
+    : `${rows.length} waypoints`;
+  // Add from map is a row of ⋯; armed, the map says so beside it, with the
+  // way to stop.
+  const placing =
+    addMode && live ? (
+      <>
+        <span
+          role="status"
+          className={cn("text-sm font-medium", mode != null && "min-w-0 flex-1")}
+        >
+          Tap the map to place…
+        </span>
+        <Button
+          variant={mode == null ? "outline" : "ghost"}
+          size={mode == null ? "sm" : undefined}
+          className={mode == null ? undefined : "h-11 px-4"}
+          onPress={() => setAddMode(false)}
+        >
+          Stop
+        </Button>
+      </>
+    ) : null;
+  const detail = (
+    <>
+      <div
+        ref={mapRef}
+        className={cn(
+          mode == null
+            ? // The column, side by side. An explicit height: Mapbox renders
+              // nothing into an unsized container.
+              "h-[520px]"
+            : // The window, or the page, is the frame: the map fills it.
+              "relative min-h-0 flex-1 overflow-hidden",
+          // The column has the way to the full-size page in its corner only
+          // for an organiser; a visitor's keeps the map's own controls there.
+          (mode != null || fullTo) && floatMapClass(mode)
+        )}
+      >
+        {mode == null && !mapInView ? (
+          mapFallback
+        ) : (
+          <Suspense fallback={mapFallback}>
+            <RouteMap
+              task={null}
+              waypoints={mapWaypoints}
+              addMode={addMode}
+              fitNonce={fitNonce}
+              focus={focus}
+              // Not on the small window's picture, which takes no input.
+              placeSearch={isAdmin && live}
+              // The map's top right corner has the size buttons.
+              searchBelow
+              // The same ground in view when the window changes size.
+              keepView
+              // Where the map was left when it was last mounted, if it was:
+              // coming back from Add waypoint or a waypoint's page.
+              initialCamera={waypointCameras.get(bareId) ?? null}
+              onCameraChange={(camera) => waypointCameras.set(bareId, camera)}
+              onWaypointPick={() => {}}
+              onMapPick={(lat, lon, details) => {
+                // On the list one tap places one point; the full-size page
+                // stays armed for the next.
+                if (view !== "map") setAddMode(false);
+                navigate(
+                  compWaypointsNewPath(urlId, compName, newWaypointSearch(lat, lon, details)));
+              }}
+            />
+          </Suspense>
+        )}
+      </div>
+      {mode == null ? (
+        isAdmin ? (
+          <div className="flex flex-wrap items-center gap-2 p-2">
+            {placing}
+            <span className="text-xs text-muted-foreground">{countLine}</span>
+          </div>
+        ) : (
+          <p className="p-2 text-xs text-muted-foreground">{countLine}</p>
+        )
+      ) : mode === "large" && placing ? (
+        // The window can be held by its last row, as by its grabber:
+        // anywhere but the button (FloatingContent reads the mark).
+        <div
+          {...floatDragRow}
+          className={cn(
+            floatDragRow.className,
+            "flex min-h-11 shrink-0 items-center gap-2 border-t border-border bg-card pr-1 pl-3"
+          )}
+        >
+          {placing}
+        </div>
+      ) : mode === "full" ? (
+        <>
+          {placing ? (
+            <div className="flex shrink-0 items-center gap-2 border-t border-border bg-card py-1 pr-1 pl-4">
+              {placing}
+            </div>
+          ) : null}
+          <p className="shrink-0 border-t border-border px-gutter-safe py-2 text-xs text-muted-foreground">
+            {rows.length} waypoint{rows.length === 1 ? "" : "s"} · nothing is saved until you
+            press Save
+          </p>
+        </>
+      ) : null}
+    </>
+  );
+  // First in the tree on the list AND on the full-size page, so the router
+  // keeps it, and the map in it, when the reader goes between them. While
+  // the waypoints are not here its place is held by null, so the page after
+  // it keeps its own place and the bar is not mounted again.
+  const floatingContent = (
+    <FloatingContent
+      float={float}
+      label="map"
+      ariaLabel="Waypoint map"
+      // The filter is the bar's second layer.
+      tallBar
+      // Armed, the full-size page opens armed.
+      fullTo={fullTo && addMode ? `${fullTo}?add=1` : fullTo}
+      // It leaves the page as the bar's Back does: the full-size map is a
+      // page (guide 2.1).
+      onLeaveFull={() => leave(compWaypointsPath(urlId, compName))}
+    >
+      {detail}
+    </FloatingContent>
+  );
+
+  if (view === "map") {
+    const trail = underCompWaypoints(urlId, compName);
+    const gate = waypointsEditorGate(editor, { title: "Waypoint map", trail });
+    if (gate) {
+      return (
+        <>
+          {null}
+          {gate}
+        </>
+      );
+    }
+    return (
+      <>
+        {floatingContent}
+        {/* The page is the bar and the map (issue #863): `fill`, so the page
+            does not scroll and every drag belongs to the map, which is as
+            wide and as tall as the screen under the bar. Add from map is
+            the bar's one action, and the bar's Back is the way out. */}
+        <Page
+          fill="viewport"
+          bar={
+            <PageBar
+              title="Waypoint map"
+              trail={trail}
+              actions={[
+                {
+                  id: "add-from-map",
+                  icon: addMode ? MapPinXIcon : MapPinPlusIcon,
+                  label: addMode ? "Stop adding from map" : "Add from map",
+                  onAction: () => setAddMode(!addMode),
+                },
+              ]}
+            />
+          }
+        >
+          <FloatSlot
+            float={float}
+            kind="full"
+            role="region"
+            aria-label="Waypoint map"
+            className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-border"
+          />
+        </Page>
+      </>
+    );
+  }
+
   return (
+    <>
+      {editor.loading || editor.loadError ? null : floatingContent}
     <Page
       width="wide"
       bar={
@@ -478,110 +705,35 @@ export function CompWaypoints() {
         <Loading className="text-sm">Loading waypoints…</Loading>
       ) : editor.loadError ? null : (
         <>
-          {/* One line of state above the list, with the map's fold at its
-              end: what the filter left, and whether there is anything to
-              save. Both are live regions, so they are here before they have
-              anything to say.
-
-              `@container` because DetailFoldButton hides itself side by side
-              with the same `@5xl:` query MasterDetail splits on, and a
-              container query with no container ancestor never matches. */}
-          <div className="@container mb-2">
-            <div className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-              {isAdmin ? <span role="status">{dirty ? "Unsaved changes" : ""}</span> : null}
-              <span aria-live="polite">
-                {query ? `${visibleRows.length} of ${rows.length} match` : ""}
-              </span>
-              <DetailFoldButton fold={mapFold} detailLabel={MAP_LABEL} className="ms-auto" />
-            </div>
+          {/* One line of state above the list: what the filter left, and
+              whether there is anything to save. Both are live regions, so
+              they are here before they have anything to say. While the map
+              floats, the count that is under it in the column is here. */}
+          <div className="mb-2 flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            {isAdmin ? <span role="status">{dirty ? "Unsaved changes" : ""}</span> : null}
+            <span aria-live="polite">
+              {query ? `${visibleRows.length} of ${rows.length} match` : ""}
+            </span>
+            {mode != null ? <span className="ms-auto">{countLine}</span> : null}
           </div>
           <MasterDetail
             detailLabel={MAP_LABEL}
-            fold={mapFold}
             detailAriaLabel="Waypoint map"
-            bleed="page"
+            floating={float}
             defaultMasterShare={0.5}
             // A map wants the whole line, not the chart pane's 35rem cap.
             paneWidthClassName="w-full"
             paneWrapClassName={PANE_WRAP}
             // Side by side the column starts lower than MasterDetail assumes.
             paneClassName="@5xl:max-h-[calc(100vh-9.5rem)]"
-            detail={
-              <div>
-                {/* Explicit heights: Mapbox renders nothing into an unsized
-                    container. Stacked they fit under the pane's caps with the
-                    control row; side by side the taller map is the point. */}
-                <div ref={mapRef} className="h-56 sm:h-72 @5xl:h-[520px]">
-                  {!mapInView ? (
-                    mapFallback
-                  ) : (
-                    <Suspense fallback={mapFallback}>
-                      <RouteMap
-                        task={null}
-                        waypoints={mapWaypoints}
-                        addMode={addMode}
-                        fitNonce={fitNonce}
-                        focus={focus}
-                        placeSearch={isAdmin}
-                        // Where the full-size map was left, if it was: one view
-                        // across both pages (see waypointCameras).
-                        initialCamera={waypointCameras.get(bareId) ?? null}
-                        onCameraChange={(camera) => waypointCameras.set(bareId, camera)}
-                        onWaypointPick={() => {}}
-                        onMapPick={(lat, lon, details) => {
-                          setAddMode(false);
-                          navigate(
-                            compWaypointsNewPath(urlId, compName, newWaypointSearch(lat, lon, details)));
-                        }}
-                      />
-                    </Suspense>
-                  )}
-                </div>
-                {isAdmin ? (
-                  <div className="flex flex-wrap items-center gap-2 p-2">
-                    {/* Add from map is a row of ⋯; armed, the map says so
-                        here, beside it, with the way to stop. */}
-                    {addMode ? (
-                      <>
-                        <span role="status" className="text-sm font-medium">
-                          Tap the map to place…
-                        </span>
-                        <Button variant="outline" size="sm" onPress={() => setAddMode(false)}>
-                          Stop
-                        </Button>
-                      </>
-                    ) : null}
-                    {/* Stacked on a phone the pane is capped at ~19rem, which
-                        leaves the map a few centimetres to place a point in.
-                        At full size it gets the whole screen, and Add from map
-                        goes with it. A link beside the map it enlarges, not a
-                        row of ⋯: its place says what it is. */}
-                    <LinkButton
-                      variant="outline"
-                      size="sm"
-                      // Contains the visible label (WCAG 2.5.3) while saying
-                      // WHAT is maximised for anyone reading the link alone.
-                      aria-label="Maximise map"
-                      href={compWaypointsMapPath(urlId, compName)}
-                    >
-                      <Maximize2Icon className="size-4" aria-hidden="true" />
-                      Maximise
-                    </LinkButton>
-                    <span className="text-xs text-muted-foreground">
-                      {rows.length} waypoint{rows.length === 1 ? "" : "s"}
-                      {invalidCount > 0 ? ` · ${invalidCount} need valid coordinates` : ""}
-                    </span>
-                  </div>
-                ) : (
-                  <p className="p-2 text-xs text-muted-foreground">{rows.length} waypoints</p>
-                )}
-              </div>
-            }
+            // No `detail`: the pane is the map's place, side by side. The map
+            // itself is rendered once, above, and is moved there, into its
+            // window or onto its own page (FloatingContent).
             master={
               // One list, at every width, for everyone. An admin's rows open
               // the waypoint's page; a visitor's do not, and that is the only
               // difference (see WaypointList).
-              <div className={cn(mapFold.collapsed ? CLEAR_FOLDED : CLEAR_OPEN, CLEAR_WIDE)}>
+              <div ref={listRef} className={CLEAR}>
                 <WaypointList
                   rows={visibleRows}
                   emptyMessage={
@@ -600,5 +752,6 @@ export function CompWaypoints() {
         </>
       )}
     </Page>
+    </>
   );
 }

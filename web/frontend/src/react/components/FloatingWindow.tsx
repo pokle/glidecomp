@@ -29,7 +29,7 @@
  * hook owns (the HOST). The host is moved, never remounted, between:
  *
  * - the FLOW slot: the pane's place in the page, side by side;
- * - the WINDOW: straight after the page bar (`main > header`), where nothing
+ * - the WINDOW: straight after the page bar, in `main`, where nothing
  *   above it is a containing block for `position: fixed`;
  * - the FULL slot: the detail's own page, at full size (guide 2.1: a figure
  *   at full size is a page with a URL, left with Back).
@@ -100,8 +100,10 @@ export interface FloatingDetail {
    * server, and until the layout has been measured. */
   mode: FloatMode | null;
   /** Bring a tucked window back. The reader asked to see something in it,
-   * by pressing `pressed`: the window returns clear of it. */
-  reveal: (pressed?: Element | null) => void;
+   * by pressing `pressed`: the window returns clear of it. With `"large"` it
+   * also comes back large, or grows from small: for a question only a live
+   * map can answer, such as a tap to place a point on it. */
+  reveal: (pressed?: Element | null, size?: "large") => void;
   /** For MasterDetail, FloatSlot and FloatingContent. Not for pages. */
   internal: {
     state: FloatState;
@@ -169,20 +171,21 @@ export function useFloatingDetail(storageKey: string): FloatingDetail {
   const stateRef = useRef(state);
   stateRef.current = state;
   const beforeChange = useRef<(() => void) | null>(null);
-  const reveal = useCallback((pressed?: Element | null) => {
+  const reveal = useCallback((pressed?: Element | null, size?: "large") => {
     const s = stateRef.current;
-    if (!s.tucked) return;
+    if (!s.tucked && (!size || s.size === size)) return;
     // Back as the small window, on the half of the screen the reader is not
     // looking at. The caller says what was pressed: focus does not, because
-    // Safari does not focus a button that is tapped.
-    const rect = pressed?.getBoundingClientRect() ?? null;
+    // Safari does not focus a button that is tapped. A window that is out
+    // already only grows, where it is.
+    const rect = s.tucked ? (pressed?.getBoundingClientRect() ?? null) : null;
     const edge: FloatEdge = rect
       ? rect.top + rect.height / 2 < window.innerHeight / 2
         ? "bottom"
         : "top"
       : s.edge;
     beforeChange.current?.();
-    update({ ...s, tucked: false, size: "small", edge });
+    update({ ...s, tucked: false, size: size ?? "small", edge });
   }, [update]);
 
   const floating = active && !slots.full;
@@ -190,16 +193,22 @@ export function useFloatingDetail(storageKey: string): FloatingDetail {
   // Out of the keyboard's way. Only where a keyboard takes screen: with a
   // mouse and real keys, a map that left whenever a field was focused would
   // be a map that could not be read while searching.
+  //
+  // A field INSIDE the window does not put it away: the reader is typing
+  // into it (the waypoints map's place search), and a window that left
+  // would take the field with it.
   useEffect(() => {
     if (!floating) return;
     if (!window.matchMedia("(pointer: coarse)").matches) return;
+    const typingIn = (el: EventTarget | null) =>
+      opensKeyboard(el as HTMLElement | null) && !(el instanceof Node && host?.contains(el));
     const onIn = (e: FocusEvent) => {
-      if (opensKeyboard(e.target as HTMLElement | null)) setTyping(true);
+      if (typingIn(e.target)) setTyping(true);
     };
     const onOut = (e: FocusEvent) => {
-      setTyping(opensKeyboard(e.relatedTarget as HTMLElement | null));
+      setTyping(typingIn(e.relatedTarget));
     };
-    if (opensKeyboard(document.activeElement as HTMLElement | null)) setTyping(true);
+    if (typingIn(document.activeElement)) setTyping(true);
     document.addEventListener("focusin", onIn);
     document.addEventListener("focusout", onOut);
     return () => {
@@ -207,7 +216,7 @@ export function useFloatingDetail(storageKey: string): FloatingDetail {
       document.removeEventListener("focusout", onOut);
       setTyping(false);
     };
-  }, [floating]);
+  }, [floating, host]);
 
   const mode: FloatMode | null = slots.full
     ? "full"
@@ -255,6 +264,13 @@ const EDGE: Record<FloatEdge, string> = {
   top: "top-[calc(4.25rem+env(safe-area-inset-top,0px))]",
   bottom: "bottom-safe-3",
 };
+/** The same, under a bar with a second layer (PageBar's `below`: the
+ * waypoints page's filter). That bar is 7.25rem tall: a window at 4.25rem
+ * would have its grabber and its buttons under the filter. */
+const EDGE_TALL_BAR: Record<FloatEdge, string> = {
+  top: "top-[calc(7.75rem+env(safe-area-inset-top,0px))]",
+  bottom: "bottom-safe-3",
+};
 const SIDE: Record<FloatSide, string> = {
   left: "left-[calc(0.75rem+env(safe-area-inset-left,0px))]",
   // By `left` and the `translate` property, so it shares nothing with the
@@ -269,6 +285,9 @@ const SIZE = {
     "h-[min(24rem,55svh)] [@media(max-height:500px)]:h-[calc(100svh-5.5rem)] [@media(max-height:500px)]:max-w-[24rem]"
   ),
 } as const;
+/** Large under a tall bar, on a short screen: at the top it starts 3.5rem
+ * lower, so it is 3.5rem shorter, or its foot would be off the screen. */
+const LARGE_TALL_BAR = "[@media(max-height:500px)]:h-[calc(100svh-9rem)]";
 /** Past its own side, and out of the accessibility tree with it. */
 const TUCKED: Record<"left" | "right", string> = {
   left: "invisible -translate-x-[calc(100%+2rem)]",
@@ -323,6 +342,7 @@ export function FloatingContent({
   fullTo,
   onLeaveFull,
   icon: TabGlyph = MapIcon,
+  tallBar = false,
   children,
 }: {
   float: FloatingDetail;
@@ -342,6 +362,9 @@ export function FloatingContent({
   onLeaveFull?: () => void;
   /** What the tab shows when the window is put away. */
   icon?: LucideIcon;
+  /** The page's bar has a second layer (PageBar's `below`), so the places
+   * at the top start under both. */
+  tallBar?: boolean;
   /**
    * The detail. A function is given where it is, to lay itself out for it:
    * null in the page's column, or the window's size, or "full". (A page
@@ -354,6 +377,7 @@ export function FloatingContent({
   const full = mode === "full";
   const floating = active && !full;
   const hidden = mode === "tucked";
+  const edgeClass = tallBar ? EDGE_TALL_BAR : EDGE;
 
   /** Where the window was drawn before the change now being made. */
   const flipFrom = useRef<DOMRect | null>(null);
@@ -424,7 +448,12 @@ export function FloatingContent({
         // Straight after the page bar: where the pinned pane was read, and
         // the first stop after the bar for a keyboard. At the end of the
         // body it was read after the footer, forty Tab presses away.
-        const bar = document.querySelector("main > header");
+        // A page whose bar is its form (the waypoints page: Save is the
+        // bar's) wraps the bar in that form: the window goes after what
+        // holds the bar in `main`, never into the form, where a field in
+        // the window would submit the page.
+        let bar: Element | null = document.querySelector("main header");
+        while (bar?.parentElement && bar.parentElement.tagName !== "MAIN") bar = bar.parentElement;
         if (bar) bar.insertAdjacentElement("afterend", el);
         else document.body.appendChild(el);
       }
@@ -441,10 +470,11 @@ export function FloatingContent({
       want === "window"
         ? cn(
             WINDOW,
-            EDGE[state.edge],
+            edgeClass[state.edge],
             // Put away, a window from the middle leaves by the right.
             SIDE[hidden ? tuckSide(state.side) : state.side],
             SIZE[state.size],
+            tallBar && state.size === "large" && LARGE_TALL_BAR,
             hidden && TUCKED[tuckSide(state.side)]
           )
         : want === "full"
@@ -509,6 +539,8 @@ export function FloatingContent({
     state.size,
     ariaLabel,
     settleTick,
+    edgeClass,
+    tallBar,
   ]);
 
   // Resting at the bottom, the window would cover the page's last lines for
@@ -958,7 +990,7 @@ export function FloatingContent({
               "fixed z-30 flex h-16 touch-pan-y [-webkit-tap-highlight-color:transparent] flex-col items-center justify-center gap-0.5 border border-border bg-card text-foreground shadow-lg outline-none print:hidden",
               "transition-opacity duration-300 starting:opacity-0",
               "focus-visible:ring-3 focus-visible:ring-ring",
-              EDGE[state.edge],
+              edgeClass[state.edge],
               tabSide === "right"
                 ? "right-0 w-[calc(2.75rem+env(safe-area-inset-right,0px))] rounded-l-xl border-r-0 pr-[env(safe-area-inset-right,0px)]"
                 : "left-0 w-[calc(2.75rem+env(safe-area-inset-left,0px))] rounded-r-xl border-l-0 pl-[env(safe-area-inset-left,0px)]",

@@ -35,6 +35,8 @@ export default function RouteMap({
   fitNonce,
   focus,
   placeSearch = false,
+  searchBelow = false,
+  keepView = false,
   initialCamera,
   onCameraChange,
   onWaypointPick,
@@ -72,10 +74,29 @@ export default function RouteMap({
    */
   placeSearch?: boolean;
   /**
+   * The search box goes UNDER the map. For a map whose top right corner
+   * carries the size buttons of a floating detail (the waypoints page,
+   * components/FloatingWindow.tsx): above, the field would sit under them,
+   * and under the window's grabber.
+   */
+  searchBelow?: boolean;
+  /**
+   * When the map's box changes size, go on showing the same ground — the
+   * fit, or the reader's own view — rather than a crop of it, as the report
+   * card's map does (`invalidateSize({ keepView: true })`). For a map that
+   * changes size under the reader: a floating window going small or large.
+   * Off by default, so a map that has not asked for it resizes exactly as it
+   * did. Note that a map resized this way to under 240 px also paints out
+   * the task's labels (the provider's compact rule, which touches nothing
+   * else): a route drawn in a small window is a picture of the route.
+   */
+  keepView?: boolean;
+  /**
    * Open on this exact view instead of the globe (or wherever the last map
-   * anywhere in the app left off). For handing the camera between two
-   * instances of the same map — the waypoint editor's pane and its
-   * full-size page. Read once, at mount; changing it later does nothing.
+   * anywhere in the app left off). For handing the camera to the next
+   * instance of the same map — the waypoints map, coming back from Add
+   * waypoint or a waypoint's page, which unmounted it. Read once, at mount;
+   * changing it later does nothing.
    *
    * Passing one also suppresses the mount-time fit to the waypoints: an
    * explicit view beats a computed one, or maximising would throw the admin
@@ -209,33 +230,43 @@ export default function RouteMap({
   useEffect(() => {
     const container = containerRef.current;
     if (!provider || !container) return;
-    const observer = new ResizeObserver(() => provider.invalidateSize());
+    const observer = new ResizeObserver(() => provider.invalidateSize({ keepView }));
     observer.observe(container);
     return () => observer.disconnect();
-  }, [provider]);
+  }, [provider, keepView]);
 
   // The search box sits above the map rather than floating over it: both
   // top corners already carry Mapbox controls (style picker, navigation,
   // geolocate), and a popover listbox in normal flow can't be clipped by the
-  // container's overflow-hidden.
+  // container's overflow-hidden. Or below it (`searchBelow`). Either way the
+  // map's own element keeps its place among its siblings, so moving the
+  // search, or dropping it, never remounts the map.
   const showSearch = placeSearch && PLACE_SEARCH_AVAILABLE;
+  const search = (
+    <div
+      className={
+        searchBelow
+          ? "shrink-0 border-t border-border bg-card p-1.5"
+          : "shrink-0 border-b border-border bg-card p-1.5"
+      }
+    >
+      <PlaceSearchField
+        isDisabled={!provider}
+        waypoints={waypoints}
+        onWaypointPick={(wp) => provider?.panTo(wp.lat, wp.lon)}
+        onPick={(place) => {
+          if (!provider) return;
+          if (place.bounds) provider.fitToBounds(place.bounds);
+          else provider.panTo(place.lat, place.lon, PLACE_FALLBACK_ZOOM);
+        }}
+      />
+    </div>
+  );
   return (
     <div className="flex h-full w-full flex-col">
-      {showSearch ? (
-        <div className="shrink-0 border-b border-border bg-card p-1.5">
-          <PlaceSearchField
-            isDisabled={!provider}
-            waypoints={waypoints}
-            onWaypointPick={(wp) => provider?.panTo(wp.lat, wp.lon)}
-            onPick={(place) => {
-              if (!provider) return;
-              if (place.bounds) provider.fitToBounds(place.bounds);
-              else provider.panTo(place.lat, place.lon, PLACE_FALLBACK_ZOOM);
-            }}
-          />
-        </div>
-      ) : null}
+      {showSearch && !searchBelow ? search : null}
       <div ref={containerRef} className="min-h-0 w-full flex-1" />
+      {showSearch && searchBelow ? search : null}
     </div>
   );
 }
