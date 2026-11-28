@@ -122,7 +122,7 @@ describe code that no longer exists.
   full-width 44px rows in flow, replacing a Select or RadioGroup wherever the
   value is part of a form that gets Saved; see the Conventions section for
   which control to reach for), `table` (Table/TableHeader/Column/Row/
-  Cell/CellEditZone), `grid-list` (GridList/GridListItem/RowContent, plus
+  Cell), `grid-list` (GridList/GridListItem/RowContent, plus
   GridListSection/GridListHeader for named groups — a
   vertical list with `keyboardNavigationBehavior="tab"`, and since the
   mobile-first pass the kit's default answer for an editable collection that
@@ -446,12 +446,14 @@ What goes in the bar, and why, is in the [interaction guide](interaction-guide.m
 2. **Table is a navigation/selection grid, not an edit grid.** Cells attach a
    **capture-phase** keydown handler (`useGridCell`) that steals
    Arrow/Left/Right for cell navigation — bubble-phase `stopPropagation` on an
-   inner input can never win, so carets can't move in inline editors. Fix:
-   wrap inline editors in `CellEditZone` (rac/table.tsx), which flips
-   `TableState.setKeyboardNavigationDisabled` while focus is inside (same flag
-   RAC's column resizer uses) and restores nav on blur. Keyboard reorder path
-   still works: focus row → ArrowRight → drag handle → Enter. Note GridList
-   has `keyboardNavigationBehavior="tab"` for this; **Table does not**.
+   inner input can never win, so carets can't move in inline editors. No
+   table in the app holds a live input today: the route editor's rows moved
+   to a GridList, and `CellEditZone` (rac/table.tsx), which suspended cell
+   navigation while focus was inside an editor, was deleted unused on
+   2026-11-25. If a table needs one again, Table has taken
+   `keyboardNavigationBehavior="tab"` since RAC 1.20, as GridList does, and
+   Tree since 1.19 (rac/tree.tsx sets it). It is not tried on a Table here,
+   so drive it before you rely on it.
    Spectrum 2's answer (`EditableCell` in @react-spectrum/s2) is a popover
    editor — no live inputs in the grid at all; there is no RAC equivalent yet.
 3. **RAC collections cache each item's render by object identity.** Row props
@@ -972,8 +974,7 @@ narrow column frees width for the map). Verified live (headless admin drive,
   preview sits **full-width below** it; the waypoint picker is no longer on
   this dialog at all (it moved into `TurnpointDetailsDialog` — see below).
 - **`GridList` with `keyboardNavigationBehavior="tab"`** — arrows move between
-  cards, Tab reaches focusable children, so **no CellEditZone** is needed here
-  (contrast the Table, gotcha #2). `selectionMode="none"`.
+  cards, Tab reaches focusable children (contrast the Table, gotcha #2). `selectionMode="none"`.
 - **Reorder is per-row up/down arrow buttons, NOT drag-and-drop** (changed
   2026-07-23). The row was `useDragAndDrop`'d with a `slot="drag"` handle, but
   that handle is `pointer-events:none` (gotcha #4) so the drag lives on the
@@ -1104,9 +1105,11 @@ rather than "how to convert one".
   `.claude/worktrees/explore-rac`), then `explore/rac-route-editor-list`
   (PR #374 — the GridList route editor + ARIA-native breadcrumbs). All
   merged (PRs #373, #374, #378, and #401 for the comp list).
-- RAC version in web/frontend: `^1.20.0` (a caret range, currently resolving to
-  1.20.0 in `bun.lock` — not a hard pin). Upgrades: re-run the drives —
-  `CellEditZone` and `dependencies` behavior are the fragile seams.
+- RAC version in web/frontend: `^1.22.1` (a caret range, resolving to 1.22.1
+  in `bun.lock` on 2026-11-25 — not a hard pin). Upgrades: re-run the drives —
+  `dependencies` behavior is the fragile seam.
+- RAC 1.22 added a `Sheet` (a swipeable overlay). We do not use it: a screen
+  is a page (interaction guide 2.1), and `no-overlays.test.ts` holds that.
 - Docs: react-aria.adobe.com (RAC), react-spectrum.adobe.com (Spectrum 2 —
   same behavior engine, Adobe-styled; its TableView `EditableCell` popover
   pattern is a good future model for *occasional*-edit tables).

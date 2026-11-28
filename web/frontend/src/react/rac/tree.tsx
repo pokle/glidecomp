@@ -2,16 +2,18 @@
  * React Aria Components Tree — hierarchical rows with expand/collapse and
  * full keyboard navigation.
  *
- * It is a `treegrid`, and that decides the keyboard contract: the whole tree
- * is ONE tab stop, Up/Down move between rows, and a row's own focusable
- * children (inline links, the route glyph on the comp page) are reached with
- * Right/Left, not with Tab — Tab leaves the tree entirely. That is RAC's
- * `keyboardNavigationBehavior: 'arrow'`, which Tree hard-codes and does not
- * expose as a prop, so it is the contract here whether or not a consumer
- * wants it. Two consequences worth knowing before putting a control in a row:
- * pressing it focuses the ROW rather than the control, and focus returning
- * from a dialog it opened lands on the row too (react-aria pulls focus back
- * to the focused row whenever focus re-enters the collection).
+ * It is a `treegrid`: Up/Down move between rows, and Left/Right walk to a
+ * row's parent or fold it. A row's own focusable children (the inline links
+ * on the Dashboard) are reached with Tab, in the order a reader sees them,
+ * and the next Tab after the last one leaves the tree. That is
+ * `keyboardNavigationBehavior="tab"`, the same contract as rac/grid-list.tsx.
+ * RAC's default is `"arrow"`, which makes the whole tree ONE tab stop and
+ * hides those children behind Right/Left. Tree has taken the prop since RAC
+ * 1.19; before that it hard-coded `"arrow"`.
+ *
+ * Not checked under `"tab"`, because no row holds one yet: a BUTTON in a row.
+ * Under `"arrow"`, pressing one focused the ROW, and focus returning from a
+ * dialog it opened landed on the row too. Check both before you add one.
  *
  * First consumer: the Dashboard's Competition flights section, which groups
  * flights under their competition. RAC renders every item as a sibling
@@ -40,6 +42,7 @@ export function Tree<T extends object>({
 }: Omit<TreeProps<T>, "className"> & { className?: string }) {
   return (
     <AriaTree
+      keyboardNavigationBehavior="tab"
       className={cn(
         "flex flex-col outline-none data-focus-visible:ring-2 data-focus-visible:ring-ring/50",
         className

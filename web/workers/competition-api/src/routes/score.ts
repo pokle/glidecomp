@@ -472,6 +472,15 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         return c.json({ error: "Task not found" }, 404);
       }
 
+      const pilot = await c.env.DB.prepare(
+        "SELECT comp_pilot_id FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
+      )
+        .bind(compPilotId, compId)
+        .first();
+      if (!pilot) {
+        return c.json({ error: "Pilot not found" }, 404);
+      }
+
       try {
         const result = await computePilotAnalysis(
           taskId,
