@@ -14,8 +14,8 @@
  *   edge. The tab brings it back.
  * - TAP the small window and it becomes large. Small, it is a picture: every
  *   touch moves the window, none moves the map. Large, the map is live, and
- *   the window moves by the grabber at its top. The button in its corner
- *   makes it small again.
+ *   the window moves by the grabber at its top, or by its last row
+ *   anywhere but a control. The button in its corner makes it small again.
  * - While the reader TYPES, it puts itself away, and comes back afterwards.
  *   That is how it stays clear of the on-screen keyboard without following
  *   the keyboard from script, which is what the fixed bars could not do.
@@ -287,7 +287,7 @@ export function FloatingWindow({
     (next: FloatState, focus: "window" | "tab" | null = "window") => {
       captureFlip();
       focusNext.current = focus;
-      if (next.size !== state.size) suppressClickUntil.current = performance.now() + 350;
+      if (next.size !== state.size) resizeGuardUntil.current = performance.now() + 400;
       update(next);
     },
     [captureFlip, update, state.size]
@@ -397,7 +397,14 @@ export function FloatingWindow({
    * next real press.
    */
   const suppressClickUntil = useRef(0);
-  const clickIsDragEnd = (e: { timeStamp: number }) => e.timeStamp < suppressClickUntil.current;
+  /**
+   * A change of size draws the new face under the finger that asked for it,
+   * and a second tap of a double tap would land on it and undo the change.
+   * A new press does NOT clear this one: the second tap is a new press.
+   */
+  const resizeGuardUntil = useRef(0);
+  const clickIsDragEnd = (e: { timeStamp: number }) =>
+    e.timeStamp < suppressClickUntil.current || performance.now() < resizeGuardUntil.current;
 
   // A drag whose handle went away (the window changed under the finger: the
   // keyboard came up, a step brought it back) is over.
@@ -410,6 +417,18 @@ export function FloatingWindow({
   }, [el, mode, active]);
   const [menuOpen, setMenuOpen] = useState(false);
   const grabberRef = useRef<HTMLButtonElement>(null);
+  // Without a MenuTrigger the menu opens with focus on its box, where Enter
+  // does nothing until an arrow key has been pressed. Put it on the first
+  // row, as the kit's triggered menus do.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const id = window.setTimeout(() => {
+      const menu = document.activeElement;
+      if (menu?.getAttribute("role") !== "menu") return;
+      menu.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [menuOpen]);
 
   const onPointerDown = (e: ReactPointerEvent<HTMLElement>) => {
     // A new press: any click from here on is its own, not an old drag's.

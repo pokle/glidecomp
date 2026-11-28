@@ -250,18 +250,38 @@ export function createMapBoxProvider(
         }
       }) as typeof map.fitBounds;
       const rawFlyTo = map.flyTo.bind(map);
+      // A flight to a point that is under way: where it is going, and the
+      // zoom it left from. A resize in mid-flight has to send it again,
+      // because Mapbox aims a flight at the centre of the box as it was when
+      // the flight began.
+      let flight: { options: mapboxgl.EasingOptions; fromZoom: number } | null = null;
       map.flyTo = ((options, eventData) => {
-        if (!fitting) framedOn = null;
+        if (!fitting) {
+          framedOn = null;
+          flight = { options, fromZoom: map.getZoom() };
+        }
         return rawFlyTo(options, eventData);
       }) as typeof map.flyTo;
+      map.on('moveend', () => {
+        if (!map.isMoving()) flight = null;
+      });
       map.on('movestart', (e) => {
-        if ((e as { originalEvent?: unknown }).originalEvent) framedOn = null;
+        const cause = (e as { originalEvent?: { type?: string } }).originalEvent;
+        // Mapbox's own handler for a window resize reports the window's
+        // event as the cause. That is not the reader moving the map.
+        if (cause && cause.type !== 'resize' && cause.type !== 'orientationchange') {
+          framedOn = null;
+          flight = null;
+        }
       });
       // A map this small is a picture. The route's labels are sized for a
       // map a reader can pan, and at this size one clipped name covers the
       // flight, so they are painted out until the box is large again.
       const COMPACT_BELOW_PX = 240;
       const applyCompact = () => {
+        // Only a map that is resized with `keepView` has a size on record.
+        // Every other map in the app is left exactly as it was.
+        if (framedSide <= 0) return;
         const opacity = framedSide > 0 && framedSide < COMPACT_BELOW_PX ? 0 : 1;
         for (const id of ['task-labels', 'task-segment-labels']) {
           if (!map.getLayer(id)) continue;
@@ -3027,10 +3047,17 @@ export function createMapBoxProvider(
           }
           // The reader's own view, or a flight to a point. Scaling the zoom
           // by the shorter side keeps the same ground in view and is undone
-          // exactly by the resize back. A flight under way is left alone:
-          // setting the zoom would stop it short of where it was going.
-          if (!flying && before > 0 && side !== before) {
-            map.setZoom(map.getZoom() + Math.log2(side / before));
+          // exactly by the resize back.
+          if (before <= 0 || side === before) return;
+          const scale = Math.log2(side / before);
+          if (flight) {
+            // In mid-flight: send it again, aimed at this box's centre, to
+            // the zoom it was going to as this box would show it.
+            const { options, fromZoom } = flight;
+            map.stop();
+            map.flyTo({ ...options, zoom: (options.zoom ?? fromZoom) + scale });
+          } else if (!flying) {
+            map.setZoom(map.getZoom() + scale);
           }
         },
 
