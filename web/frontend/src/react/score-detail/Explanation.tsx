@@ -20,7 +20,9 @@ export function ExplanationSection({
   section: ScoreExplanationSection;
   selectedItem: string | null;
   hasAnchor: (item: ScoreExplanationItem) => boolean;
-  onItemClick: (item: ScoreExplanationItem) => void;
+  /** `pressed` is the step's own button, for a caller that must know
+   * where on the screen the reader is looking. */
+  onItemClick: (item: ScoreExplanationItem, pressed: Element) => void;
 }) {
   return (
     <Card>
@@ -73,7 +75,7 @@ export function ExplanationSection({
             item={item}
             anchored={hasAnchor(item)}
             selected={selectedItem === item.id}
-            onClick={() => onItemClick(item)}
+            onClick={(pressed) => onItemClick(item, pressed)}
           />
         ))}
       </div>
@@ -94,7 +96,7 @@ export function ExplanationItem({
   item: ScoreExplanationItem;
   anchored: boolean;
   selected: boolean;
-  onClick: () => void;
+  onClick: (pressed: Element) => void;
 }) {
   const textClass =
     item.emphasis === "warning"
@@ -140,7 +142,7 @@ export function ExplanationItem({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(e) => onClick(e.currentTarget)}
       title="Show on map"
       className={`block w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60 pointer-coarse:min-h-11 ${
         selected ? "bg-muted" : ""

@@ -94,6 +94,26 @@ describe("releaseVelocity", () => {
   });
 });
 
+describe("releaseVelocity on a busy page", () => {
+  it("still sees a flick when the moves arrive far apart", () => {
+    const samples = [
+      { x: 0, y: 0, t: 0 },
+      { x: 0, y: 50, t: 130 },
+      { x: 0, y: 100, t: 260 },
+    ];
+    const v = releaseVelocity(samples, 265);
+    expect(v.vy).toBeGreaterThan(0.3);
+  });
+
+  it("and still calls a finger that stopped, stopped", () => {
+    const samples = [
+      { x: 0, y: 0, t: 0 },
+      { x: 0, y: 50, t: 130 },
+    ];
+    expect(releaseVelocity(samples, 430)).toEqual({ vx: 0, vy: 0 });
+  });
+});
+
 describe("parseFloatState", () => {
   it("reads back what was written", () => {
     const s: FloatState = { side: "left", edge: "bottom", size: "large", tucked: true };

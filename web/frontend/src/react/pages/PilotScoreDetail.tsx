@@ -524,13 +524,13 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
   const { data } = state;
   const { entry, explanation } = data;
 
-  const onItemClick = (item: ScoreExplanationItem) => {
+  const onItemClick = (item: ScoreExplanationItem, pressed: Element) => {
     const event = data.eventsByItem.get(item.id);
     if (!event) return;
     setSelectedItem(item.id);
     // A step is a question put to the map. If the map was put away, this is
-    // the moment it is wanted.
-    float.reveal();
+    // the moment it is wanted, and away from the step that was pressed.
+    float.reveal(pressed);
     setFocus((prev) => ({ event, nonce: (prev?.nonce ?? 0) + 1 }));
     // Show the flight only up to the clicked moment — when a pilot crosses
     // the same cylinder repeatedly, the clipped track is what makes the

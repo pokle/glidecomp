@@ -29,9 +29,12 @@
  *   an `@container` is a containing block for fixed descendants in the
  *   browsers that still apply layout containment to it. The detail is
  *   rendered through a portal into ONE element this component owns, and that
- *   element is moved between the page's flow and `<body>`. A move is not a
- *   remount: a map keeps its WebGL context, its camera and its layers when
- *   the screen is turned or the window widens.
+ *   element is moved between the pane's place in the layout and a place
+ *   straight after the page bar (`main > header`), where nothing above it
+ *   is a containing block. A move is not a remount: a map keeps its WebGL
+ *   context, its camera and its layers when the screen is turned or the
+ *   window widens. (The detail is mounted once more at the very start, when
+ *   the portal takes over from the server's markup, before any map exists.)
  * - At rest it is positioned by CSS alone: a corner is `top`/`bottom` and
  *   `left`/`right`, with the safe-area insets. Script moves it only while a
  *   finger is on it, and animates it to where the CSS already put it. So
@@ -86,8 +89,9 @@ export interface FloatingDetail {
   /** null while the detail is in the page's flow: side by side, on the
    * server, and until the layout has been measured. */
   mode: FloatMode | null;
-  /** Bring a tucked window back. The reader asked to see something in it. */
-  reveal: () => void;
+  /** Bring a tucked window back. The reader asked to see something in it,
+   * by pressing `pressed`: the window returns clear of it. */
+  reveal: (pressed?: Element | null) => void;
   /** For MasterDetail and FloatingWindow. Not for pages. */
   internal: {
     state: FloatState;
@@ -129,14 +133,13 @@ export function useFloatingDetail(storageKey: string): FloatingDetail {
   const stateRef = useRef(state);
   stateRef.current = state;
   const beforeChange = useRef<(() => void) | null>(null);
-  const reveal = useCallback(() => {
+  const reveal = useCallback((pressed?: Element | null) => {
     const s = stateRef.current;
     if (!s.tucked) return;
     // Back as the small window, on the half of the screen the reader is not
-    // looking at: what they pressed is where their eyes are.
-    const pressed = document.activeElement;
-    const rect =
-      pressed && pressed !== document.body ? pressed.getBoundingClientRect() : null;
+    // looking at. The caller says what was pressed: focus does not, because
+    // Safari does not focus a button that is tapped.
+    const rect = pressed?.getBoundingClientRect() ?? null;
     const edge: FloatEdge = rect
       ? rect.top + rect.height / 2 < window.innerHeight / 2
         ? "bottom"
@@ -200,7 +203,7 @@ const SIZE = {
   small: "size-[min(11rem,46vw)]",
   large: cn(
     "w-[calc(100vw-1.5rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px))] max-w-[32rem]",
-    "h-[min(24rem,55dvh)] [@media(max-height:500px)]:h-[calc(100dvh-5.5rem)] [@media(max-height:500px)]:max-w-[24rem]"
+    "h-[min(24rem,55svh)] [@media(max-height:500px)]:h-[calc(100svh-5.5rem)] [@media(max-height:500px)]:max-w-[24rem]"
   ),
 } as const;
 /** Past its own side, and out of the accessibility tree with it. */
@@ -265,6 +268,8 @@ export function FloatingWindow({
   /** Which control takes focus after the reader's own action. */
   const focusNext = useRef<"window" | "tab" | null>(null);
   const tabRef = useRef<HTMLButtonElement>(null);
+  const elRef = useRef<HTMLDivElement | null>(null);
+  elRef.current = el;
 
   const captureFlip = useCallback(() => {
     if (el && active) flipFrom.current = el.getBoundingClientRect();
@@ -364,14 +369,23 @@ export function FloatingWindow({
   // good: the page cannot scroll further to bring them out. So the page is
   // made that much longer while it rests there.
   useEffect(() => {
-    if (!el || !active || hidden || state.edge !== "bottom") return;
+    // Kept while it steps aside for the keyboard: the page must not jump
+    // under a reader who has just begun to type.
+    if (!el || !active || state.tucked || state.edge !== "bottom") return;
     const body = document.body;
     const before = body.style.paddingBottom;
-    body.style.paddingBottom = `${el.offsetHeight + 24}px`;
+    const apply = () => {
+      body.style.paddingBottom = `${el.offsetHeight + 24}px`;
+    };
+    apply();
+    // Its height follows the screen (a turn, a toolbar), not only its size.
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(apply);
+    ro?.observe(el);
     return () => {
+      ro?.disconnect();
       body.style.paddingBottom = before;
     };
-  }, [el, active, hidden, state.edge, state.size]);
+  }, [el, active, state.tucked, state.edge]);
 
   // -- Dragging ------------------------------------------------------------
 
@@ -398,6 +412,8 @@ export function FloatingWindow({
   const grabberRef = useRef<HTMLButtonElement>(null);
 
   const onPointerDown = (e: ReactPointerEvent<HTMLElement>) => {
+    // A new press: any click from here on is its own, not an old drag's.
+    suppressClickUntil.current = 0;
     if (!el || e.button !== 0) return;
     // A second finger does not take over a drag that is under way.
     if (drag.current?.moved) return;
@@ -407,7 +423,6 @@ export function FloatingWindow({
       const t = e.target instanceof Element ? e.target : null;
       if (!t?.closest("[data-float-drag]") || t.closest("input, button, a, select")) return;
     }
-    // The bar's own buttons are buttons, not a handle.
     drag.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
@@ -493,7 +508,7 @@ export function FloatingWindow({
           aria-expanded={menuOpen}
           data-float-handle=""
           data-float-focus=""
-          className="absolute top-0 left-1/2 z-30 flex h-11 w-24 -translate-x-1/2 cursor-grab touch-none justify-center rounded-b-lg pt-1.5 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring in-data-dragging:cursor-grabbing"
+          className="absolute top-0 left-1/2 z-30 flex h-11 w-24 -translate-x-1/2 cursor-grab touch-none justify-center rounded-b-lg pt-1.5 outline-none select-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-3 focus-visible:ring-ring in-data-dragging:cursor-grabbing"
         >
           <span
             aria-hidden
@@ -507,6 +522,17 @@ export function FloatingWindow({
           aria-label={`Move or hide ${label}`}
           onAction={(id) => {
             setMenuOpen(false);
+            // The closing menu hands focus back to the grabber, which the
+            // action may have just removed. Once it has finished, put focus
+            // on whatever stands in the grabber's place.
+            window.setTimeout(() => {
+              const a = document.activeElement;
+              if (a && a !== document.body && a.isConnected) return;
+              (
+                tabRef.current ??
+                elRef.current?.querySelector<HTMLElement>("[data-float-focus]")
+              )?.focus({ preventScroll: true });
+            }, 250);
             if (id === "smaller") act({ ...state, size: "small" });
             else if (id === "hide") act({ ...state, tucked: true }, "tab");
             else if (id === "edge") {
@@ -577,8 +603,9 @@ export function FloatingWindow({
             act({ ...state, ...next });
           }}
           aria-label={`Enlarge ${label}`}
+          aria-description="Arrow keys move it to another corner."
           data-float-focus=""
-          className="absolute inset-0 z-30 cursor-grab touch-none rounded-[inherit] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset in-data-dragging:cursor-grabbing"
+          className="absolute inset-0 z-30 cursor-grab touch-none rounded-[inherit] outline-none select-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset in-data-dragging:cursor-grabbing"
         />
       ) : null}
     </>
@@ -614,7 +641,7 @@ export function FloatingWindow({
               tabDrag.current = null;
             }}
             className={cn(
-              "fixed z-30 flex h-16 touch-pan-y flex-col items-center justify-center gap-0.5 border border-border bg-card text-foreground shadow-lg outline-none print:hidden",
+              "fixed z-30 flex h-16 touch-pan-y [-webkit-tap-highlight-color:transparent] flex-col items-center justify-center gap-0.5 border border-border bg-card text-foreground shadow-lg outline-none print:hidden",
               "transition-opacity duration-300 starting:opacity-0",
               "focus-visible:ring-3 focus-visible:ring-ring",
               EDGE[state.edge],

@@ -228,6 +228,52 @@ export function createMapBoxProvider(
         localFontFamily: MAP_FONT_FAMILY,
       });
 
+      // What an embedded map is framed on, for `invalidateSize({ keepView })`.
+      // A fit is remembered until the reader moves the map themselves or the
+      // page flies it to a point: until then, "the same view" at a new size
+      // means the same fit, landed at once. Re-fitting is right even while
+      // the first fit is still animating, which is when a reader who taps a
+      // small map straight away resizes it.
+      let framedOn: { bounds: mapboxgl.LngLatBoundsLike; options?: mapboxgl.EasingOptions } | null = null;
+      let framedSide = 0;
+      // Mapbox makes an animated fit BY flying, through the public method,
+      // so a flight inside a fit is the fit and not a flight to a point.
+      let fitting = false;
+      const rawFitBounds = map.fitBounds.bind(map);
+      map.fitBounds = ((bounds, options, eventData) => {
+        fitting = true;
+        try {
+          return rawFitBounds(bounds, options, eventData);
+        } finally {
+          fitting = false;
+          framedOn = { bounds, options };
+        }
+      }) as typeof map.fitBounds;
+      const rawFlyTo = map.flyTo.bind(map);
+      map.flyTo = ((options, eventData) => {
+        if (!fitting) framedOn = null;
+        return rawFlyTo(options, eventData);
+      }) as typeof map.flyTo;
+      map.on('movestart', (e) => {
+        if ((e as { originalEvent?: unknown }).originalEvent) framedOn = null;
+      });
+      // A map this small is a picture. The route's labels are sized for a
+      // map a reader can pan, and at this size one clipped name covers the
+      // flight, so they are painted out until the box is large again.
+      const COMPACT_BELOW_PX = 240;
+      const applyCompact = () => {
+        const opacity = framedSide > 0 && framedSide < COMPACT_BELOW_PX ? 0 : 1;
+        for (const id of ['task-labels', 'task-segment-labels']) {
+          if (!map.getLayer(id)) continue;
+          if ((map.getPaintProperty(id, 'text-opacity') ?? 1) !== opacity) {
+            map.setPaintProperty(id, 'text-opacity', opacity);
+          }
+        }
+      };
+      // The layers arrive after the first resize; `idle` follows them.
+      map.on('idle', applyCompact);
+
+
       // State
       let boundsChangeCallback: (() => void) | null = null;
       let currentFixes: IGCFix[] = [];
@@ -2960,17 +3006,31 @@ export function createMapBoxProvider(
             return;
           }
           // Mapbox keeps the centre and the ZOOM across a resize, so a
-          // container that shrinks shows a crop of what it showed. Scaling
-          // the zoom by the shorter side keeps the same ground in view, and
-          // is exactly undone by the resize back (a fit to the old bounds
-          // would creep outwards with every change of aspect).
-          const canvas = map.getCanvas();
-          const before = Math.min(canvas.clientWidth, canvas.clientHeight);
+          // container that shrinks shows a crop of what it showed.
+          const flying = map.isMoving();
           map.resize();
           const box = map.getContainer();
-          const after = Math.min(box.clientWidth, box.clientHeight);
-          if (before > 0 && after > 0 && after !== before) {
-            map.setZoom(map.getZoom() + Math.log2(after / before));
+          const side = Math.min(box.clientWidth, box.clientHeight);
+          // Our own record of the last size: Mapbox may have resized the
+          // canvas itself already (it follows the window), and then the
+          // canvas no longer says what the size WAS.
+          const before = framedSide;
+          framedSide = side;
+          if (side <= 0) return;
+          applyCompact();
+          if (framedOn) {
+            // Still framed on a fit: make the same fit, for this size.
+            // Through the wrapper, which knows a fit's own flight from a
+            // flight to a point and so keeps the fit remembered.
+            map.fitBounds(framedOn.bounds, { ...framedOn.options, duration: 0 });
+            return;
+          }
+          // The reader's own view, or a flight to a point. Scaling the zoom
+          // by the shorter side keeps the same ground in view and is undone
+          // exactly by the resize back. A flight under way is left alone:
+          // setting the zoom would stop it short of where it was going.
+          if (!flying && before > 0 && side !== before) {
+            map.setZoom(map.getZoom() + Math.log2(side / before));
           }
         },
 
