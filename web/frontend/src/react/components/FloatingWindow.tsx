@@ -322,7 +322,7 @@ export function FloatingContent({
   ariaLabel,
   fullTo,
   onLeaveFull,
-  icon: TabIcon = MapIcon,
+  icon: TabGlyph = MapIcon,
   children,
 }: {
   float: FloatingDetail;
@@ -971,7 +971,7 @@ export function FloatingContent({
             ) : (
               <ChevronRightIcon aria-hidden className="size-4 text-muted-foreground" />
             )}
-            <TabIcon aria-hidden className="size-5" />
+            <TabGlyph aria-hidden className="size-5" />
           </button>,
           document.body
         )
