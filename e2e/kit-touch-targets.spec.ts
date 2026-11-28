@@ -159,6 +159,11 @@ test("the report card's map button, time slider and flight steps", { tag: PHONE_
   const enlarge = page.getByRole("button", { name: "Enlarge map" });
   await enlarge.waitFor({ timeout: 60_000 });
   await enlarge.click();
+  // The window grows by an animation; a box read during it is scaled.
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[data-floating="large"]');
+    return el != null && el.getAnimations().length === 0;
+  });
   await expectTarget(page.getByRole("button", { name: "Move or hide map" }), "the window's grabber");
   await expectTarget(page.getByRole("button", { name: "Make map smaller" }), "the window's smaller button");
 
