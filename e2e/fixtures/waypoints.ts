@@ -108,6 +108,15 @@ export async function onEditorList(page: Page, rows: number): Promise<void> {
  * is in its bar). A row with a second menu behind it opens that menu.
  */
 export async function barAction(page: Page, name: string | RegExp): Promise<void> {
+  // The ways to add a waypoint are buttons of the bar itself, beside ⋯.
+  const bar = page.locator("header").first();
+  const direct = bar
+    .getByRole("button", { name, exact: true })
+    .or(bar.getByRole("link", { name, exact: true }));
+  if ((await direct.count()) > 0) {
+    await direct.first().click();
+    return;
+  }
   await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name, exact: true }).click();
 }

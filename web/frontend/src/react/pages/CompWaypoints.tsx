@@ -102,7 +102,7 @@ import {
 } from "@/react/components/FloatingWindow";
 import { floatMapClass } from "../comp/float-map";
 import { Loading, Spinner } from "@/react/rac/progress";
-import { Page, PageBar, commitClass, type BarAction } from "@/react/rac/page-bar";
+import { Page, PageBar, commitClass, type BarAction, type BarAdd } from "@/react/rac/page-bar";
 import { SearchField } from "@/react/rac/field";
 import { Form, FormErrorBanner, SubmitButton, refusal } from "@/react/rac/form";
 import { api } from "../../comp/api";
@@ -350,24 +350,27 @@ export function CompWaypoints({ view = "list" }: { view?: "list" | "map" } = {})
     </div>
   );
 
+  // The two ways to add a waypoint are buttons of the bar, beside ⋯, and not
+  // rows inside it (owner's decision, 28 November 2026): adding is what an
+  // organiser comes to this page to do, and a menu hid both.
+  const addFromMap: BarAdd = {
+    label: addMode ? "Stop adding from map" : "Add from map",
+    glyph: addMode ? MapPinXIcon : MapPinPlusIcon,
+    onAction: () => undefined,
+  };
+  const adds: BarAdd[] | undefined = editing
+    ? [
+        { label: "Add waypoint", to: compWaypointsNewPath(urlId, compName) },
+        { ...addFromMap, onAction: toggleAddFromMap },
+      ]
+    : undefined;
+
   // ⋯: the editing actions (an organiser's, once the waypoints are here),
   // then the device rows (everyone's), then the way to throw the draft away
   // — only while there is one to throw away.
   const actions: BarAction[] = [
     ...(editing
       ? [
-          {
-            id: "add",
-            icon: PlusIcon,
-            label: "Add waypoint",
-            to: compWaypointsNewPath(urlId, compName),
-          },
-          {
-            id: "add-from-map",
-            icon: addMode ? MapPinXIcon : MapPinPlusIcon,
-            label: addMode ? "Stop adding from map" : "Add from map",
-            onAction: toggleAddFromMap,
-          },
           {
             id: "upload",
             icon: ImportIcon,
@@ -411,7 +414,11 @@ export function CompWaypoints({ view = "list" }: { view?: "list" | "map" } = {})
   // or "full".
   /** A map the reader can work: not the small window's picture. */
   const live = mode !== "small" && mode !== "tucked";
-  const fullTo = editing ? compWaypointsMapPath(urlId, compName) : undefined;
+  // Everyone may open the map at full size (owner's decision, 28 November
+  // 2026). It was the organisers' alone while it was only a place to add
+  // points from.
+  const fullTo =
+    editor.loading || editor.loadError ? undefined : compWaypointsMapPath(urlId, compName);
   const countLine = isAdmin
     ? `${rows.length} waypoint${rows.length === 1 ? "" : "s"}${
         invalidCount > 0 ? ` · ${invalidCount} need valid coordinates` : ""
@@ -545,7 +552,13 @@ export function CompWaypoints({ view = "list" }: { view?: "list" | "map" } = {})
 
   if (view === "map") {
     const trail = underCompWaypoints(urlId, compName);
-    const gate = waypointsEditorGate(editor, { title: "Waypoint map", trail });
+    // A visitor sees the map too, read-only: only an organiser waits for a
+    // draft, and nobody is sent away.
+    const visitor =
+      !editor.notFound && !editor.loading && !editor.userLoading && !!editor.comp && !isAdmin;
+    const gate = visitor
+      ? null
+      : waypointsEditorGate(editor, { title: "Waypoint map", trail });
     if (gate) {
       return (
         <>
@@ -567,14 +580,9 @@ export function CompWaypoints({ view = "list" }: { view?: "list" | "map" } = {})
             <PageBar
               title="Waypoint map"
               trail={trail}
-              actions={[
-                {
-                  id: "add-from-map",
-                  icon: addMode ? MapPinXIcon : MapPinPlusIcon,
-                  label: addMode ? "Stop adding from map" : "Add from map",
-                  onAction: () => setAddMode(!addMode),
-                },
-              ]}
+              add={
+                editing ? [{ ...addFromMap, onAction: () => setAddMode(!addMode) }] : undefined
+              }
             />
           }
         >
@@ -637,6 +645,7 @@ export function CompWaypoints({ view = "list" }: { view?: "list" | "map" } = {})
             trail={underComp(urlId, compName)}
             related={compPages(urlId, comp, isAdmin, "Waypoints")}
             actions={actions}
+            add={adds}
             status={altitudeCheck.checking ? <Spinner label="Checking altitudes" /> : undefined}
             commit={
               // Live only while the draft differs from what is saved.

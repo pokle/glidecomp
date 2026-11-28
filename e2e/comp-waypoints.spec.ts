@@ -499,6 +499,11 @@ test("on a phone the map floats; Add from map brings it up large, and a row's pi
   await expect(map).toHaveAttribute("data-floating", "large");
   await expect(map.getByText("Tap the map to place…")).toBeVisible();
   const stop = map.getByRole("button", { name: "Stop", exact: true });
+  // The window grows by an animation; a box read during it is scaled.
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[data-floating="large"]');
+    return el != null && el.getAnimations().length === 0;
+  });
   await expectBigEnoughToTap(stop);
   await stop.click();
   await expect(page.getByText("Tap the map to place…")).toHaveCount(0);
@@ -901,19 +906,29 @@ test("anonymous visitors get the same list, read-only, and no editor pages", asy
   expect(labels[1]).toBe("QR code");
   await expect(page.getByRole("link", { name: "Add waypoint" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
-  // The full-size map is the organisers' (below), so a visitor's map has no
-  // way there, in its column or in its window.
+  // The map at full size is everyone's, read-only for a visitor.
   if (isMobile) await page.getByRole("button", { name: "Enlarge map" }).click();
   await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Expand map" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Expand map" })).toBeVisible();
   await expect(page.locator(".tabulator")).toHaveCount(0);
   // The filter is in the bar for a visitor too.
   await expect(page.getByRole("searchbox", { name: "Filter waypoints" })).toBeVisible();
 
   // The editor's pages are the organisers': a visitor is sent to the list.
-  for (const sub of ["1", "new", "map", "altitudes"]) {
+  for (const sub of ["1", "new", "altitudes"]) {
     await page.goto(`/comp/${compId}/waypoints/${sub}`);
     await expect(page).toHaveURL(/\/waypoints$/, { timeout: 20_000 });
     await expect(page.getByRole("grid", { name: "Waypoints", exact: true })).toBeVisible();
   }
+
+  // The map's own page is not one of those: a visitor reads it, with no way
+  // to add a point, and its "smaller" goes to the list.
+  await page.goto(`/comp/${compId}/waypoints/map`);
+  await expect(page.getByRole("heading", { level: 1, name: "Waypoint map" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add from map" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Shrink map" }).click();
+  await expect(page).toHaveURL(/\/waypoints$/);
 });
