@@ -18,13 +18,15 @@ export interface FloatState {
 }
 
 /**
- * Small, top right. Top, because a thumb scrolls from the bottom of a phone
- * and a window resting there would be dragged by every scroll that began on
- * it. Right, because the text it covers is left-aligned.
+ * Small, bottom right (owner's decision, 28 November 2026). At the top it
+ * covered the page's opening lines, and at the top of a page those cannot be
+ * scrolled clear. At the bottom the page is made longer by the window's
+ * height, so nothing is covered for good. Right, because the text it covers
+ * is left-aligned.
  */
 export const DEFAULT_FLOAT: FloatState = {
   side: "right",
-  edge: "top",
+  edge: "bottom",
   size: "small",
   tucked: false,
 };

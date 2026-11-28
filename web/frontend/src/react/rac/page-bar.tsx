@@ -711,7 +711,9 @@ export function Page({
 }: {
   bar: ReactNode;
   width?: PageWidth;
-  fill?: boolean;
+  /** `"viewport"`: as `fill`, and the content is as wide as the screen
+   * too. The bar keeps the page's width. For a map with the page to itself. */
+  fill?: boolean | "viewport";
   className?: string;
   children: ReactNode;
 }) {
@@ -719,10 +721,10 @@ export function Page({
     <PageWidthContext.Provider value={width}>
       {bar}
       <div
-        data-page-fill={fill || undefined}
+        data-page-fill={fill ? true : undefined}
         className={cn(
           "mx-auto w-full",
-          WIDTH[width],
+          fill !== "viewport" && WIDTH[width],
           fill
             ? // The bar's height (44 px and its padding), then the rest of the screen.
               "flex h-[calc(100dvh-3.75rem-env(safe-area-inset-top,0px))] flex-col pb-safe"

@@ -295,13 +295,19 @@ broke on an iPhone.
   of a phone's screen, and the only way out was to hide it. Stacked, the map
   is a window over the page, as a video is in picture-in-picture. Side by
   side it is a column of the page, as before.
-  - The reader drags it and it rests in the nearest corner. Dragged or
+  - It starts small, at the bottom right. The reader holds it by the
+    grabber at its top and it rests in the nearest corner. Dragged or
     flicked off a side, it is put away, and a tab on that edge brings it
     back. Its place, its size and whether it is put away are remembered.
-  - Small, it is a picture: a tap makes it large, and every other touch
-    moves the window. It shows the map alone, with none of the map's
-    buttons. Large, the map is live. The window is held by the grabber at
-    its top or by its last row, and one button in that row makes it small.
+  - One button in its top right corner makes it large or small. The map is
+    live at both sizes: a touch on the map moves the map. Small, it shows
+    the map alone. Large, it keeps the map's style and drawing controls,
+    and its last row holds the window too, anywhere but a control.
+  - The large window links to the map's own page, at full size
+    ([2.1](#21-a-screen-is-a-page)). That page shows the SAME map: its
+    view, and what the reader drew on it, go there and come back. The map
+    is edge to edge under the bar, and its Shrink button leaves the page as
+    the bar's back does.
   - It puts itself away while the reader types, and comes back afterwards.
     It does not follow the keyboard.
   - At rest it is placed by CSS alone: a corner is `top` or `bottom`, and
@@ -309,8 +315,9 @@ broke on an iPhone.
     under a finger. This is why it may exist where the fixed bars could
     not.
   - Every drag has a control that is not a drag
-    ([2.9](#29-the-pointer)): a tap on the grabber opens Make smaller,
-    Hide and the moves as a menu, and the tab is a button.
+    ([2.9](#29-the-pointer)): a tap on the grabber opens the size, Hide and
+    the moves as a menu, the arrow keys on it move the window between
+    corners, and the tab is a button.
   - A page that asks the map a question brings a put-away window back,
     small, on the half of the screen away from what was pressed
     (`reveal()`).

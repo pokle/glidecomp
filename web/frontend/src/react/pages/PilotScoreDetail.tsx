@@ -59,7 +59,7 @@ import type {
   TaskDetailData,
   TaskScoreData,
 } from "../comp/types";
-import { useFloatingDetail } from "../components/FloatingWindow";
+import { FloatSlot, FloatingContent, useFloatingDetail } from "../components/FloatingWindow";
 import { cn } from "@/react/lib/utils";
 import { TrackScrubber, nearestFixIndexByTime } from "../score-detail/TrackScrubber";
 import {
@@ -68,7 +68,8 @@ import {
   TrackValidityDocLink,
 } from "../score-detail/TrackNotes";
 import { ExplanationSection } from "../score-detail/Explanation";
-import { MaximizeIcon } from "../score-detail/icons";
+import { MaximizeIcon, MinimizeIcon } from "../score-detail/icons";
+import { useLeave } from "../lib/leave";
 import { ScoringGlossary } from "../components/ScoringGlossary";
 import { MasterDetail } from "../components/MasterDetail";
 import { TaskInCompScores } from "../comp/TaskInCompScores";
@@ -251,6 +252,7 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
   // here because the page lays the map out for it, and brings it back when
   // the reader picks a step it had been put away for.
   const float = useFloatingDetail("score-map");
+  const leave = useLeave();
   // Time scrubber: draw the track only up to this fix (null = whole flight).
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   // Deep-link into the standalone analysis viewer. `pilotId` narrows it to
@@ -569,20 +571,125 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
       />
     ) : null;
 
+  const mapPath = pilotMapPath(
+    urlId,
+    data.comp.name,
+    taskId,
+    data.task.name,
+    pilotId,
+    entry.pilot_name
+  );
+  const cardPath = pilotPath(
+    urlId,
+    data.comp.name,
+    taskId,
+    data.task.name,
+    pilotId,
+    entry.pilot_name
+  );
+  // The map's own control where it is part of a page, styled like the
+  // provider's (white regardless of theme) and kept clear of them:
+  // bottom-right, above the attribution line. In the window, the window's
+  // own buttons do this job from its top right corner.
+  const MAP_CONTROL =
+    "absolute bottom-8 right-2 z-20 flex size-10 pointer-coarse:size-11 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md";
+  // The map and its slider: ONE subtree for the report card's column, the
+  // floating window and the full-size page, so the map (its camera, what the
+  // reader drew on it) is the same map in all three. `float.mode` says which
+  // it is in, and the layout follows.
+  const mode = float.mode;
+  const detail = (
+    <>
+      <div
+        ref={mapRef}
+        className={
+          mode == null
+            ? "relative h-56 overflow-hidden rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)]"
+            : cn(
+                // The window, or the page, is the frame: the map fills it.
+                "relative min-h-0 flex-1 overflow-hidden",
+                // Large, the window is not large: the provider's zoom,
+                // compass, locate and scale are dropped (a map is zoomed
+                // with two fingers), and the style and drawing stay.
+                mode === "large" &&
+                  "[&_.mapboxgl-ctrl-top-right]:hidden [&_.mapboxgl-ctrl-scale]:hidden",
+                // Small, it shows the map alone. The provider's logo and
+                // attribution stay.
+                (mode === "small" || mode === "tucked") &&
+                  "[&_.mapboxgl-ctrl-top-left]:hidden [&_.mapboxgl-ctrl-top-right]:hidden [&_.mapboxgl-ctrl-bottom-left>*:not(:has(.mapboxgl-ctrl-logo))]:hidden [&_.ann-toggle]:hidden!"
+              )
+        }
+      >
+        {mode == null && !mapInView ? mapFallback : map}
+        {mode == null ? (
+          // Opens the map's own page (#870). Opening this track in the
+          // analysis viewer is in the bar's ⋯ menu.
+          <Link to={mapPath} title="Expand map" aria-label="Expand map" className={MAP_CONTROL}>
+            <MaximizeIcon />
+          </Link>
+        ) : mode === "full" ? (
+          // The way back, where the way in was. It leaves the page as the
+          // bar's Back does: the full-size map is a page (guide 2.1).
+          <button
+            type="button"
+            title="Shrink map"
+            aria-label="Shrink map"
+            onClick={() => leave(cardPath)}
+            className={MAP_CONTROL}
+          >
+            <MinimizeIcon />
+          </button>
+        ) : null}
+      </div>
+      {!scrubber || mode === "small" || mode === "tucked" ? null : mode === "large" ? (
+        // The window can be held by its last row, as by its grabber:
+        // anywhere but the slider (FloatingContent reads the mark).
+        <div
+          data-float-drag=""
+          className="min-h-11 shrink-0 cursor-grab touch-none px-3 select-none"
+        >
+          {scrubber}
+        </div>
+      ) : mode === "full" ? (
+        // The page's last row, in its flow: nothing is fixed to the bottom.
+        <div className="shrink-0 px-4 py-2">{scrubber}</div>
+      ) : (
+        <div className="mt-1.5">{scrubber}</div>
+      )}
+      {mode == null ? (
+        <p className="mt-1 hidden text-xs text-muted-foreground @5xl:block">
+          Click any highlighted step in the explanation to see where it
+          happened.
+          {fixes && fixes.length > 1
+            ? " Drag the slider to trace the flight up to any moment."
+            : ""}
+        </p>
+      ) : null}
+    </>
+  );
+  // First in the tree on the report card AND on the map's page, so the
+  // router keeps it, and the map in it, when the reader goes between them.
+  const floatingContent = (
+    <FloatingContent float={float} label="map" ariaLabel="Track map" fullTo={mapPath}>
+      {detail}
+    </FloatingContent>
+  );
+
   if (view === "map") {
     return (
-      <Page fill bar={bar}>
-        {/* The rest of the screen: Mapbox renders nothing into an unsized
-            container, and `min-h-0 flex-1` inside the fill page is a size. */}
-        <section
-          aria-label="Track map"
-          className="relative min-h-0 w-full flex-1 overflow-hidden border-y border-border sm:rounded-xl sm:border"
-        >
-          {map}
-        </section>
-        {/* The page's last row, in its flow: nothing is fixed to the bottom. */}
-        {scrubber ? <div className="shrink-0 px-4 py-2">{scrubber}</div> : null}
-      </Page>
+      <>
+        {floatingContent}
+        {/* The map under the bar, as wide and as tall as the screen. */}
+        <Page fill="viewport" bar={bar}>
+          <FloatSlot
+            float={float}
+            kind="full"
+            role="region"
+            aria-label="Track map"
+            className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-border"
+          />
+        </Page>
+      </>
     );
   }
 
@@ -611,6 +718,8 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
   );
 
   return (
+    <>
+    {floatingContent}
     <Page width="wide" bar={bar}>
       {/* The pilot's name is the bar's title, and the page's <h1>. */}
       <div>
@@ -707,74 +816,10 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
           // a pane border around it would double it. The wrapper's bleed
           // still paints the background the stuck pane needs.
           paneClassName="rounded-none border-0 bg-transparent max-h-none @5xl:max-h-none overflow-y-visible"
-          detail={
-            <>
-              <div
-                ref={mapRef}
-                className={
-                  float.mode
-                    ? // The window is the frame, and the map fills it.
-                      cn(
-                        "relative min-h-0 flex-1 overflow-hidden",
-                        // Small, it is a picture: the map's own controls
-                        // cannot be used and would cover a third of it.
-                        // The provider's logo and attribution stay.
-                        float.mode !== "large" &&
-                          "[&_.mapboxgl-ctrl-top-left]:hidden [&_.mapboxgl-ctrl-top-right]:hidden [&_.mapboxgl-ctrl-bottom-left>*:not(:has(.mapboxgl-ctrl-logo))]:hidden [&_.ann-toggle]:hidden!"
-                      )
-                    : "relative h-56 overflow-hidden rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)]"
-                }
-              >
-                {!mapInView ? mapFallback : map}
-                {/* The map's own control, styled like the providers' controls
-                    (white regardless of theme) and kept clear of them:
-                    bottom-right, above the attribution line. It opens the
-                    map's own page (#870). Opening this track in the analysis
-                    viewer is in the bar's ⋯ menu. */}
-                {/* A small window is a picture, and its whole face is one
-                    button already. */}
-                <Link
-                  hidden={float.mode != null && float.mode !== "large"}
-                  to={pilotMapPath(
-                    urlId,
-                    data.comp.name,
-                    taskId,
-                    data.task.name,
-                    pilotId,
-                    entry.pilot_name
-                  )}
-                  title="Expand map"
-                  aria-label="Expand map"
-                  className="absolute bottom-8 right-2 z-20 flex size-10 pointer-coarse:size-11 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
-                >
-                  <MaximizeIcon />
-                </Link>
-              </div>
-              {float.mode ? (
-                // The window's last row. Its right end is the window's own
-                // "smaller" button, so the row is there with or without a
-                // tracklog to scrub.
-                <div
-                  hidden={float.mode !== "large"}
-                  // The window can be held by this row, as by its grabber:
-                  // anywhere but the slider (FloatingWindow reads the mark).
-                  data-float-drag=""
-                  className="min-h-11 shrink-0 cursor-grab touch-none py-0 pr-12 pl-3 select-none"
-                >
-                  {scrubber}
-                </div>
-              ) : scrubber ? (
-                <div className="mt-1.5">{scrubber}</div>
-              ) : null}
-              <p className="mt-1 hidden text-xs text-muted-foreground @5xl:block">
-                Click any highlighted step in the explanation to see where it
-                happened.
-                {fixes && fixes.length > 1
-                  ? " Drag the slider to trace the flight up to any moment."
-                  : ""}
-              </p>
-            </>
-          }
+          // The pane's place, side by side. The map itself is rendered
+          // once, below, and is moved here, into its window or onto its own
+          // page (FloatingContent).
+          detail={<FloatSlot float={float} kind="flow" />}
           master={
             <div className="space-y-4">
               <TrackQualityNote
@@ -812,6 +857,7 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
         />
       </div>
     </Page>
+    </>
   );
 }
 

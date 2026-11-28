@@ -1,6 +1,6 @@
 /**
- * FloatingWindow — a detail pane that floats over the page on a phone, the
- * way a video does in picture-in-picture (owner's decision, 28 November 2026;
+ * A detail that floats over the page on a phone, the way a video does in
+ * picture-in-picture (owner's decisions, 28 November 2026;
  * docs/interaction-guide.md 2.8 holds the rule and this is its one owner).
  *
  * It replaces {@link MasterDetail}'s PINNED pane where a caller opts in. A
@@ -8,14 +8,13 @@
  * its section, and the only way out was to hide it altogether. The window
  * covers a corner instead, and the reader decides which:
  *
- * - DRAG it and it comes to rest in the nearest corner. It never stops in
- *   between, so there is nothing to tidy up.
- * - Drag or flick it OFF A SIDE and it is put away, leaving a tab on that
- *   edge. The tab brings it back.
- * - TAP the small window and it becomes large. Small, it is a picture: every
- *   touch moves the window, none moves the map. Large, the map is live, and
- *   the window moves by the grabber at its top, or by its last row
- *   anywhere but a control. The button in its corner makes it small again.
+ * - It is held by the GRABBER at its top (and, large, by its last row
+ *   anywhere but a control). Dragged, it comes to rest in the nearest corner.
+ *   It never stops in between, so there is nothing to tidy up.
+ * - Dragged or flicked OFF A SIDE it is put away, leaving a tab on that edge.
+ *   The tab brings it back.
+ * - The button in its top right corner makes it LARGE or SMALL. The map is
+ *   live at both sizes: a touch on the map moves the map.
  * - While the reader TYPES, it puts itself away, and comes back afterwards.
  *   That is how it stays clear of the on-screen keyboard without following
  *   the keyboard from script, which is what the fixed bars could not do.
@@ -23,24 +22,27 @@
  * Every one of those has a control that is not a drag (guide 2.9, WCAG
  * 2.5.7): a tap on the grabber opens them as a menu, and the tab is a button.
  *
- * ## How it is built
+ * ## One detail, three places
  *
- * - The window is `position: fixed`, so it cannot live inside MasterDetail:
- *   an `@container` is a containing block for fixed descendants in the
- *   browsers that still apply layout containment to it. The detail is
- *   rendered through a portal into ONE element this component owns, and that
- *   element is moved between the pane's place in the layout and a place
- *   straight after the page bar (`main > header`), where nothing above it
- *   is a containing block. A move is not a remount: a map keeps its WebGL
- *   context, its camera and its layers when the screen is turned or the
- *   window widens. (The detail is mounted once more at the very start, when
- *   the portal takes over from the server's markup, before any map exists.)
- * - At rest it is positioned by CSS alone: a corner is `top`/`bottom` and
- *   `left`/`right`, with the safe-area insets. Script moves it only while a
- *   finger is on it, and animates it to where the CSS already put it. So
- *   Safari's moving toolbars, a rotation and a zoom need no listener.
- * - The server renders the detail in the flow, and so does the first client
- *   render. The portal starts in a layout effect, before the first paint.
+ * The detail is ONE subtree, rendered through a portal into one element the
+ * hook owns (the HOST). The host is moved, never remounted, between:
+ *
+ * - the FLOW slot: the pane's place in the page, side by side;
+ * - the WINDOW: straight after the page bar (`main > header`), where nothing
+ *   above it is a containing block for `position: fixed`;
+ * - the FULL slot: the detail's own page, at full size (guide 2.1: a figure
+ *   at full size is a page with a URL, left with Back).
+ *
+ * So a map keeps its WebGL context, its camera and whatever was drawn on it
+ * when the window changes size, when the screen is turned, and when the
+ * reader opens the full-size page and comes back. That last one needs the
+ * two routes to render the SAME component, with {@link FloatingContent} at
+ * the same place in its tree: the router then keeps the instance.
+ *
+ * At rest the window is positioned by CSS alone: a corner is `top`/`bottom`
+ * and `left`/`right`, with the safe-area insets. Script moves it only while
+ * a finger is on it, and animates it to where the CSS already put it. So
+ * Safari's moving toolbars, a rotation and a zoom need no listener.
  */
 import {
   useCallback,
@@ -53,13 +55,14 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { Link } from "react-router-dom";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MapIcon,
+  Maximize2Icon,
   PictureInPicture2Icon,
 } from "lucide-react";
-import { Button } from "@/react/rac/button";
 import { Menu, MenuItem } from "@/react/rac/menu";
 import { cn } from "@/react/lib/utils";
 import { readStoredCollapsed } from "./master-detail-split";
@@ -76,14 +79,18 @@ import {
   type FloatState,
 } from "./floating-window";
 
-/** What the reader sees: a small picture, the large live window, or its tab. */
-export type FloatMode = "small" | "large" | "tucked";
+/**
+ * Where the detail is and how the reader sees it: the window, small or
+ * large; its tab, when put away; or the full-size page.
+ */
+export type FloatMode = "small" | "large" | "tucked" | "full";
+
+type SlotKind = "flow" | "full";
 
 /**
  * A floating detail's state, owned by the page so that it can lay the detail
- * out for the window (`mode`) and bring the window back when the reader asks
- * the detail a question (`reveal`). From {@link useFloatingDetail}; passed to
- * MasterDetail as `floating`.
+ * out for where it is (`mode`) and bring the window back when the reader
+ * asks the detail a question (`reveal`). From {@link useFloatingDetail}.
  */
 export interface FloatingDetail {
   /** null while the detail is in the page's flow: side by side, on the
@@ -92,11 +99,14 @@ export interface FloatingDetail {
   /** Bring a tucked window back. The reader asked to see something in it,
    * by pressing `pressed`: the window returns clear of it. */
   reveal: (pressed?: Element | null) => void;
-  /** For MasterDetail and FloatingWindow. Not for pages. */
+  /** For MasterDetail, FloatSlot and FloatingContent. Not for pages. */
   internal: {
     state: FloatState;
     active: boolean;
     typing: boolean;
+    host: HTMLDivElement | null;
+    slots: Record<SlotKind, HTMLElement | null>;
+    slotRef: Record<SlotKind, (el: HTMLElement | null) => void>;
     setActive: (active: boolean) => void;
     update: (next: FloatState) => void;
     /** Set by the window: called before a change it should animate. */
@@ -112,6 +122,29 @@ export function useFloatingDetail(storageKey: string): FloatingDetail {
   const [state, setState] = useState<FloatState>(DEFAULT_FLOAT);
   const [active, setActive] = useState(false);
   const [typing, setTyping] = useState(false);
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  const [slots, setSlots] = useState<Record<SlotKind, HTMLElement | null>>({
+    flow: null,
+    full: null,
+  });
+
+  // The one element the detail lives in, wherever it is shown. In a layout
+  // effect: the server and the first client render have no host and draw
+  // nothing, and the detail arrives before the first paint.
+  useLayoutEffect(() => {
+    const node = document.createElement("div");
+    setHost(node);
+    return () => {
+      node.remove();
+      setHost(null);
+    };
+  }, []);
+
+  const slotRef = useMemo(() => {
+    const set = (kind: SlotKind) => (el: HTMLElement | null) =>
+      setSlots((prev) => (prev[kind] === el ? prev : { ...prev, [kind]: el }));
+    return { flow: set("flow"), full: set("full") };
+  }, []);
 
   // In an effect, not an initialiser: there is no localStorage on the server.
   useEffect(() => {
@@ -149,11 +182,13 @@ export function useFloatingDetail(storageKey: string): FloatingDetail {
     update({ ...s, tucked: false, size: "small", edge });
   }, [update]);
 
+  const floating = active && !slots.full;
+
   // Out of the keyboard's way. Only where a keyboard takes screen: with a
   // mouse and real keys, a map that left whenever a field was focused would
   // be a map that could not be read while searching.
   useEffect(() => {
-    if (!active) return;
+    if (!floating) return;
     if (!window.matchMedia("(pointer: coarse)").matches) return;
     const onIn = (e: FocusEvent) => {
       if (opensKeyboard(e.target as HTMLElement | null)) setTyping(true);
@@ -169,22 +204,44 @@ export function useFloatingDetail(storageKey: string): FloatingDetail {
       document.removeEventListener("focusout", onOut);
       setTyping(false);
     };
-  }, [active]);
+  }, [floating]);
 
-  const mode: FloatMode | null = !active
-    ? null
-    : state.tucked || typing
-      ? "tucked"
-      : state.size;
+  const mode: FloatMode | null = slots.full
+    ? "full"
+    : !active
+      ? null
+      : state.tucked || typing
+        ? "tucked"
+        : state.size;
 
   return useMemo(
     () => ({
       mode,
       reveal,
-      internal: { state, active, typing, setActive, update, beforeChange },
+      internal: { state, active, typing, host, slots, slotRef, setActive, update, beforeChange },
     }),
-    [mode, reveal, state, active, typing, update]
+    [mode, reveal, state, active, typing, host, slots, slotRef, update]
   );
+}
+
+/**
+ * A place the detail can be shown: `flow` is the pane's place in the page,
+ * `full` is its own page. Wherever a `full` slot is mounted the detail is in
+ * it; otherwise it floats while stacked and sits in `flow` side by side.
+ */
+export function FloatSlot({
+  float,
+  kind,
+  className = "contents",
+  ...rest
+}: {
+  float: FloatingDetail;
+  kind: SlotKind;
+  className?: string;
+  "aria-label"?: string;
+  role?: string;
+}) {
+  return <div ref={float.internal.slotRef[kind]} className={className} {...rest} />;
 }
 
 // Whole class strings: Tailwind reads the source, not the running program.
@@ -200,7 +257,7 @@ const SIDE: Record<FloatSide, string> = {
   right: "right-safe-3",
 };
 const SIZE = {
-  small: "size-[min(11rem,46vw)]",
+  small: "size-[min(11.5rem,48vw)]",
   large: cn(
     "w-[calc(100vw-1.5rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px))] max-w-[32rem]",
     "h-[min(24rem,55svh)] [@media(max-height:500px)]:h-[calc(100svh-5.5rem)] [@media(max-height:500px)]:max-w-[24rem]"
@@ -230,36 +287,37 @@ interface Drag {
   samples: { x: number; y: number; t: number }[];
 }
 
-export function FloatingWindow({
+/** The window's own buttons, drawn like the map provider's: white in both
+ * themes, because they sit on a map and not on the page. */
+const CONTROL =
+  "flex size-9 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md outline-none [-webkit-tap-highlight-color:transparent] pointer-coarse:size-11 focus-visible:ring-3 focus-visible:ring-ring";
+
+/**
+ * The detail itself, and the window around it while it floats. Render it
+ * ONCE, at a place in the page's tree that is the same on the report page and
+ * on the full-size page, so the router keeps it across the two.
+ */
+export function FloatingContent({
   float,
   label,
   ariaLabel,
+  fullTo,
   children,
 }: {
   float: FloatingDetail;
-  /** The noun, lower case: "map". As MasterDetail's `detailLabel`. */
+  /** The noun, lower case: "map". */
   label: string;
   /** The window's name as a region. */
   ariaLabel: string;
+  /** The detail's own page, at full size. The large window links to it. */
+  fullTo?: string;
   children: ReactNode;
 }) {
-  const { state, active, typing, update, beforeChange } = float.internal;
+  const { state, active, typing, update, beforeChange, host: el, slots } = float.internal;
   const { mode } = float;
+  const full = mode === "full";
+  const floating = active && !full;
   const hidden = mode === "tucked";
-
-  const slotRef = useRef<HTMLDivElement>(null);
-  const [el, setEl] = useState<HTMLDivElement | null>(null);
-
-  // The one element the detail lives in, wherever it is shown.
-  useLayoutEffect(() => {
-    const node = document.createElement("div");
-    slotRef.current?.appendChild(node);
-    setEl(node);
-    return () => {
-      node.remove();
-      setEl(null);
-    };
-  }, []);
 
   /** Where the window was drawn before the change now being made. */
   const flipFrom = useRef<DOMRect | null>(null);
@@ -270,10 +328,12 @@ export function FloatingWindow({
   const tabRef = useRef<HTMLButtonElement>(null);
   const elRef = useRef<HTMLDivElement | null>(null);
   elRef.current = el;
+  /** Where the host is now, so it is moved only when that changes. */
+  const placed = useRef<"flow" | "window" | "full" | null>(null);
 
   const captureFlip = useCallback(() => {
-    if (el && active) flipFrom.current = el.getBoundingClientRect();
-  }, [el, active]);
+    if (el && floating) flipFrom.current = el.getBoundingClientRect();
+  }, [el, floating]);
 
   useEffect(() => {
     beforeChange.current = captureFlip;
@@ -293,33 +353,44 @@ export function FloatingWindow({
     [captureFlip, update, state.size]
   );
 
-  // Place, dress and animate the element. One effect, because the order is
-  // the point: it must be in its new place before that place is measured.
+  // Place, dress and animate the host. One effect, because the order is the
+  // point: it must be in its new place before that place is measured.
   useLayoutEffect(() => {
     if (!el) return;
-    if (!active) {
-      if (slotRef.current && el.parentElement !== slotRef.current) {
-        slotRef.current.appendChild(el);
+    const want = full ? "full" : floating ? "window" : "flow";
+    const flowOrFull = want === "full" ? slots.full : slots.flow;
+    if (want === "window") {
+      if (placed.current !== "window" || !el.isConnected) {
+        // Straight after the page bar: where the pinned pane was read, and
+        // the first stop after the bar for a keyboard. At the end of the
+        // body it was read after the footer, forty Tab presses away.
+        const bar = document.querySelector("main > header");
+        if (bar) bar.insertAdjacentElement("afterend", el);
+        else document.body.appendChild(el);
       }
-    } else if (!el.hasAttribute("data-floating")) {
-      // Straight after the page bar: where the pinned pane was read, and the
-      // first stop after the bar for a keyboard. At the end of the body it
-      // was read after the footer, forty Tab presses away.
-      const bar = document.querySelector("main > header");
-      if (bar) bar.insertAdjacentElement("afterend", el);
-      else document.body.appendChild(el);
+    } else if (flowOrFull) {
+      if (el.parentElement !== flowOrFull) flowOrFull.appendChild(el);
+    } else {
+      // Nowhere to show it yet (the page is still loading its slot).
+      el.remove();
     }
-    el.className = active
-      ? cn(
-          WINDOW,
-          EDGE[state.edge],
-          SIDE[state.side],
-          SIZE[state.size],
-          hidden && TUCKED[state.side]
-        )
-      : "contents";
-    el.inert = active && hidden;
-    if (active) {
+    const animate = want === "window" && placed.current === "window";
+    placed.current = want;
+
+    el.className =
+      want === "window"
+        ? cn(
+            WINDOW,
+            EDGE[state.edge],
+            SIDE[state.side],
+            SIZE[state.size],
+            hidden && TUCKED[state.side]
+          )
+        : want === "full"
+          ? "relative flex min-h-0 flex-1 flex-col"
+          : "contents";
+    el.inert = want === "window" && hidden;
+    if (want === "window") {
       el.setAttribute("role", "region");
       el.setAttribute("aria-label", ariaLabel);
       el.dataset.floating = mode ?? "";
@@ -335,7 +406,7 @@ export function FloatingWindow({
 
     const first = flipFrom.current;
     flipFrom.current = null;
-    if (active && first && !reducedMotion() && typeof el.animate === "function") {
+    if (animate && first && !reducedMotion() && typeof el.animate === "function") {
       const last = el.getBoundingClientRect();
       if (last.width > 0 && last.height > 0) {
         const dx = first.left - last.left;
@@ -363,7 +434,20 @@ export function FloatingWindow({
     else if (focus === "window") {
       el.querySelector<HTMLElement>("[data-float-focus]")?.focus({ preventScroll: true });
     }
-  }, [el, active, hidden, mode, state.edge, state.side, state.size, ariaLabel, settleTick]);
+  }, [
+    el,
+    full,
+    floating,
+    hidden,
+    mode,
+    slots.flow,
+    slots.full,
+    state.edge,
+    state.side,
+    state.size,
+    ariaLabel,
+    settleTick,
+  ]);
 
   // Resting at the bottom, the window would cover the page's last lines for
   // good: the page cannot scroll further to bring them out. So the page is
@@ -371,7 +455,7 @@ export function FloatingWindow({
   useEffect(() => {
     // Kept while it steps aside for the keyboard: the page must not jump
     // under a reader who has just begun to type.
-    if (!el || !active || state.tucked || state.edge !== "bottom") return;
+    if (!el || !floating || state.tucked || state.edge !== "bottom") return;
     const body = document.body;
     const before = body.style.paddingBottom;
     const apply = () => {
@@ -385,7 +469,7 @@ export function FloatingWindow({
       ro?.disconnect();
       body.style.paddingBottom = before;
     };
-  }, [el, active, state.tucked, state.edge]);
+  }, [el, floating, state.tucked, state.edge]);
 
   // -- Dragging ------------------------------------------------------------
 
@@ -414,7 +498,7 @@ export function FloatingWindow({
       delete el.dataset.dragging;
       el.style.transform = "";
     }
-  }, [el, mode, active]);
+  }, [el, mode, floating]);
   const [menuOpen, setMenuOpen] = useState(false);
   const grabberRef = useRef<HTMLButtonElement>(null);
   // Without a MenuTrigger the menu opens with focus on its box, where Enter
@@ -505,13 +589,16 @@ export function FloatingWindow({
   // The tab: a tap brings the window back, and so does pulling it inward.
   const tabDrag = useRef<{ id: number; x: number } | null>(null);
   const show = () => act({ ...state, tucked: false });
+  const small = mode === "small";
+  const toggleSize = () => act({ ...state, size: small ? "large" : "small" });
 
-  // Large, the window has no bar: a bar spent a row of a small screen on
-  // three words. A grabber floats over the top of the map and a corner
-  // button makes the window small. The grabber is also a button: a tap opens
-  // the same moves as a menu, which is the way that is not a drag.
+  // The window has no bar: a bar spent a row of a small screen on words. A
+  // grabber floats over the top of the map, and the buttons that size the
+  // window sit in its top right corner at both sizes. The grabber is also a
+  // button: a tap opens the same moves as a menu, which is the way that is
+  // not a drag, and the arrow keys carry the window between corners.
   const chrome =
-    active && mode === "large" ? (
+    floating && (mode === "small" || mode === "large") ? (
       <>
         <button
           ref={grabberRef}
@@ -522,16 +609,33 @@ export function FloatingWindow({
             // The click that ends a drag is not a tap.
             if (!clickIsDragEnd(e)) setMenuOpen(true);
           }}
+          onKeyDown={(e) => {
+            const next =
+              e.key === "ArrowLeft" ? { side: "left" as const }
+              : e.key === "ArrowRight" ? { side: "right" as const }
+              : e.key === "ArrowUp" ? { edge: "top" as const }
+              : e.key === "ArrowDown" ? { edge: "bottom" as const }
+              : null;
+            if (!next) return;
+            e.preventDefault();
+            act({ ...state, ...next }, null);
+          }}
           aria-label={`Move or hide ${label}`}
+          aria-description="Arrow keys move it to another corner."
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           data-float-handle=""
-          data-float-focus=""
-          className="absolute top-0 left-1/2 z-30 flex h-11 w-24 -translate-x-1/2 cursor-grab touch-none justify-center rounded-b-lg pt-1.5 outline-none select-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-3 focus-visible:ring-ring in-data-dragging:cursor-grabbing"
+          className={cn(
+            "absolute top-0 left-1/2 z-30 flex h-11 -translate-x-1/2 cursor-grab touch-none justify-center rounded-b-lg pt-1.5 outline-none select-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-3 focus-visible:ring-ring in-data-dragging:cursor-grabbing",
+            small ? "w-16" : "w-24"
+          )}
         >
           <span
             aria-hidden
-            className="h-1.5 w-12 rounded-full bg-white shadow-md ring-1 ring-black/60"
+            className={cn(
+              "h-1.5 rounded-full bg-white shadow-md ring-1 ring-black/60",
+              small ? "w-9" : "w-12"
+            )}
           />
         </button>
         <Menu
@@ -552,7 +656,7 @@ export function FloatingWindow({
                 elRef.current?.querySelector<HTMLElement>("[data-float-focus]")
               )?.focus({ preventScroll: true });
             }, 250);
-            if (id === "smaller") act({ ...state, size: "small" });
+            if (id === "size") toggleSize();
             else if (id === "hide") act({ ...state, tucked: true }, "tab");
             else if (id === "edge") {
               act({ ...state, edge: state.edge === "top" ? "bottom" : "top" });
@@ -561,79 +665,61 @@ export function FloatingWindow({
             }
           }}
         >
-          <MenuItem id="smaller">Make smaller</MenuItem>
+          <MenuItem id="size">{small ? "Make larger" : "Make smaller"}</MenuItem>
           <MenuItem id="hide">Hide</MenuItem>
           <MenuItem id="edge">
             {state.edge === "top" ? "Move to the bottom" : "Move to the top"}
           </MenuItem>
-          <MenuItem id="side">
-            {state.side === "left" ? "When small, keep on the right" : "When small, keep on the left"}
-          </MenuItem>
+          {/* Large, the window is as wide as the screen: it has no side. */}
+          {small ? (
+            <MenuItem id="side">
+              {state.side === "left" ? "Move to the right" : "Move to the left"}
+            </MenuItem>
+          ) : null}
         </Menu>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={`Make ${label} smaller`}
-          onPress={() => act({ ...state, size: "small" })}
-          className="absolute right-0 bottom-0 z-30 size-11"
-        >
-          <PictureInPicture2Icon className="size-5" />
-        </Button>
+        <div className="absolute top-1.5 right-1.5 z-30 flex gap-1.5">
+          {!small && fullTo ? (
+            <Link to={fullTo} title={`Expand ${label}`} aria-label={`Expand ${label}`} className={CONTROL}>
+              <Maximize2Icon aria-hidden className="size-5" />
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            title={small ? `Enlarge ${label}` : `Make ${label} smaller`}
+            aria-label={small ? `Enlarge ${label}` : `Make ${label} smaller`}
+            data-float-focus=""
+            onClick={(e) => {
+              if (!clickIsDragEnd(e)) toggleSize();
+            }}
+            className={CONTROL}
+          >
+            <PictureInPicture2Icon aria-hidden className="size-5" />
+          </button>
+        </div>
       </>
     ) : null;
-
-  const picture = active && mode !== "large";
 
   const content = (
     <>
       {chrome}
-      {/* The same element in every mode, so the detail is never remounted.
-          A picture takes no input: the window's one button is over it. */}
+      {/* The same element in every mode, so the detail is never remounted. */}
       <div
         key="detail"
-        inert={picture}
         data-float-detail=""
-        {...(active && mode === "large"
+        {...(floating && mode === "large"
           ? { ...handle, onPointerUp: (e) => void endDrag(e, false) }
           : {})}
-        className={active ? "flex min-h-0 flex-1 flex-col" : "contents"}
+        className={floating || full ? "flex min-h-0 flex-1 flex-col" : "contents"}
       >
         {children}
       </div>
-      {active && mode === "small" ? (
-        <button
-          type="button"
-          {...handle}
-          onPointerUp={(e) => void endDrag(e, false)}
-          onClick={(e) => {
-            if (clickIsDragEnd(e)) return;
-            act({ ...state, size: "large" });
-          }}
-          onKeyDown={(e) => {
-            // Arrows move it between corners; Enter and Space enlarge it.
-            const next =
-              e.key === "ArrowLeft" ? { side: "left" as const }
-              : e.key === "ArrowRight" ? { side: "right" as const }
-              : e.key === "ArrowUp" ? { edge: "top" as const }
-              : e.key === "ArrowDown" ? { edge: "bottom" as const }
-              : null;
-            if (!next) return;
-            e.preventDefault();
-            act({ ...state, ...next });
-          }}
-          aria-label={`Enlarge ${label}`}
-          aria-description="Arrow keys move it to another corner."
-          data-float-focus=""
-          className="absolute inset-0 z-30 cursor-grab touch-none rounded-[inherit] outline-none select-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset in-data-dragging:cursor-grabbing"
-        />
-      ) : null}
     </>
   );
 
   // Only a window the reader put away has a tab. One that stepped aside for
   // the keyboard comes back by itself, and a tab would sit on the keyboard.
   const tab =
-    active && state.tucked
+    floating && state.tucked
       ? createPortal(
           <button
             ref={tabRef}
@@ -684,9 +770,7 @@ export function FloatingWindow({
 
   return (
     <>
-      <div ref={slotRef} className="contents">
-        {el ? createPortal(content, el) : children}
-      </div>
+      {el ? createPortal(content, el) : null}
       {tab}
     </>
   );

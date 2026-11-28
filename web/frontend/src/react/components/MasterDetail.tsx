@@ -151,7 +151,7 @@ import {
   writeStoredCollapsed,
   writeStoredMasterShare,
 } from "./master-detail-split";
-import { FloatingWindow, type FloatingDetail } from "./FloatingWindow";
+import type { FloatingDetail } from "./FloatingWindow";
 
 /** The `@5xl` container query above, in pixels, for `onWideChange`. */
 const WIDE_PX = 64 * 16;
@@ -335,9 +335,10 @@ export function MasterDetail({
   /**
    * Stacked, FLOAT the detail over the page instead of pinning it: a window
    * the reader moves, sizes and puts away (see `FloatingWindow.tsx`). From
-   * `useFloatingDetail`, which the caller holds so it can lay the detail out
-   * for the window. Side by side nothing changes. There is no fold toggle:
-   * the window's own Hide is the fold. Not for `navigation`.
+   * `useFloatingDetail`. The caller passes a `FloatSlot` as `detail` (the
+   * pane's place, side by side) and renders the detail itself once, in a
+   * `FloatingContent`. Side by side nothing changes. There is no fold
+   * toggle: the window's own Hide is the fold. Not for `navigation`.
    */
   floating?: FloatingDetail;
   /** Opt the STACKED layout out of pinning and into one-pane-at-a-time (see
@@ -559,17 +560,7 @@ export function MasterDetail({
             paneClassName
           )}
         >
-          {floating && !navigation ? (
-            <FloatingWindow
-              float={floating}
-              label={detailLabel}
-              ariaLabel={detailAriaLabel ?? detailLabel}
-            >
-              {detail}
-            </FloatingWindow>
-          ) : (
-            detail
-          )}
+          {detail}
         </div>
       </div>
       <SplitHandle

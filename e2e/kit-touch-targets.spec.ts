@@ -154,10 +154,13 @@ test("the report card's map button, time slider and flight steps", { tag: PHONE_
   await page.goto(`/comp/${compId}/task/${taskId}/pilot/${pilotId}`, {
     waitUntil: "domcontentloaded",
   });
-  // On a phone the map is a floating window, and its small face is one
-  // button; the map's controls and the slider are on the large one.
+  // On a phone the map is a floating window. Its button and its grabber
+  // are a finger wide at both sizes; the slider and the way to the
+  // full-size page are on the large one.
   const enlarge = page.getByRole("button", { name: "Enlarge map" });
   await enlarge.waitFor({ timeout: 60_000 });
+  await expectTarget(enlarge, "the small window's button");
+  await expectTarget(page.getByRole("button", { name: "Move or hide map" }), "the small window's grabber");
   await enlarge.click();
   // The window grows by an animation; a box read during it is scaled.
   await page.waitForFunction(() => {
