@@ -33,6 +33,7 @@ Each line is a rule. The number is the section that explains it.
 
 - One bar on every page: the way out on the left, the title in the centre, the action on the right. ([5.3](#53-one-bar-no-tab-bar))
 - A page's actions go in ⋯, each with its icon from the table. ([5.4](#54-actions-go-in-), [5.5](#55-every--row-has-an-icon))
+- "Submit your track" is a labelled button of the bar on an open competition and its tasks. ([5.4](#54-actions-go-in-))
 - A form's commit button is in the bar, is live only when there is something to commit, and says Save, Create, Add or Done. A commit that sends, imports or fetches is named for that act. ([5.6](#56-forms))
 
 **Forms, lists and waiting**
@@ -706,7 +707,7 @@ decision, 15 November 2026, #863.)
 |---|---|
 | **Left: the way out** | Back ([2.3](#23-leaving-a-page)). Cancel on a form. The main menu on a top-level page |
 | **Centre: where you are** | The page's title, which is its `<h1>`, over a menu drawn as one tree: up to the pages above, across or down to the pages beside or under this one, and out to the top-level places |
-| **Right: what you can do** | A form's commit button. Or ⋯ for the page's actions, with + and a status beside it |
+| **Right: what you can do** | A form's commit button. Or ⋯ for the page's actions, with + and a status beside it, and the page's one main action as a labelled button ([5.4](#54-actions-go-in-)) |
 
 - **The top-level places** (Competitions, My Flights, Submit track, Settings)
   are in the main menu and in every title menu.
@@ -743,8 +744,16 @@ this [More] menu if you really need it."
 **Here**: a page's actions go in ⋯, so there is one place to look.
 
 - Rows are grouped by rules. Rare rows go behind one row.
-- "Submit your track" is the first row of ⋯ on the competition and task
-  pages.
+- **"Submit your track" is a labelled button of the bar, after ⋯**, on the
+  competition and task pages while the reader may submit (the bar's
+  `primary`; owner's decision, 28 November 2026). It was the first row of ⋯.
+  A pilot is at a competition a few times a year and does not know the app,
+  and nothing on the page said the row was there. The button says "Submit",
+  and its name for a screen reader is the action in full. Under 360px it is
+  its glyph alone. A bar has one such button, and never beside a form's
+  commit.
+- Where the task page says that a pilot's track is missing, the sentence
+  carries a link to the same form.
 - Pass the bar only the actions this reader may use.
 - **A page whose work is adding shows its ways to add beside ⋯**, as
   buttons of the bar: the waypoints editor's Add waypoint and Add from map,
@@ -775,7 +784,7 @@ thing everywhere.
 | `MapIcon` | Opens tracks on a map, the 3D replay included |
 | `ChartColumnIcon` | Task analysis and comp analysis, and nothing else |
 | `ShareIcon`, `QrCodeIcon` | Sharing |
-| `CloudUploadIcon` | Submit your track |
+| `CloudUploadIcon` | Submit your track: the bar's button, not a ⋯ row |
 | `PlusIcon` | Make a new one |
 | `CopyIcon` | Copy between competitions |
 | `SettingsIcon` | Settings |

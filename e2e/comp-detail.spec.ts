@@ -410,7 +410,7 @@ test("the title's menu lists the competition's pages, with the open one ticked",
   await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/waypoints`));
 });
 
-test("the competition page's actions are in the bar's menu, Submit your track first", async ({
+test("the competition page's actions are in the bar's menu, and Submit your track is the bar's button", async ({
   page,
 }) => {
   await page.goto(`/comp/${compId}`);
@@ -422,11 +422,10 @@ test("the competition page's actions are in the bar's menu, Submit your track fi
   await page.getByRole("button", { name: "More actions" }).click();
   await expect(page.getByRole("menuitem", { name: "Settings", exact: true })).toBeVisible();
   const labels = await page.getByRole("menu").getByRole("menuitem").allInnerTexts();
-  // Submit your track is offered until the competition's close date, and is
-  // the first row whenever it is there.
-  const submit = "Submit your track";
-  if (labels.includes(submit)) expect(labels[0]).toBe(submit);
-  expect(labels.filter((label) => label !== submit)).toEqual([
+  // Submit your track is not a row: it is the bar's own button, after ⋯,
+  // until the competition's close date (this competition's has passed or
+  // not, as the fixture has it; task-submit-link.spec.ts presses it).
+  expect(labels).toEqual([
     "Download the results record (PDF)",
     "New task",
     "Copy to a new competition…",

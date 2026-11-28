@@ -166,7 +166,8 @@ cd web/frontend && bunx vitest run     # or: bun run --filter '@glidecomp/fronte
 - **Where the controls are (issue #863).** A page's actions are rows of the
   bar's ⋯ ("More actions" → `menuitem`), not buttons on the page; a form's
   Save, Create, Add or Submit is in the bar, and is disabled until there is
-  something to commit. "Sign in", "Sign in (dev)", Settings and Sign out are in
+  something to commit. "Submit your track" on an open competition and its
+  tasks is a link in the bar, after ⋯. "Sign in", "Sign in (dev)", Settings and Sign out are in
   the "Main menu" button's menu on a top-level page (`/comp`, `/submit`,
   `/settings`). Every ⋯ row that opens a page is also a plain link in a
   visually hidden `navigation` named "Page actions", which is the easy way to

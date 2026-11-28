@@ -71,7 +71,6 @@ import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
 import {
   ChartColumnIcon,
-  CloudUploadIcon,
   FlaskConicalIcon,
   MapIcon,
   NotebookPenIcon,
@@ -80,6 +79,7 @@ import {
   SettingsIcon,
   ShareIcon,
 } from "lucide-react";
+import { submitTrackAction } from "../comp/submit-track";
 import { underComp, taskSiblings, TASK_ANALYSIS_LABEL } from "../lib/crumbs";
 import { compUrlId, idFromSegment, compPath, submitTrackPath, taskPath, taskAnalysisPath, taskQrPath, taskSettingsPath, taskRoutePath, taskTestIgcPath, taskWeatherPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -204,36 +204,29 @@ export function TaskDetail() {
   const isClosed = isPastCloseDate(comp?.close_date ?? null);
   const hasRoute = !!task?.xctsk && task.xctsk.turnpoints.length > 0;
 
-  // Every action of the page, in the bar's ⋯ (issue #863: the page is for
-  // information). Three groups, with a rule between them: submitting, the
-  // ways to take the task away or look at it elsewhere, and the organisers'
-  // tools.
+  // "Submit your track" is the bar's labelled button, beside ⋯: the one thing
+  // a pilot comes to this page to DO. Mount-gated: whether it shows depends
+  // on who is asking (an organiser keeps it on a closed or hidden task) and
+  // on today's date, and the server renders this page for anyone, so the
+  // markup must settle after hydration rather than before. It does not
+  // depend on a session — submitting is open to anyone the comp's roster
+  // knows.
+  //
+  // A hidden comp's share link is for READING a draft: every write route
+  // refuses anyone but its admins, so no visitor is offered a button that
+  // can only fail.
+  const canSubmit =
+    !!task &&
+    mounted &&
+    !isClosed &&
+    (!task.submissions_closed || isAdmin) &&
+    (!comp?.test || isAdmin);
+
+  // Every other action of the page, in the bar's ⋯ (issue #863: the page is
+  // for information). Two groups, with a rule between them: the ways to take
+  // the task away or look at it elsewhere, and the organisers' tools.
   const actions: BarAction[] = [];
   if (task) {
-    // "Submit your track" leads: the one thing a pilot comes to this page to
-    // DO. Mount-gated: whether it shows depends on who is asking (an organiser
-    // keeps it on a closed or hidden task) and on today's date, and the
-    // server renders this page for anyone, so the markup must settle after
-    // hydration rather than before. It does not depend on a session —
-    // submitting is open to anyone the comp's roster knows.
-    //
-    // A hidden comp's share link is for READING a draft: every write route
-    // refuses anyone but its admins, so no visitor is offered a row that can
-    // only fail.
-    if (
-      mounted &&
-      !isClosed &&
-      (!task.submissions_closed || isAdmin) &&
-      (!comp?.test || isAdmin)
-    ) {
-      actions.push({
-        id: "submit",
-        icon: CloudUploadIcon,
-        label: "Submit your track",
-        to: submitHref,
-      });
-    }
-
     const share: BarAction[] = [];
     if (task.xctsk) {
       share.push(
@@ -329,6 +322,7 @@ export function TaskDetail() {
       trail={underComp(compId, comp?.name)}
       related={taskSiblings(compId, comp?.name, comp?.tasks, taskId)}
       actions={actions}
+      primary={canSubmit ? submitTrackAction(submitHref) : undefined}
     />
   );
 
@@ -392,7 +386,7 @@ export function TaskDetail() {
               </Tag>
             ))}
           </TagGroup>
-        {/* A sentence, not a disabled row in ⋯: a greyed-out control invites
+        {/* A sentence, not a disabled button in the bar: a greyed-out control invites
             tapping and explains nothing. Admins see it AND keep "Submit your
             track", because the flag stops pilots, not the scorekeeper. */}
         {mounted && !isClosed && task.submissions_closed ? (
@@ -437,7 +431,7 @@ export function TaskDetail() {
 
       {/* Public results: top-3 podium per class + the link to the comp's
           scores page (the canonical scores surface), plus the signed-in
-          pilot's own your-submission line. Submitting is in the bar's ⋯. The
+          pilot's own your-submission line. Submitting is the bar's button. The
           management grid below is admin-only. */}
       <CompNameProvider value={comp?.name ?? null}>
         <TaskScoresPublic
@@ -447,6 +441,7 @@ export function TaskDetail() {
           timezone={comp?.timezone ?? null}
           isOpenDistance={comp?.scoring_format === "open_distance"}
           isAuthenticated={user != null}
+          submitHref={canSubmit ? submitHref : undefined}
           refresh={scoresRefresh + resultsRefresh}
           onReplayAvailable={setReplayAvailable}
           initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}
