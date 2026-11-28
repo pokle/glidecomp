@@ -234,7 +234,19 @@ export function createMapBoxProvider(
       // means the same fit, landed at once. Re-fitting is right even while
       // the first fit is still animating, which is when a reader who taps a
       // small map straight away resizes it.
-      let framedOn: { bounds: mapboxgl.LngLatBoundsLike; options?: mapboxgl.EasingOptions } | null = null;
+      type Fit = { bounds: mapboxgl.LngLatBoundsLike; options?: mapboxgl.EasingOptions };
+      let framedOn: Fit | null = null;
+      // The last fit, kept after the reader has moved off it, so the map can
+      // be put back on what it was showing (`refit`). Told to whoever asked
+      // (`onFramingChange`) each time the map goes on or off its fit.
+      let lastFit: Fit | null = null;
+      let framingCallback: ((framed: boolean) => void) | null = null;
+      const setFramedOn = (fit: Fit | null) => {
+        const was = framedOn != null;
+        framedOn = fit;
+        if (fit) lastFit = fit;
+        if (was !== (fit != null)) framingCallback?.(fit != null);
+      };
       let framedSide = 0;
       // Mapbox makes an animated fit BY flying, through the public method,
       // so a flight inside a fit is the fit and not a flight to a point.
@@ -246,7 +258,7 @@ export function createMapBoxProvider(
           return rawFitBounds(bounds, options, eventData);
         } finally {
           fitting = false;
-          framedOn = { bounds, options };
+          setFramedOn({ bounds, options });
         }
       }) as typeof map.fitBounds;
       const rawFlyTo = map.flyTo.bind(map);
@@ -257,7 +269,7 @@ export function createMapBoxProvider(
       let flight: { options: mapboxgl.EasingOptions; fromZoom: number } | null = null;
       map.flyTo = ((options, eventData) => {
         if (!fitting) {
-          framedOn = null;
+          setFramedOn(null);
           flight = { options, fromZoom: map.getZoom() };
         }
         return rawFlyTo(options, eventData);
@@ -270,7 +282,7 @@ export function createMapBoxProvider(
         // Mapbox's own handler for a window resize reports the window's
         // event as the cause. That is not the reader moving the map.
         if (cause && cause.type !== 'resize' && cause.type !== 'orientationchange') {
-          framedOn = null;
+          setFramedOn(null);
           flight = null;
         }
       });
@@ -3018,6 +3030,15 @@ export function createMapBoxProvider(
             marker.remove();
           }
           map.remove();
+        },
+
+        refit() {
+          if (!lastFit) return;
+          map.fitBounds(lastFit.bounds, { ...lastFit.options, duration: 500 });
+        },
+
+        onFramingChange(callback: (framed: boolean) => void) {
+          framingCallback = callback;
         },
 
         invalidateSize(options?: { keepView?: boolean }) {

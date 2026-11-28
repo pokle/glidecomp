@@ -329,7 +329,12 @@ broke on an iPhone.
     small, on the half of the screen away from what was pressed
     (`reveal()`).
   - Resting at the bottom, it makes the page longer by its own height, so
-    it never covers the page's last lines for good.
+    it never covers the page's last lines for good. Wherever it rests, the
+    page's scroll padding on that edge is the window, so a control that
+    takes focus stops clear of it.
+  - A live map under a thumb gets moved by mistake. When the map is off the
+    flight it was showing, a button on it puts the whole flight back in
+    view. It is there only then.
   - Today only the report card uses it (`floating` on `MasterDetail`). No
     second floating thing is added without the owner's decision.
 - The app runs edge to edge. A surface that touches an edge keeps its content

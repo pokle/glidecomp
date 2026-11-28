@@ -331,6 +331,30 @@ export function FloatingContent({
   /** Where the host is now, so it is moved only when that changes. */
   const placed = useRef<"flow" | "window" | "full" | null>(null);
 
+  // Gone with the content: a host left dressed as a window is an empty box
+  // over whatever the page shows next (its loading or its error state).
+  useLayoutEffect(() => {
+    if (!el) return;
+    return () => {
+      el.remove();
+      el.className = "";
+      el.removeAttribute("role");
+      el.removeAttribute("aria-label");
+      delete el.dataset.floating;
+      delete el.dataset.corner;
+      el.inert = false;
+      placed.current = null;
+    };
+  }, [el]);
+
+  // Back from the full-size page, the reader was just looking at the map:
+  // it does not return as a tab, whatever state it was left in before.
+  const wasFull = useRef(full);
+  useEffect(() => {
+    if (wasFull.current && !full && state.tucked) update({ ...state, tucked: false });
+    wasFull.current = full;
+  }, [full, state, update]);
+
   const captureFlip = useCallback(() => {
     if (el && floating) flipFrom.current = el.getBoundingClientRect();
   }, [el, floating]);
@@ -451,15 +475,30 @@ export function FloatingContent({
 
   // Resting at the bottom, the window would cover the page's last lines for
   // good: the page cannot scroll further to bring them out. So the page is
-  // made that much longer while it rests there.
+  // made that much longer while it rests there. And wherever it rests, a
+  // control that takes focus is scrolled to a stop clear of it, not under it
+  // (WCAG 2.4.11): the page's scroll padding on that edge is the window.
   useEffect(() => {
     // Kept while it steps aside for the keyboard: the page must not jump
     // under a reader who has just begun to type.
-    if (!el || !floating || state.tucked || state.edge !== "bottom") return;
+    if (!el || !floating || state.tucked) return;
     const body = document.body;
-    const before = body.style.paddingBottom;
+    const root = document.documentElement;
+    const bottom = state.edge === "bottom";
+    const before = {
+      pad: body.style.paddingBottom,
+      top: root.style.scrollPaddingTop,
+      bottom: root.style.scrollPaddingBottom,
+    };
     const apply = () => {
-      body.style.paddingBottom = `${el.offsetHeight + 24}px`;
+      const h = el.offsetHeight;
+      if (bottom) {
+        body.style.paddingBottom = `${h + 24}px`;
+        root.style.scrollPaddingBottom = `${h + 24}px`;
+      } else {
+        // From the top of the screen: the page bar, then the window.
+        root.style.scrollPaddingTop = `${el.offsetTop + h + 12}px`;
+      }
     };
     apply();
     // Its height follows the screen (a turn, a toolbar), not only its size.
@@ -467,7 +506,9 @@ export function FloatingContent({
     ro?.observe(el);
     return () => {
       ro?.disconnect();
-      body.style.paddingBottom = before;
+      body.style.paddingBottom = before.pad;
+      root.style.scrollPaddingTop = before.top;
+      root.style.scrollPaddingBottom = before.bottom;
     };
   }, [el, floating, state.tucked, state.edge]);
 
@@ -627,7 +668,9 @@ export function FloatingContent({
           data-float-handle=""
           className={cn(
             "absolute top-0 left-1/2 z-30 flex h-11 -translate-x-1/2 cursor-grab touch-none justify-center rounded-b-lg pt-1.5 outline-none select-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-3 focus-visible:ring-ring in-data-dragging:cursor-grabbing",
-            small ? "w-16" : "w-24"
+            // Narrow at both sizes: on a 320px screen a wider one reaches
+            // the map's style picker.
+            "w-16 print:hidden"
           )}
         >
           <span
@@ -677,7 +720,7 @@ export function FloatingContent({
             </MenuItem>
           ) : null}
         </Menu>
-        <div className="absolute top-1.5 right-1.5 z-30 flex gap-1.5">
+        <div className="absolute top-1.5 right-1.5 z-30 flex gap-1.5 print:hidden">
           {!small && fullTo ? (
             <Link to={fullTo} title={`Expand ${label}`} aria-label={`Expand ${label}`} className={CONTROL}>
               <Maximize2Icon aria-hidden className="size-5" />
@@ -704,7 +747,6 @@ export function FloatingContent({
       {chrome}
       {/* The same element in every mode, so the detail is never remounted. */}
       <div
-        key="detail"
         data-float-detail=""
         {...(floating && mode === "large"
           ? { ...handle, onPointerUp: (e) => void endDrag(e, false) }

@@ -21,7 +21,7 @@
  * inputs — so the page renders without downloading the tracklog. The
  * IGC is fetched separately, only to draw the track on the map.
  */
-import { ClipboardPenIcon, MapIcon } from "lucide-react";
+import { ClipboardPenIcon, MapIcon, ScanIcon } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "../lib/use-in-view";
 import { Link, useParams } from "react-router-dom";
@@ -196,6 +196,14 @@ async function loadDetail(
 // ---------------------------------------------------------------------------
 
 /**
+ * The map's own controls where it is part of a page, styled like the
+ * provider's (white regardless of theme) and kept clear of them. In the
+ * window, the window's own buttons sit in its top right corner.
+ */
+const MAP_CONTROL =
+  "absolute z-20 flex size-10 pointer-coarse:size-11 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md print:hidden";
+
+/**
  * `view="map"` is the same page with the map alone, at full size
  * (`/pilot/:id/map`, #870). It is this component rather than a second one
  * because the map is drawn from what the report card loads: the task, the
@@ -252,6 +260,10 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
   // here because the page lays the map out for it, and brings it back when
   // the reader picks a step it had been put away for.
   const float = useFloatingDetail("score-map");
+  // Whether the map is on the whole flight, or the reader has moved it (a
+  // thumb that meant to scroll the page will). Off it, a button puts it back.
+  const [mapFramed, setMapFramed] = useState(true);
+  const [refitNonce, setRefitNonce] = useState(0);
   const leave = useLeave();
   // Time scrubber: draw the track only up to this fix (null = whole flight).
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
@@ -558,6 +570,8 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
         scrubIndex={scrubIndex}
         openDistanceLine={data.openDistanceLine}
         bestProgressRoute={data.bestProgressRoute}
+        refitNonce={refitNonce}
+        onFramingChange={setMapFramed}
       />
     </Suspense>
   );
@@ -587,12 +601,6 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
     pilotId,
     entry.pilot_name
   );
-  // The map's own control where it is part of a page, styled like the
-  // provider's (white regardless of theme) and kept clear of them:
-  // bottom-right, above the attribution line. In the window, the window's
-  // own buttons do this job from its top right corner.
-  const MAP_CONTROL =
-    "absolute bottom-8 right-2 z-20 flex size-10 pointer-coarse:size-11 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md";
   // The map and its slider: ONE subtree for the report card's column, the
   // floating window and the full-size page, so the map (its camera, what the
   // reader drew on it) is the same map in all three. `float.mode` says which
@@ -614,9 +622,10 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
                 mode === "large" &&
                   "[&_.mapboxgl-ctrl-top-right]:hidden [&_.mapboxgl-ctrl-scale]:hidden",
                 // Small, it shows the map alone. The provider's logo and
-                // attribution stay.
+                // attribution stay. A popup would not fit, and the step that
+                // was picked already says what it says.
                 (mode === "small" || mode === "tucked") &&
-                  "[&_.mapboxgl-ctrl-top-left]:hidden [&_.mapboxgl-ctrl-top-right]:hidden [&_.mapboxgl-ctrl-bottom-left>*:not(:has(.mapboxgl-ctrl-logo))]:hidden [&_.ann-toggle]:hidden!"
+                  "[&_.mapboxgl-ctrl-top-left]:hidden [&_.mapboxgl-ctrl-top-right]:hidden [&_.mapboxgl-ctrl-bottom-left>*:not(:has(.mapboxgl-ctrl-logo))]:hidden [&_.ann-toggle]:hidden! [&_.mapboxgl-popup]:hidden"
               )
         }
       >
@@ -624,7 +633,12 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
         {mode == null ? (
           // Opens the map's own page (#870). Opening this track in the
           // analysis viewer is in the bar's ⋯ menu.
-          <Link to={mapPath} title="Expand map" aria-label="Expand map" className={MAP_CONTROL}>
+          <Link
+            to={mapPath}
+            title="Expand map"
+            aria-label="Expand map"
+            className={cn(MAP_CONTROL, "right-2 bottom-8")}
+          >
             <MaximizeIcon />
           </Link>
         ) : mode === "full" ? (
@@ -635,11 +649,35 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
             title="Shrink map"
             aria-label="Shrink map"
             onClick={() => leave(cardPath)}
-            className={MAP_CONTROL}
+            // On a short screen the provider's own column of controls
+            // reaches this corner, so the button steps left of it.
+            className={cn(MAP_CONTROL, "right-2 bottom-8 [@media(max-height:500px)]:right-16")}
           >
             <MinimizeIcon />
           </button>
         ) : null}
+        {/* The reader moved the map (a thumb that meant to scroll the page
+            will): one press puts the whole flight back in view. */}
+        {mapFramed ? null : (
+          <button
+            type="button"
+            title="Show the whole flight"
+            aria-label="Show the whole flight"
+            onClick={() => setRefitNonce((n) => n + 1)}
+            className={cn(
+              MAP_CONTROL,
+              mode === "small" || mode === "tucked"
+                ? "top-1.5 left-1.5"
+                : mode === "large"
+                  ? // Under the window's own buttons.
+                    "top-12 right-1.5 pointer-coarse:top-14"
+                  : // Above Expand or Shrink.
+                    "right-2 bottom-20 pointer-coarse:bottom-[5.25rem] [@media(max-height:500px)]:right-16"
+            )}
+          >
+            <ScanIcon aria-hidden className="size-5" />
+          </button>
+        )}
       </div>
       {!scrubber || mode === "small" || mode === "tucked" ? null : mode === "large" ? (
         // The window can be held by its last row, as by its grabber:
@@ -777,24 +815,17 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
         ) : null}
       </div>
 
-      {/* Explanation and map, paired by the shared MasterDetail in its PINNED
-          mode — the map is evidence read ALONGSIDE the explanation, so a step
-          must change a map that is on screen, never navigate to one. What the
-          hand-rolled layout this replaces could not do is get out of the way:
-          on a phone the map held a third of the viewport for the whole read
-          with no way to dismiss it, and a focused step could stop behind it
-          (WCAG 2.4.11). The component brings the "Hide map" fold — remembered,
-          so a reader who reads the words says so once — and the scroll-margin
-          clearance that keeps focus clear of the stuck pane.
+      {/* Explanation and map, paired by the shared MasterDetail: the map is
+          evidence read ALONGSIDE the explanation, so a step must change a map
+          that is on screen, never navigate to one.
 
-          The pane stays only beside the sections whose steps it can show;
-          the rest of the page is `after`, so on a phone the map scrolls off
-          once the reader is past them, rather than covering a third of the
-          screen for the glossary.
+          Side by side the map is the sticky right-hand column. On a phone it
+          FLOATS (`floating`): a pinned map held half the screen for the whole
+          read, and the fold that replaced that was all or nothing. The window
+          covers a corner the reader chooses, and can be put away.
 
-          On a phone the map is not pinned any more: it FLOATS (`floating`),
-          in a window the reader moves and puts away. What is said above
-          about pinning now describes the side-by-side column only.
+          The sections whose steps the map can show are the `master`; the
+          rest of the page is `after`.
 
           `storageKey`: the noun is "map" here and on the waypoints page, and
           those are different decisions on very different pages. */}

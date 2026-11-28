@@ -100,6 +100,10 @@
  * there is no fold toggle, and rows clear only the page bar. Side by side
  * nothing changes. Today the report card's map is the one caller.
  *
+ * The caller's `detail` is then a `FloatSlot`, the pane's place, and the
+ * detail itself is rendered once by the caller in a `FloatingContent`, which
+ * moves it between that place, the window and the detail's full-size page.
+ *
  * ## `navigation`: one pane at a time, stacked
  *
  * A pinned pane is the right stacked answer when the detail is SMALL — a

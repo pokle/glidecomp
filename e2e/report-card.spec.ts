@@ -338,6 +338,15 @@ test.describe("the pilot report card", () => {
     await expect(page.getByRole("menu")).toHaveCount(0);
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
 
+    // The arrow keys carry it too, from the grabber, and focus stays there.
+    const grabber = page.getByRole("button", { name: "Move or hide map" });
+    await grabber.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(map).toHaveAttribute("data-corner", "top-right");
+    await expect(grabber).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(map).toHaveAttribute("data-corner", "top-left");
+
     // The page's last lines are not left under a window resting at the foot.
     await carry({ x: 120, y: 520 });
     await expect(map).toHaveAttribute("data-corner", "bottom-left");
@@ -350,12 +359,23 @@ test.describe("the pilot report card", () => {
     }
     await page.evaluate(() => window.scrollTo(0, 0));
 
+    // And a control that takes focus stops clear of it (WCAG 2.4.11): the
+    // page's scroll padding on that edge is the window.
+    expect(
+      await page.evaluate(() => parseFloat(document.documentElement.style.scrollPaddingBottom)),
+      "scroll padding under a bottom window"
+    ).toBeGreaterThan(150);
+
     // Carried over the left edge, it is put away, and a tab stays there.
     await carry({ x: 15, y: 600 });
     await expect(map).toBeHidden();
     const tab = page.getByRole("button", { name: "Show map" });
     await expect(tab).toBeVisible();
     expect((await tab.boundingBox())!.x, "the tab is on the side it left by").toBeLessThan(5);
+
+    // Put away, it asks nothing of the page.
+    expect(await page.evaluate(() => document.body.style.paddingBottom)).toBe("");
+    expect(await page.evaluate(() => document.documentElement.style.scrollPaddingBottom)).toBe("");
 
     // Side by side there is no window at all: the map is a column of the page.
     await page.setViewportSize({ width: 1400, height: 900 });
@@ -458,9 +478,15 @@ test.describe("the pilot report card", () => {
     await page.goto(cardUrl);
     await page.getByRole("link", { name: "Expand map" }).click({ timeout: 30_000 });
     await expect(page).toHaveURL(/\/pilot\/[^/]+\/map$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Map" })).toBeVisible();
     const map = page.getByRole("region", { name: "Track map" });
-    await expect(map).toBeVisible();
-    expect((await map.boundingBox())!.width, "edge to edge, not the bar's width").toBe(1500);
+    // Polled: for a moment after the URL changes the region in the document
+    // is still the report card's column.
+    await expect
+      .poll(async () => (await map.boundingBox())?.width, {
+        message: "edge to edge, not the bar's width",
+      })
+      .toBe(1500);
     await page.getByRole("button", { name: "Shrink map" }).click();
     await expect(page).toHaveURL(/\/pilot\/[^/]+$/);
     await expect(page.getByRole("link", { name: "Expand map" })).toBeVisible();
