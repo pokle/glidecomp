@@ -182,6 +182,12 @@ something a page does by itself.
   never shows it. `no-overlays.test.ts` names it and fails on another.
 - **A page fetches what it needs.** State goes in the URL or is fetched. It
   is never handed over in memory from the page underneath.
+  - One thing is carried as well as fetched: the report card's map
+    (owner's decision, 28 November 2026). Its full-size page loads alone
+    from its URL, as any page does. Reached from the report card, it shows
+    the same map the reader was looking at, with its view and what they
+    drew on it, and gives it back on the way out
+    ([2.8](#28-the-keyboard-and-the-screens-edges)).
 - Worked example: the pilot editor, `pages/CompPilotPage.tsx`.
 - `src/react/no-overlays.test.ts` fails if a full-screen overlay comes back.
 
@@ -287,8 +293,9 @@ broke on an iPhone.
 
 - The page bar is `sticky` at the top of the page's flow, never `fixed`.
 - An iPhone pans the screen when the keyboard opens. The bar follows the pan
-  with one transform (`useKeepOnScreen` in `rac/page-bar.tsx`). That is the
-  only place the app positions anything from script. Do not add a second.
+  with one transform (`useKeepOnScreen` in `rac/page-bar.tsx`). That and
+  the floating map below are the only places the app positions anything
+  from script. Do not add a third.
 - **Nothing sticks to the bottom.**
 - **One thing floats: a map on a phone** (`components/FloatingWindow.tsx`,
   owner's decision, 28 November 2026). A map pinned under the bar held half
@@ -337,7 +344,9 @@ broke on an iPhone.
   ([3.9](#39-targets)).
 - **A drag is never the only way to do a thing.** HTML drag does not fire on
   touch without a long press. Reordering a route is a mode with Move up and
-  Move down on each row (`comp/TurnpointList.tsx`).
+  Move down on each row (`comp/TurnpointList.tsx`). The floating map's
+  grabber is a button as well as a handle: a tap opens its moves as a menu
+  ([2.8](#28-the-keyboard-and-the-screens-edges)).
 
 ### 2.10 A page the reader may not use
 
@@ -441,6 +450,10 @@ WCAG 2.1.1, 2.1.2.
   they can see. `rac/grid-list.tsx` and `rac/tree.tsx` set this.
 - On the map and the replay, pan, zoom, layer toggles and playback have
   keyboard equivalents.
+- The floating map's large window has no zoom buttons (owner's decision, 28
+  November 2026: the window is too small to spend on them). There the map
+  is zoomed by its gestures and, focused, by the keyboard. The buttons are
+  one press away, on the map's full-size page.
 
 ### 3.6 Focus
 
@@ -454,6 +467,11 @@ WCAG 2.4.3, 2.4.7, 2.4.11.
   `scroll-mt-*` at least that tall. A refused Save moves focus to the field,
   and the field comes to rest below the bar (`e2e/page-bar.spec.ts`). A
   toast must not cover the focused element either.
+- The floating map covers a corner of the page, and can cover a focused
+  control there. The reader moves it or puts it away, and it follows the
+  page bar in the focus order, so it is never far to reach. Resting at the
+  bottom, it makes the page longer, so the last control can always be
+  scrolled clear of it.
 - **Focus order follows reading order.** A dialog takes focus when it opens
   and returns it to its trigger when it closes. A page gives focus to its
   `<h1>` ([2.7](#27-scroll-and-focus-follow-the-navigation)).
