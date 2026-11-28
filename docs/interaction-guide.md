@@ -302,14 +302,18 @@ broke on an iPhone.
   of a phone's screen, and the only way out was to hide it. Stacked, the map
   is a window over the page, as a video is in picture-in-picture. Side by
   side it is a column of the page, as before.
-  - It starts small, at the bottom right. The reader holds it by the
-    grabber at its top and it rests in the nearest corner. Dragged or
+  - It starts small, in the middle of the bottom edge, where neither thumb
+    scrolls. The reader carries it and it rests in the nearest of six
+    places: the left, the middle or the right of the top or the bottom. Dragged or
     flicked off a side, it is put away, and a tab on that edge brings it
     back. Its place, its size and whether it is put away are remembered.
-  - One button in its top right corner makes it large or small. The map is
-    live at both sizes: a touch on the map moves the map. Small, it shows
-    the map alone. Large, it keeps the map's style and drawing controls,
-    and its last row holds the window too, anywhere but a control.
+  - One button in its top right corner makes it large or small. Small, it
+    is a picture of the map alone: a finger anywhere on it carries the
+    window, and a tap, or two fingers spread on it, makes it large. (A live
+    map that small was too hard to work, and a thumb that meant to scroll
+    the page moved it.) Large, the map is live. It keeps the map's style
+    and drawing controls, and its last row holds the window too, anywhere
+    but a control.
   - The large window links to the map's own page, at full size
     ([2.1](#21-a-screen-is-a-page)). That page shows the SAME map: its
     view, and what the reader drew on it, go there and come back. The map
@@ -317,14 +321,14 @@ broke on an iPhone.
     the bar's back does.
   - It puts itself away while the reader types, and comes back afterwards.
     It does not follow the keyboard.
-  - At rest it is placed by CSS alone: a corner is `top` or `bottom`, and
+  - At rest it is placed by CSS alone: a place is `top` or `bottom`, and
     `left` or `right`, with the safe-area insets. Script moves it only
     under a finger. This is why it may exist where the fixed bars could
     not.
   - Every drag has a control that is not a drag
     ([2.9](#29-the-pointer)): a tap on the grabber opens the size, Hide and
     the moves as a menu, the arrow keys on it move the window between
-    corners, and the tab is a button.
+    places, and the tab is a button.
   - A page that asks the map a question brings a put-away window back,
     small, on the half of the screen away from what was pressed
     (`reveal()`).
@@ -332,9 +336,8 @@ broke on an iPhone.
     it never covers the page's last lines for good. Wherever it rests, the
     page's scroll padding on that edge is the window, so a control that
     takes focus stops clear of it.
-  - A live map under a thumb gets moved by mistake. When the map is off the
-    flight it was showing, a button on it puts the whole flight back in
-    view. It is there only then.
+  - When a live map is off the flight it was showing, a button on it puts
+    the whole flight back in view. It is there only then.
   - Today only the report card uses it (`floating` on `MasterDetail`). No
     second floating thing is added without the owner's decision.
 - The app runs edge to edge. A surface that touches an edge keeps its content

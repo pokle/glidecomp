@@ -243,19 +243,28 @@ test.describe("the pilot report card", () => {
     const map = page.getByRole("region", { name: "Track map" });
     await expect(map).toBeVisible({ timeout: 30_000 });
     await expect(map).toHaveAttribute("data-floating", "small");
-    // At the foot, where it covers none of the page's opening lines.
-    await expect(map).toHaveAttribute("data-corner", "bottom-right");
+    // At the foot, where it covers none of the page's opening lines, and in
+    // the middle, where neither thumb scrolls.
+    await expect(map).toHaveAttribute("data-corner", "bottom-centre");
 
     // Small, it is a map in a corner: it does not take the screen.
     const small = await settled(page);
     expect(small.width, "a corner, not a band").toBeLessThan(200);
     expect(small.y, "below the page's first screenful of text").toBeGreaterThan(500);
+    expect(
+      Math.abs(small.x + small.width / 2 - 195),
+      "in the middle of the screen"
+    ).toBeLessThan(2);
     // The way to the full-size page is on the large window.
     await expect(page.getByRole("link", { name: "Expand map" })).toBeHidden();
 
-    // A press on the map is the map's: it does not change the window.
+    // Small, it is a picture: a press anywhere on it makes it large.
     await page.mouse.click(small.x + 50, small.y + 120);
+    await expect(map).toHaveAttribute("data-floating", "large");
+    await settled(page);
+    await page.getByRole("button", { name: "Make map smaller" }).click();
     await expect(map).toHaveAttribute("data-floating", "small");
+    await settled(page);
 
     // One button, in the window's top right corner at both sizes.
     const sizeButton = page.getByRole("button", { name: "Enlarge map" });
@@ -277,7 +286,7 @@ test.describe("the pilot report card", () => {
     // Nothing here needs a drag (guide 2.9): the grabber is a button too.
     await page.getByRole("button", { name: "Move or hide map" }).click();
     await page.getByRole("menuitem", { name: "Move to the top" }).click();
-    await expect(map).toHaveAttribute("data-corner", "top-right");
+    await expect(map).toHaveAttribute("data-corner", "top-centre");
     const high = await settled(page);
     expect(high.y, "under the page bar").toBeGreaterThanOrEqual(60);
     expect(high.y).toBeLessThan(100);
@@ -306,19 +315,23 @@ test.describe("the pilot report card", () => {
     );
   });
 
-  test("the window is carried by its grabber to a corner, and off a side to put it away", async ({
+  test("the window is carried to a corner, and off a side to put it away", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 780 });
     await page.goto(cardUrl);
     const map = page.getByRole("region", { name: "Track map" });
     await expect(map).toBeVisible({ timeout: 30_000 });
-    await expect(map).toHaveAttribute("data-corner", "bottom-right");
+    await expect(map).toHaveAttribute("data-corner", "bottom-centre");
 
-    // By the grabber: the map under it is the map's own to drag.
-    const carry = async (to: { x: number; y: number }) => {
+    // Small, the whole face carries it, not only the grabber: it is a
+    // picture, and no touch on it is the map's.
+    const carry = async (to: { x: number; y: number }, by: "face" | "grabber" = "face") => {
       const box = await settled(page);
-      const from = { x: box.x + box.width / 2, y: box.y + 10 };
+      const from =
+        by === "face"
+          ? { x: box.x + box.width / 2, y: box.y + box.height * 0.6 }
+          : { x: box.x + box.width / 2, y: box.y + 10 };
       await page.mouse.move(from.x, from.y);
       await page.mouse.down();
       await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 5 });
@@ -329,8 +342,10 @@ test.describe("the pilot report card", () => {
     };
 
     // Let go anywhere, and it goes to the nearest corner.
-    await carry({ x: 150, y: 150 });
+    await carry({ x: 90, y: 250 });
     await expect(map).toHaveAttribute("data-corner", "top-left");
+    // The carry was not a tap: it is still small.
+    await expect(map).toHaveAttribute("data-floating", "small");
     const rest = await settled(page);
     expect(rest.x, "against the left edge").toBeLessThan(20);
     expect(rest.y, "under the page bar").toBeLessThan(100);
@@ -342,13 +357,13 @@ test.describe("the pilot report card", () => {
     const grabber = page.getByRole("button", { name: "Move or hide map" });
     await grabber.focus();
     await page.keyboard.press("ArrowRight");
-    await expect(map).toHaveAttribute("data-corner", "top-right");
+    await expect(map).toHaveAttribute("data-corner", "top-centre");
     await expect(grabber).toBeFocused();
     await page.keyboard.press("ArrowLeft");
     await expect(map).toHaveAttribute("data-corner", "top-left");
 
     // The page's last lines are not left under a window resting at the foot.
-    await carry({ x: 120, y: 520 });
+    await carry({ x: 90, y: 520 }, "grabber");
     await expect(map).toHaveAttribute("data-corner", "bottom-left");
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const footer = page.getByRole("contentinfo");
@@ -367,7 +382,7 @@ test.describe("the pilot report card", () => {
     ).toBeGreaterThan(150);
 
     // Carried over the left edge, it is put away, and a tab stays there.
-    await carry({ x: 15, y: 600 });
+    await carry({ x: 15, y: 600 }, "grabber");
     await expect(map).toBeHidden();
     const tab = page.getByRole("button", { name: "Show map" });
     await expect(tab).toBeVisible();

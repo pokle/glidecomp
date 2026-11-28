@@ -4,7 +4,13 @@
  * window itself and docs/interaction-guide.md 2.8 for why it exists.
  */
 
-export type FloatSide = "left" | "right";
+/** Three places along an edge. The middle is where neither thumb sweeps. */
+export type FloatSide = "left" | "centre" | "right";
+
+/** The side a window in the middle is put away to, and its tab shown on. */
+export function tuckSide(side: FloatSide): "left" | "right" {
+  return side === "left" ? "left" : "right";
+}
 export type FloatEdge = "top" | "bottom";
 export type FloatSize = "small" | "large";
 
@@ -21,11 +27,12 @@ export interface FloatState {
  * Small, bottom right (owner's decision, 28 November 2026). At the top it
  * covered the page's opening lines, and at the top of a page those cannot be
  * scrolled clear. At the bottom the page is made longer by the window's
- * height, so nothing is covered for good. Right, because the text it covers
- * is left-aligned.
+ * height, so nothing is covered for good. In the middle, because a thumb
+ * scrolls from either side of a phone's foot, and a window resting there was
+ * carried by scrolls that began on it (owner's decision, 28 November 2026).
  */
 export const DEFAULT_FLOAT: FloatState = {
-  side: "right",
+  side: "centre",
   edge: "bottom",
   size: "small",
   tucked: false,
@@ -44,7 +51,10 @@ export function parseFloatState(raw: string | null): FloatState | null {
     const v = JSON.parse(raw) as Partial<Record<keyof FloatState, unknown>>;
     if (v == null || typeof v !== "object") return null;
     return {
-      side: v.side === "left" ? "left" : v.side === "right" ? "right" : DEFAULT_FLOAT.side,
+      side:
+        v.side === "left" || v.side === "right" || v.side === "centre"
+          ? v.side
+          : DEFAULT_FLOAT.side,
       edge: v.edge === "bottom" ? "bottom" : v.edge === "top" ? "top" : DEFAULT_FLOAT.edge,
       size: v.size === "large" ? "large" : "small",
       tucked: v.tucked === true,
@@ -86,10 +96,6 @@ const TUCK_OVERHANG_MAX_PX = 80;
 /** A flick outward puts it away from less far: this much, at this speed. */
 const TUCK_FLICK_OVERHANG = 1 / 10;
 const TUCK_FLICK_SPEED = 0.5;
-/** A large window rests with its centre ON the middle of the screen, so
- * near the middle it keeps the side it had and does not flip on a tremor. */
-const LARGE_SIDE_DEAD_ZONE_PX = 60;
-
 export interface Release {
   /** The window's centre on release, in viewport pixels. */
   cx: number;
@@ -113,7 +119,6 @@ const clampSpeed = (v: number) => Math.max(-MAX_SPEED, Math.min(MAX_SPEED, v));
 export function settle(from: FloatState, r: Release): FloatState {
   const px = r.cx + clampSpeed(r.vx) * PROJECT_MS;
   const py = r.cy + clampSpeed(r.vy) * PROJECT_MS;
-  const mid = r.vw / 2;
   // Putting it away takes the window itself going over the edge. A flick
   // TOWARDS a side is only a throw to that side's corner: a projected
   // position must never tuck, or every fast move to the right would.
@@ -128,8 +133,11 @@ export function settle(from: FloatState, r: Release): FloatState {
   const side: FloatSide =
     tuckLeft ? "left"
     : tuckRight ? "right"
-    : from.size === "large" && Math.abs(px - mid) < LARGE_SIDE_DEAD_ZONE_PX ? from.side
-    : px < mid ? "left" : "right";
+    // A large window is as wide as the screen: it has no side to change.
+    : from.size === "large" ? from.side
+    : px < r.vw / 3 ? "left"
+    : px > (r.vw * 2) / 3 ? "right"
+    : "centre";
   return {
     ...from,
     side,

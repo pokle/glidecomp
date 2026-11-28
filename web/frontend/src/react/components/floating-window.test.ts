@@ -35,6 +35,14 @@ describe("settle: where a released window rests", () => {
     });
   });
 
+  it("rests in the middle of an edge when it is let go there", () => {
+    expect(settle(at({ side: "left" }), still(195, 600))).toMatchObject({
+      side: "centre",
+      edge: "bottom",
+      tucked: false,
+    });
+  });
+
   it("is carried on by a flick", () => {
     // Released left of the middle, moving right at speed.
     const r = { ...still(150, 200), vx: 1.2 };
@@ -128,6 +136,7 @@ describe("parseFloatState", () => {
 
   it("replaces a field it does not know with the default", () => {
     expect(parseFloatState('{"side":"up","size":7}')).toEqual(DEFAULT_FLOAT);
+    expect(parseFloatState('{"side":"centre"}')?.side).toBe("centre");
   });
 });
 

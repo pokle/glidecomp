@@ -13,8 +13,9 @@
  *   It never stops in between, so there is nothing to tidy up.
  * - Dragged or flicked OFF A SIDE it is put away, leaving a tab on that edge.
  *   The tab brings it back.
- * - The button in its top right corner makes it LARGE or SMALL. The map is
- *   live at both sizes: a touch on the map moves the map.
+ * - The button in its top right corner makes it LARGE or SMALL. Small, it
+ *   is a picture: a finger anywhere on it carries the window, and a tap, or
+ *   two fingers spread on it, makes it large. Large, the map is live.
  * - While the reader TYPES, it puts itself away, and comes back afterwards.
  *   That is how it stays clear of the on-screen keyboard without following
  *   the keyboard from script, which is what the fixed bars could not do.
@@ -61,6 +62,7 @@ import {
   ChevronRightIcon,
   MapIcon,
   Maximize2Icon,
+  MaximizeIcon,
   PictureInPicture2Icon,
 } from "lucide-react";
 import { Menu, MenuItem } from "@/react/rac/menu";
@@ -73,6 +75,7 @@ import {
   readStoredFloat,
   releaseVelocity,
   settle,
+  tuckSide,
   writeStoredFloat,
   type FloatEdge,
   type FloatSide,
@@ -254,6 +257,9 @@ const EDGE: Record<FloatEdge, string> = {
 };
 const SIDE: Record<FloatSide, string> = {
   left: "left-[calc(0.75rem+env(safe-area-inset-left,0px))]",
+  // By `left` and the `translate` property, so it shares nothing with the
+  // `transform` a drag and an animation use.
+  centre: "left-1/2 -translate-x-1/2",
   right: "right-safe-3",
 };
 const SIZE = {
@@ -264,13 +270,16 @@ const SIZE = {
   ),
 } as const;
 /** Past its own side, and out of the accessibility tree with it. */
-const TUCKED: Record<FloatSide, string> = {
+const TUCKED: Record<"left" | "right", string> = {
   left: "invisible -translate-x-[calc(100%+2rem)]",
   right: "invisible translate-x-[calc(100%+2rem)]",
 };
 /** z-30: over the page, under the page bar (z-40) and every popover (z-50). */
 const WINDOW =
   "fixed z-30 flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl print:visible print:static print:mt-4 print:h-80 print:w-full print:max-w-none print:translate-x-0 print:shadow-none";
+
+const STEP_LEFT: Record<FloatSide, FloatSide> = { left: "left", centre: "left", right: "centre" };
+const STEP_RIGHT: Record<FloatSide, FloatSide> = { left: "centre", centre: "right", right: "right" };
 
 const MOVE_MS = 320;
 const MOVE_EASING = "cubic-bezier(0.22, 0.9, 0.3, 1)";
@@ -371,7 +380,7 @@ export function FloatingContent({
     (next: FloatState, focus: "window" | "tab" | null = "window") => {
       captureFlip();
       focusNext.current = focus;
-      if (next.size !== state.size) resizeGuardUntil.current = performance.now() + 400;
+      if (next.size !== state.size) resizeGuardUntil.current = performance.now() + 300;
       update(next);
     },
     [captureFlip, update, state.size]
@@ -406,9 +415,10 @@ export function FloatingContent({
         ? cn(
             WINDOW,
             EDGE[state.edge],
-            SIDE[state.side],
+            // Put away, a window from the middle leaves by the right.
+            SIDE[hidden ? tuckSide(state.side) : state.side],
             SIZE[state.size],
-            hidden && TUCKED[state.side]
+            hidden && TUCKED[tuckSide(state.side)]
           )
         : want === "full"
           ? "relative flex min-h-0 flex-1 flex-col"
@@ -627,9 +637,68 @@ export function FloatingContent({
     onLostPointerCapture: (e: ReactPointerEvent<HTMLElement>) => void endDrag(e, true),
   };
 
+  // The small window's face. Small, the map is a picture (owner's decision,
+  // 28 November 2026: at that size it is too small to work): one finger
+  // anywhere carries the window, a tap makes it large, and so does spreading
+  // two fingers, which is what a reader does to a map they want bigger.
+  const fingers = useRef(new Map<number, { x: number; y: number }>());
+  const spreadFrom = useRef<number | null>(null);
+  const spread = () => {
+    const [a, b] = [...fingers.current.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  };
+  const face = {
+    onPointerDown: (e: ReactPointerEvent<HTMLElement>) => {
+      fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (fingers.current.size === 1) {
+        onPointerDown(e);
+        return;
+      }
+      // A second finger: this is not a carry any more.
+      e.currentTarget.setPointerCapture(e.pointerId);
+      drag.current = null;
+      if (el) {
+        delete el.dataset.dragging;
+        el.style.transform = "";
+      }
+      spreadFrom.current = spread();
+    },
+    onPointerMove: (e: ReactPointerEvent<HTMLElement>) => {
+      if (fingers.current.has(e.pointerId)) {
+        fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+      const from = spreadFrom.current;
+      if (from == null) {
+        onPointerMove(e);
+        return;
+      }
+      const now = spread();
+      if (now - from > 24 && now > from * 1.2) {
+        fingers.current.clear();
+        spreadFrom.current = null;
+        act({ ...state, size: "large" });
+      }
+    },
+    onPointerUp: (e: ReactPointerEvent<HTMLElement>) => {
+      fingers.current.delete(e.pointerId);
+      if (fingers.current.size < 2) spreadFrom.current = null;
+      void endDrag(e, false);
+    },
+    onPointerCancel: (e: ReactPointerEvent<HTMLElement>) => {
+      fingers.current.delete(e.pointerId);
+      if (fingers.current.size < 2) spreadFrom.current = null;
+      void endDrag(e, true);
+    },
+    onLostPointerCapture: (e: ReactPointerEvent<HTMLElement>) => {
+      fingers.current.delete(e.pointerId);
+      void endDrag(e, true);
+    },
+  };
+
   // The tab: a tap brings the window back, and so does pulling it inward.
   const tabDrag = useRef<{ id: number; x: number } | null>(null);
   const show = () => act({ ...state, tucked: false });
+  const tabSide = tuckSide(state.side);
   const small = mode === "small";
   const toggleSize = () => act({ ...state, size: small ? "large" : "small" });
 
@@ -652,8 +721,8 @@ export function FloatingContent({
           }}
           onKeyDown={(e) => {
             const next =
-              e.key === "ArrowLeft" ? { side: "left" as const }
-              : e.key === "ArrowRight" ? { side: "right" as const }
+              e.key === "ArrowLeft" ? { side: STEP_LEFT[state.side] }
+              : e.key === "ArrowRight" ? { side: STEP_RIGHT[state.side] }
               : e.key === "ArrowUp" ? { edge: "top" as const }
               : e.key === "ArrowDown" ? { edge: "bottom" as const }
               : null;
@@ -703,8 +772,8 @@ export function FloatingContent({
             else if (id === "hide") act({ ...state, tucked: true }, "tab");
             else if (id === "edge") {
               act({ ...state, edge: state.edge === "top" ? "bottom" : "top" });
-            } else if (id === "side") {
-              act({ ...state, side: state.side === "left" ? "right" : "left" });
+            } else if (id === "left" || id === "centre" || id === "right") {
+              act({ ...state, side: id });
             }
           }}
         >
@@ -714,16 +783,21 @@ export function FloatingContent({
             {state.edge === "top" ? "Move to the bottom" : "Move to the top"}
           </MenuItem>
           {/* Large, the window is as wide as the screen: it has no side. */}
-          {small ? (
-            <MenuItem id="side">
-              {state.side === "left" ? "Move to the right" : "Move to the left"}
-            </MenuItem>
+          {small && state.side !== "left" ? (
+            <MenuItem id="left">Move to the left</MenuItem>
+          ) : null}
+          {small && state.side !== "centre" ? (
+            <MenuItem id="centre">Move to the middle</MenuItem>
+          ) : null}
+          {small && state.side !== "right" ? (
+            <MenuItem id="right">Move to the right</MenuItem>
           ) : null}
         </Menu>
         <div className="absolute top-1.5 right-1.5 z-30 flex gap-1.5 print:hidden">
           {!small && fullTo ? (
             <Link to={fullTo} title={`Expand ${label}`} aria-label={`Expand ${label}`} className={CONTROL}>
-              <Maximize2Icon aria-hidden className="size-5" />
+              {/* The four corners: the whole screen, on a page of its own. */}
+              <MaximizeIcon aria-hidden className="size-5" />
             </Link>
           ) : null}
           <button
@@ -736,7 +810,13 @@ export function FloatingContent({
             }}
             className={CONTROL}
           >
-            <PictureInPicture2Icon aria-hidden className="size-5" />
+            {/* Arrows outward to make it bigger; the picture-in-picture
+                glyph to send it back to a small picture. */}
+            {small ? (
+              <Maximize2Icon aria-hidden className="size-5" />
+            ) : (
+              <PictureInPicture2Icon aria-hidden className="size-5" />
+            )}
           </button>
         </div>
       </>
@@ -746,8 +826,23 @@ export function FloatingContent({
     <>
       {chrome}
       {/* The same element in every mode, so the detail is never remounted. */}
+      {/* The face: over the picture, under the grabber and the button. Not
+          a control of its own: the button beside it has the same job and
+          the name, and the grabber's menu has the moves. */}
+      {floating && small ? (
+        <div
+          {...face}
+          onClick={(e) => {
+            if (!clickIsDragEnd(e)) toggleSize();
+          }}
+          data-float-face=""
+          className="absolute inset-0 z-20 cursor-grab touch-none select-none [-webkit-tap-highlight-color:transparent] in-data-dragging:cursor-grabbing print:hidden"
+        />
+      ) : null}
       <div
         data-float-detail=""
+        // Small, a picture takes no input.
+        inert={floating && mode !== "large"}
         {...(floating && mode === "large"
           ? { ...handle, onPointerUp: (e) => void endDrag(e, false) }
           : {})}
@@ -767,7 +862,7 @@ export function FloatingContent({
             ref={tabRef}
             type="button"
             aria-label={`Show ${label}`}
-            data-float-tab={state.side}
+            data-float-tab={tabSide}
             onClick={show}
             onPointerDown={(e) => {
               tabDrag.current = { id: e.pointerId, x: e.clientX };
@@ -775,7 +870,7 @@ export function FloatingContent({
             onPointerMove={(e) => {
               const d = tabDrag.current;
               if (!d || d.id !== e.pointerId) return;
-              const inward = state.side === "right" ? d.x - e.clientX : e.clientX - d.x;
+              const inward = tabSide === "right" ? d.x - e.clientX : e.clientX - d.x;
               if (inward > DRAG_SLOP_PX * 2) {
                 tabDrag.current = null;
                 show();
@@ -792,14 +887,14 @@ export function FloatingContent({
               "transition-opacity duration-300 starting:opacity-0",
               "focus-visible:ring-3 focus-visible:ring-ring",
               EDGE[state.edge],
-              state.side === "right"
+              tabSide === "right"
                 ? "right-0 w-[calc(2.75rem+env(safe-area-inset-right,0px))] rounded-l-xl border-r-0 pr-[env(safe-area-inset-right,0px)]"
                 : "left-0 w-[calc(2.75rem+env(safe-area-inset-left,0px))] rounded-r-xl border-l-0 pl-[env(safe-area-inset-left,0px)]",
               // Stepped aside for the keyboard as well: nothing to offer yet.
               typing && "hidden"
             )}
           >
-            {state.side === "right" ? (
+            {tabSide === "right" ? (
               <ChevronLeftIcon aria-hidden className="size-4 text-muted-foreground" />
             ) : (
               <ChevronRightIcon aria-hidden className="size-4 text-muted-foreground" />

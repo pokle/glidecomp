@@ -21,7 +21,13 @@
  * inputs — so the page renders without downloading the tracklog. The
  * IGC is fetched separately, only to draw the track on the map.
  */
-import { ClipboardPenIcon, MapIcon, ScanIcon } from "lucide-react";
+import {
+  ClipboardPenIcon,
+  FocusIcon,
+  MapIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+} from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "../lib/use-in-view";
 import { Link, useParams } from "react-router-dom";
@@ -68,7 +74,6 @@ import {
   TrackValidityDocLink,
 } from "../score-detail/TrackNotes";
 import { ExplanationSection } from "../score-detail/Explanation";
-import { MaximizeIcon, MinimizeIcon } from "../score-detail/icons";
 import { useLeave } from "../lib/leave";
 import { ScoringGlossary } from "../components/ScoringGlossary";
 import { MasterDetail } from "../components/MasterDetail";
@@ -260,8 +265,8 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
   // here because the page lays the map out for it, and brings it back when
   // the reader picks a step it had been put away for.
   const float = useFloatingDetail("score-map");
-  // Whether the map is on the whole flight, or the reader has moved it (a
-  // thumb that meant to scroll the page will). Off it, a button puts it back.
+  // Whether the map is on the whole flight, or the reader has moved it, or
+  // a step has flown it to a point. Off it, a button puts it back.
   const [mapFramed, setMapFramed] = useState(true);
   const [refitNonce, setRefitNonce] = useState(0);
   const leave = useLeave();
@@ -488,9 +493,15 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
 
   if (state.kind === "loading") {
     return (
+      <>
+        {/* The map's place in the tree, empty here: see `floatingContent`.
+            Keeping the place keeps the PAGE at its own place, so the bar
+            is not mounted again when the data arrives. */}
+        {null}
       <Page width="wide" bar={bar}>
         <Loading>Loading score card…</Loading>
       </Page>
+      </>
     );
   }
 
@@ -500,6 +511,11 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
     // upload, so "no score found" would read as "your track did not go in".
     const gaveUp = pendingAttempt >= PENDING_MAX_ATTEMPTS;
     return (
+      <>
+        {/* The map's place in the tree, empty here: see `floatingContent`.
+            Keeping the place keeps the PAGE at its own place, so the bar
+            is not mounted again when the data arrives. */}
+        {null}
       <Page width="wide" bar={bar}>
         <div>
           {gaveUp ? (
@@ -518,6 +534,7 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
           </p>
         </div>
       </Page>
+      </>
     );
   }
 
@@ -529,9 +546,15 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
       return <NotFound title="Page not found" message={`${state.message}.`} />;
     }
     return (
+      <>
+        {/* The map's place in the tree, empty here: see `floatingContent`.
+            Keeping the place keeps the PAGE at its own place, so the bar
+            is not mounted again when the data arrives. */}
+        {null}
       <Page width="wide" bar={bar}>
         <p className="text-muted-foreground">{state.message}</p>
       </Page>
+      </>
     );
   }
 
@@ -622,8 +645,9 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
                 mode === "large" &&
                   "[&_.mapboxgl-ctrl-top-right]:hidden [&_.mapboxgl-ctrl-scale]:hidden",
                 // Small, it shows the map alone. The provider's logo and
-                // attribution stay. A popup would not fit, and the step that
-                // was picked already says what it says.
+                // attribution stay: it is a picture there, and takes no
+                // touch. A popup would not fit, and the step that was picked
+                // already says what it says.
                 (mode === "small" || mode === "tucked") &&
                   "[&_.mapboxgl-ctrl-top-left]:hidden [&_.mapboxgl-ctrl-top-right]:hidden [&_.mapboxgl-ctrl-bottom-left>*:not(:has(.mapboxgl-ctrl-logo))]:hidden [&_.ann-toggle]:hidden! [&_.mapboxgl-popup]:hidden"
               )
@@ -639,7 +663,7 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
             aria-label="Expand map"
             className={cn(MAP_CONTROL, "right-2 bottom-8")}
           >
-            <MaximizeIcon />
+            <MaximizeIcon aria-hidden className="size-5" />
           </Link>
         ) : mode === "full" ? (
           // The way back, where the way in was. It leaves the page as the
@@ -653,12 +677,12 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
             // reaches this corner, so the button steps left of it.
             className={cn(MAP_CONTROL, "right-2 bottom-8 [@media(max-height:500px)]:right-16")}
           >
-            <MinimizeIcon />
+            <MinimizeIcon aria-hidden className="size-5" />
           </button>
         ) : null}
-        {/* The reader moved the map (a thumb that meant to scroll the page
-            will): one press puts the whole flight back in view. */}
-        {mapFramed ? null : (
+        {/* Off the flight: one press puts the whole of it back in view. Not
+            on the small window, whose map takes no touch. */}
+        {mapFramed || mode === "small" || mode === "tucked" ? null : (
           <button
             type="button"
             title="Show the whole flight"
@@ -666,16 +690,14 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
             onClick={() => setRefitNonce((n) => n + 1)}
             className={cn(
               MAP_CONTROL,
-              mode === "small" || mode === "tucked"
-                ? "top-1.5 left-1.5"
-                : mode === "large"
-                  ? // Under the window's own buttons.
-                    "top-12 right-1.5 pointer-coarse:top-14"
-                  : // Above Expand or Shrink.
-                    "right-2 bottom-20 pointer-coarse:bottom-[5.25rem] [@media(max-height:500px)]:right-16"
+              mode === "large"
+                ? // Under the window's own buttons.
+                  "top-12 right-1.5 pointer-coarse:top-14"
+                : // Above Expand or Shrink.
+                  "right-2 bottom-20 pointer-coarse:bottom-[5.25rem] [@media(max-height:500px)]:right-16"
             )}
           >
-            <ScanIcon aria-hidden className="size-5" />
+            <FocusIcon aria-hidden className="size-5" />
           </button>
         )}
       </div>
