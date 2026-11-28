@@ -426,3 +426,11 @@ Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (per
 ## Style Reload Behaviour
 
 On style change, all custom sources/layers are re-added and current track/task/event data is restored via `restoreData()` (including an active time-scrub clip, re-applied after `setTrack`). Terrain and sky layer are also re-added on every `style.load` event.
+
+## Resizing an embedded map
+
+The report card's map keeps the same ground in view when its box changes
+size (`invalidateSize({ keepView: true })`): the zoom is scaled by the box's
+shorter side. Mapbox alone keeps the zoom, so a box that shrinks shows a crop.
+The analysis page does not pass the option, and behaves as Mapbox does.
+

@@ -683,6 +683,10 @@ export function PilotScoreDetail({ view = "card" }: { view?: "card" | "map" } = 
           once the reader is past them, rather than covering a third of the
           screen for the glossary.
 
+          On a phone the map is not pinned any more: it FLOATS (`floating`),
+          in a window the reader moves and puts away. What is said above
+          about pinning now describes the side-by-side column only.
+
           `storageKey`: the noun is "map" here and on the waypoints page, and
           those are different decisions on very different pages. */}
       <div className="mt-4">

@@ -154,6 +154,14 @@ test("the report card's map button, time slider and flight steps", { tag: PHONE_
   await page.goto(`/comp/${compId}/task/${taskId}/pilot/${pilotId}`, {
     waitUntil: "domcontentloaded",
   });
+  // On a phone the map is a floating window, and its small face is one
+  // button; the map's controls and the slider are on the large one.
+  const enlarge = page.getByRole("button", { name: "Enlarge map" });
+  await enlarge.waitFor({ timeout: 60_000 });
+  await enlarge.click();
+  await expectTarget(page.getByRole("button", { name: "Move or hide map" }), "the window's grabber");
+  await expectTarget(page.getByRole("button", { name: "Make map smaller" }), "the window's smaller button");
+
   // A link: the map at full size is a page of its own (#870).
   const expand = page.getByRole("link", { name: "Expand map" });
   await expand.waitFor({ timeout: 60_000 });

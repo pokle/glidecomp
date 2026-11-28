@@ -210,112 +210,168 @@ test.describe("the pilot report card", () => {
   });
 
   /**
-   * The map folds away, and stays folded.
+   * On a phone the map is a floating window (owner's decision, 28 November
+   * 2026; docs/interaction-guide.md 2.8, `components/FloatingWindow.tsx`).
    *
-   * The map is evidence read ALONGSIDE the explanation, so it is pinned rather
-   * than navigated to — but on a phone a pinned pane holds a third of the
-   * viewport for the whole read, and the layout this page used to carry gave
-   * no way to dismiss it. `MasterDetail`'s fold is that way out, and it is
-   * remembered per pane: a reader who came for the words should not have to
-   * say so again on the next report card.
+   * It was pinned under the page bar, and held half the screen for as long
+   * as the reader was in the Flight section. Now it covers a corner, and the
+   * reader says which, how large, and whether at all.
    *
-   * Narrow only. Side by side there is no screen to reclaim, and the control
-   * is hidden — which the last assertion pins down, because a "Hide map" that
-   * leaked onto a desktop would fold a column that covers nothing.
+   * These run in the desktop project at a phone's width, with a mouse: the
+   * window is driven by pointer events, which a mouse and a finger both are.
    */
-  test("the map folds away on a phone, and is still folded next time", async ({
+  const win = (page: Page) => page.locator("[data-floating]");
+  const settled = async (page: Page) => {
+    // The move is a 320 ms animation; a rect read during it is in between.
+    await page.waitForFunction(() => {
+      const el = document.querySelector("[data-floating]");
+      return el != null && el.getAnimations().length === 0;
+    });
+    return (await win(page).boundingBox())!;
+  };
+
+  test("on a phone the map floats: a tap enlarges it, and it can be put away and brought back", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 780 });
     await page.goto(cardUrl);
 
     const map = page.getByRole("region", { name: "Track map" });
-    const fold = page.getByRole("button", { name: "Hide map" });
     await expect(map).toBeVisible({ timeout: 30_000 });
-    await expect(fold).toBeVisible();
+    await expect(map).toHaveAttribute("data-floating", "small");
 
-    await fold.click();
+    // Small, it is a picture in a corner: it does not take the screen.
+    const small = await settled(page);
+    expect(small.width, "a corner, not a band").toBeLessThan(200);
+    expect(small.y, "clear of the page bar").toBeGreaterThanOrEqual(60);
+    // Its whole face is one button, and none of the map's own show.
+    await expect(page.getByRole("link", { name: "Expand map" })).toBeHidden();
+
+    await page.getByRole("button", { name: "Enlarge map" }).click();
+    await expect(map).toHaveAttribute("data-floating", "large");
+    const large = await settled(page);
+    expect(large.width).toBeGreaterThan(340);
+    // Large, the map is live: its own controls and the slider are there.
+    await expect(page.getByRole("link", { name: "Expand map" })).toBeVisible();
+    await expect(page.getByRole("slider", { name: "Flight time" })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // Nothing here needs a drag (guide 2.9): the grabber is a button too.
+    await page.getByRole("button", { name: "Move or hide map" }).click();
+    await page.getByRole("menuitem", { name: "Move to the bottom" }).click();
+    await expect(map).toHaveAttribute("data-corner", "bottom-right");
+    const low = await settled(page);
+    expect(low.y + low.height, "resting at the foot of the screen").toBeGreaterThan(700);
+
+    await page.getByRole("button", { name: "Move or hide map" }).click();
+    await page.getByRole("menuitem", { name: "Hide" }).click();
     await expect(map).toBeHidden();
-    // The toggle stays — folded away is not gone, and this is the way back.
-    await expect(page.getByRole("button", { name: "Show map" })).toBeVisible();
+    const tab = page.getByRole("button", { name: "Show map" });
+    await expect(tab).toBeVisible();
 
-    // The point of remembering it: the next report card opens folded, with no
-    // flash of a map the reader has already dismissed once.
+    // Remembered: the next report card opens with the map still put away.
     await page.goto(repairedCardUrl);
     await expect(page.getByRole("heading", { name: "Track data cleaning" })).toBeVisible({
       timeout: 30_000,
     });
+    await expect(page.getByRole("button", { name: "Show map" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Track map" })).toBeHidden();
 
-    const unfold = page.getByRole("button", { name: "Show map" });
-    await expect(unfold).toBeVisible();
-    await unfold.click();
+    await page.getByRole("button", { name: "Show map" }).click();
     await expect(page.getByRole("region", { name: "Track map" })).toBeVisible();
 
-    // Side by side the pane is a column of its own: nothing to reclaim, so no
-    // fold control at all.
-    await page.setViewportSize({ width: 1400, height: 900 });
-    await expect(page.getByRole("button", { name: /^(Hide|Show) map$/ })).toBeHidden();
+    await page.getByRole("button", { name: "Make map smaller" }).click();
+    await expect(page.getByRole("region", { name: "Track map" })).toHaveAttribute(
+      "data-floating",
+      "small"
+    );
   });
 
-  /**
-   * The map stays only beside the steps it can show.
-   *
-   * Every step that moves the map is in the Flight section, so on a phone
-   * the pinned map is worth its height there and nowhere below it. The
-   * sections that follow are MasterDetail's `after`: sticky stops at the end
-   * of its parent, so the map scrolls off with the last step and pins again
-   * on the way back up. Measured, not asserted from classes: a pane whose
-   * parent did not end where it should would still carry every right class.
-   *
-   * Side by side the map is a column that covers nothing, so it stays pinned
-   * beside the whole page, the glossary included.
-   */
-  test("on a phone the map scrolls off after the flight; side by side it stays", async ({
+  test("the window is dragged to a corner, and off a side to put it away", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 780 });
+    await page.goto(cardUrl);
+    const map = page.getByRole("region", { name: "Track map" });
+    await expect(map).toBeVisible({ timeout: 30_000 });
+    await expect(map).toHaveAttribute("data-corner", "top-right");
+
+    const drag = async (to: { x: number; y: number }) => {
+      const box = await settled(page);
+      const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 5 });
+      await page.mouse.move(to.x, to.y, { steps: 5 });
+      // Let go at rest: this is a carry, not a throw.
+      await page.waitForTimeout(200);
+      await page.mouse.up();
+    };
+
+    // Let go anywhere, and it goes to the nearest corner.
+    await drag({ x: 150, y: 560 });
+    await expect(map).toHaveAttribute("data-corner", "bottom-left");
+    const rest = await settled(page);
+    expect(rest.x, "against the left edge").toBeLessThan(20);
+    expect(rest.y + rest.height, "against the foot").toBeGreaterThan(740);
+    // The drag was not a tap: it is still small.
+    await expect(map).toHaveAttribute("data-floating", "small");
+    // And the page did not scroll under it.
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    // The page's last lines are not left under a window resting at the foot.
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const footer = page.getByRole("contentinfo");
+    if ((await footer.count()) > 0) {
+      const f = (await footer.boundingBox())!;
+      const w = await settled(page);
+      expect(f.y + f.height, "the footer ends above the window").toBeLessThanOrEqual(w.y + 1);
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    // Carried over the left edge, it is put away, and a tab stays there.
+    await drag({ x: 5, y: 600 });
+    await expect(map).toBeHidden();
+    const tab = page.getByRole("button", { name: "Show map" });
+    await expect(tab).toBeVisible();
+    expect((await tab.boundingBox())!.x, "the tab is on the side it left by").toBeLessThan(5);
+
+    // Side by side there is no window at all: the map is a column of the page.
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await expect(page.locator("[data-floating]")).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Track map" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Show map" })).toBeHidden();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect(page.getByRole("region", { name: "Track map" })).toBeInViewport();
+  });
+
+  test("picking a step brings a map that was put away back, clear of the step", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 780 });
     await page.goto(cardUrl);
-
     const map = page.getByRole("region", { name: "Track map" });
     await expect(map).toBeVisible({ timeout: 30_000 });
-    const steps = page.locator('button[title="Show on map"]');
-    await expect(steps.first()).toBeVisible();
 
-    // The last step that moves the map, at the foot of the screen: the map
-    // must still be pinned above it, or tapping it changes nothing in view.
-    const scrollTo = (target: "lastStep" | "bottom") =>
-      page.evaluate((where) => {
-        if (where === "bottom") {
-          window.scrollTo(0, document.documentElement.scrollHeight);
-          return;
-        }
-        const all = document.querySelectorAll('button[title="Show on map"]');
-        all[all.length - 1].scrollIntoView({ block: "end" });
-      }, target);
-    await scrollTo("lastStep");
-    expect(await page.evaluate(() => window.scrollY), "the step is below the fold").toBeGreaterThan(0);
-    await expect(map).toBeInViewport();
-    await expect(steps.last()).toBeInViewport();
+    await page.getByRole("button", { name: "Enlarge map" }).click();
+    await page.getByRole("button", { name: "Move or hide map" }).click();
+    await page.getByRole("menuitem", { name: "Hide" }).click();
+    await expect(map).toBeHidden();
 
-    // Past the flight, the map has gone up and off the screen with it —
-    // scrolled away, not folded.
-    await scrollTo("bottom");
-    await expect(map).not.toBeInViewport();
+    // A step is a question put to the map. Near the top of the screen, so the
+    // map has to come back at the foot.
+    const step = page.locator('button[title="Show on map"]').first();
+    await step.evaluate((el) => {
+      window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - 150);
+    });
+    await step.click();
+
     await expect(map).toBeVisible();
-    const box = await map.boundingBox();
-    expect(box!.y + box!.height, "the map went UP, off the top").toBeLessThanOrEqual(0);
-
-    // Back up into the flight, and it pins again.
-    await scrollTo("lastStep");
-    await expect(map).toBeInViewport();
-
-    // Side by side: pinned beside everything, down to the foot of the page.
-    await page.setViewportSize({ width: 1400, height: 900 });
-    await scrollTo("bottom");
-    expect(await page.evaluate(() => window.scrollY), "a page long enough to scroll").toBeGreaterThan(0);
-    await expect(map).toBeInViewport();
+    await expect(map).toHaveAttribute("data-floating", "small");
+    const w = await settled(page);
+    const s = (await step.boundingBox())!;
+    expect(w.y, "the window is below the step that was picked").toBeGreaterThan(s.y + s.height);
   });
+
   // #870: the map at full size was a fixed layer over the report card. It is
   // a page (docs/interaction-guide.md 2.1), reached by a link and left by Back.
   test("Expand map opens the map's own page; a reload stands on it, and Back returns", async ({
@@ -323,6 +379,9 @@ test.describe("the pilot report card", () => {
   }) => {
     await page.setViewportSize({ width: 390, height: 780 });
     await page.goto(cardUrl);
+    // The window's small face is a picture; the map's own controls, this
+    // link among them, are on the large one.
+    await page.getByRole("button", { name: "Enlarge map" }).click({ timeout: 30_000 });
     const expand = page.getByRole("link", { name: "Expand map" });
     await expect(expand).toBeVisible({ timeout: 30_000 });
     await expand.click();

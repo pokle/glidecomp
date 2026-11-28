@@ -25,7 +25,7 @@ Each line is a rule. The number is the section that explains it.
 - Put what the reader chose to look at in the URL. ([2.4](#24-the-url-holds-the-view))
 - A reload and a shared link show the same page. Unsaved work that must survive is a draft. ([2.5](#25-reload-a-shared-link-and-drafts))
 - Anything that opens a page is a real link, built with the path helpers. ([2.6](#26-links-are-links))
-- Nothing is fixed to an edge of the screen, and nothing sticks to the bottom. ([2.8](#28-the-keyboard-and-the-screens-edges))
+- Nothing is fixed to an edge of the screen, and nothing sticks to the bottom. One thing floats: a map on a phone, in a window the reader moves. ([2.8](#28-the-keyboard-and-the-screens-edges))
 - Nothing needs a hover or a drag. ([2.9](#29-the-pointer))
 - An organiser's page sends anyone else on to the public page. ([2.10](#210-a-page-the-reader-may-not-use))
 
@@ -290,6 +290,34 @@ broke on an iPhone.
   with one transform (`useKeepOnScreen` in `rac/page-bar.tsx`). That is the
   only place the app positions anything from script. Do not add a second.
 - **Nothing sticks to the bottom.**
+- **One thing floats: a map on a phone** (`components/FloatingWindow.tsx`,
+  owner's decision, 28 November 2026). A map pinned under the bar held half
+  of a phone's screen, and the only way out was to hide it. Stacked, the map
+  is a window over the page, as a video is in picture-in-picture. Side by
+  side it is a column of the page, as before.
+  - The reader drags it and it rests in the nearest corner. Dragged or
+    flicked off a side, it is put away, and a tab on that edge brings it
+    back. Its place, its size and whether it is put away are remembered.
+  - Small, it is a picture: a tap makes it large, and every other touch
+    moves the window. It shows the map alone, with none of the map's
+    buttons. Large, the map is live. The window is held by the grabber at
+    its top or by its last row, and one button in that row makes it small.
+  - It puts itself away while the reader types, and comes back afterwards.
+    It does not follow the keyboard.
+  - At rest it is placed by CSS alone: a corner is `top` or `bottom`, and
+    `left` or `right`, with the safe-area insets. Script moves it only
+    under a finger. This is why it may exist where the fixed bars could
+    not.
+  - Every drag has a control that is not a drag
+    ([2.9](#29-the-pointer)): a tap on the grabber opens Make smaller,
+    Hide and the moves as a menu, and the tab is a button.
+  - A page that asks the map a question brings a put-away window back,
+    small, on the half of the screen away from what was pressed
+    (`reveal()`).
+  - Resting at the bottom, it makes the page longer by its own height, so
+    it never covers the page's last lines for good.
+  - Today only the report card uses it (`floating` on `MasterDetail`). No
+    second floating thing is added without the owner's decision.
 - The app runs edge to edge. A surface that touches an edge keeps its content
   clear of the notch with the `pt-safe`, `pb-safe` and `px-gutter-safe`
   utilities in `react/globals.css`.
@@ -857,6 +885,7 @@ A pattern is safe when one place in the code owns it or a test holds it.
 | Scroll on Back ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/scroll-restoration.ts` | `lib/scroll-restoration.test.ts`, `e2e/task-thermal-map.spec.ts` |
 | Focus on arrival ([2.7](#27-scroll-and-focus-follow-the-navigation)) | `lib/route-focus.ts` | `e2e/page-bar.spec.ts` |
 | Nothing fixed to an edge ([2.8](#28-the-keyboard-and-the-screens-edges)) | `rac/page-bar.tsx` | `e2e/page-bar.spec.ts` |
+| A map floats on a phone ([2.8](#28-the-keyboard-and-the-screens-edges)) | `components/FloatingWindow.tsx`, with its rules in `components/floating-window.ts` | `components/floating-window.test.ts`, `e2e/report-card.spec.ts`, `e2e/kit-touch-targets.spec.ts` on a phone |
 | Colour as text ([3.2](#32-colour-and-contrast)) | The tokens in `react/globals.css` | `src/react/accent-text.test.ts` |
 | No sideways scroll ([3.3](#33-text-and-zoom)) | Each page | The `mobile` Playwright project, for the pages in `e2e/fixtures/mobile.ts` |
 | A tab strip that does not fit ([3.3](#33-text-and-zoom)) | `rac/tabs.tsx`; on the analysis page, `analysis/tab-overflow.ts` | `e2e/analysis-bar.spec.ts` for the analysis page. None for the kit's fades |

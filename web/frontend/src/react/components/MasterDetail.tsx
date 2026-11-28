@@ -90,6 +90,16 @@
  * bar's clearance for focus, not the pane's. Without `after` the DOM is
  * exactly what it was.
  *
+ * ## `floating`: the pane as a window, stacked
+ *
+ * A pinned map held half of a phone's screen, and the fold was all or
+ * nothing. A caller may pass `floating` (from `useFloatingDetail`) and,
+ * stacked, the detail leaves the page's flow for a small window the reader
+ * moves, sizes and puts away: see `FloatingWindow.tsx`, and
+ * docs/interaction-guide.md 2.8, which allows it. Nothing is pinned then, so
+ * there is no fold toggle, and rows clear only the page bar. Side by side
+ * nothing changes. Today the report card's map is the one caller.
+ *
  * ## `navigation`: one pane at a time, stacked
  *
  * A pinned pane is the right stacked answer when the detail is SMALL — a
@@ -476,7 +486,7 @@ export function MasterDetail({
               ? // Stacked, the detail is in its window, not here. Hidden by
                 // the container query rather than by what was measured, so
                 // a phone never paints the pane and then takes it away.
-                "hidden @5xl:sticky @5xl:z-10 @5xl:block"
+                "hidden @5xl:sticky @5xl:z-10 @5xl:block print:block"
               : cn(
                   // Stacked, the pane pins to the top and the master pages
                   // beneath it, covered edge to edge by the bleed surface.

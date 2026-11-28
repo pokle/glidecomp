@@ -77,14 +77,16 @@ export const DRAG_SLOP_PX = 8;
 const PROJECT_MS = 180;
 /** A finger does not exceed this by much; a noisy sample can. px/ms. */
 const MAX_SPEED = 3;
-/** This much of the window past a side edge means "put it away". */
+/** This much of the window past a side edge means "put it away": a third
+ * of it, or this many pixels where a third is a long way to carry it. */
 const TUCK_OVERHANG = 1 / 3;
+const TUCK_OVERHANG_MAX_PX = 80;
 /** A flick outward puts it away from less far: this much, at this speed. */
 const TUCK_FLICK_OVERHANG = 1 / 10;
 const TUCK_FLICK_SPEED = 0.5;
-/** Around the middle, the window keeps the side it had. A large window
- * rests with its centre ON the middle, and must not flip on a tremor. */
-const SIDE_DEAD_ZONE_PX = 24;
+/** A large window rests with its centre ON the middle of the screen, so
+ * near the middle it keeps the side it had and does not flip on a tremor. */
+const LARGE_SIDE_DEAD_ZONE_PX = 60;
 
 export interface Release {
   /** The window's centre on release, in viewport pixels. */
@@ -113,20 +115,18 @@ export function settle(from: FloatState, r: Release): FloatState {
   // Putting it away takes the window itself going over the edge. A flick
   // TOWARDS a side is only a throw to that side's corner: a projected
   // position must never tuck, or every fast move to the right would.
-  const overLeft = (r.width / 2 - r.cx) / r.width;
-  const overRight = (r.cx + r.width / 2 - r.vw) / r.width;
+  const pxLeft = r.width / 2 - r.cx;
+  const pxRight = r.cx + r.width / 2 - r.vw;
+  const far = Math.min(r.width * TUCK_OVERHANG, TUCK_OVERHANG_MAX_PX);
+  const near = r.width * TUCK_FLICK_OVERHANG;
   const vx = clampSpeed(r.vx);
-  const tuckLeft =
-    overLeft >= TUCK_OVERHANG ||
-    (overLeft >= TUCK_FLICK_OVERHANG && vx <= -TUCK_FLICK_SPEED);
+  const tuckLeft = pxLeft >= far || (pxLeft >= near && vx <= -TUCK_FLICK_SPEED);
   const tuckRight =
-    !tuckLeft &&
-    (overRight >= TUCK_OVERHANG ||
-      (overRight >= TUCK_FLICK_OVERHANG && vx >= TUCK_FLICK_SPEED));
+    !tuckLeft && (pxRight >= far || (pxRight >= near && vx >= TUCK_FLICK_SPEED));
   const side: FloatSide =
     tuckLeft ? "left"
     : tuckRight ? "right"
-    : Math.abs(px - mid) < SIDE_DEAD_ZONE_PX ? from.side
+    : from.size === "large" && Math.abs(px - mid) < LARGE_SIDE_DEAD_ZONE_PX ? from.side
     : px < mid ? "left" : "right";
   return {
     ...from,
@@ -146,8 +146,13 @@ export function releaseVelocity(
   now: number
 ): { vx: number; vy: number } {
   const WINDOW_MS = 100;
-  const recent = samples.filter((s) => now - s.t <= WINDOW_MS);
-  if (recent.length < 2) return { vx: 0, vy: 0 };
+  if (samples.length < 2) return { vx: 0, vy: 0 };
+  // The last sample must be fresh, or the finger had stopped. But a busy
+  // page delivers moves far apart, so the window widens to the last two
+  // samples rather than call a flick "still" for want of a second one.
+  if (now - samples[samples.length - 1].t > WINDOW_MS) return { vx: 0, vy: 0 };
+  let recent = samples.filter((s) => now - s.t <= WINDOW_MS);
+  if (recent.length < 2) recent = samples.slice(-2);
   const a = recent[0];
   const b = recent[recent.length - 1];
   const dt = b.t - a.t;

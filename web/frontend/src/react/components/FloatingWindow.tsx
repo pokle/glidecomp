@@ -54,7 +54,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MapIcon,
-  Minimize2Icon,
+  PictureInPicture2Icon,
 } from "lucide-react";
 import { Button } from "@/react/rac/button";
 import { Menu, MenuItem } from "@/react/rac/menu";
@@ -95,6 +95,8 @@ export interface FloatingDetail {
     typing: boolean;
     setActive: (active: boolean) => void;
     update: (next: FloatState) => void;
+    /** Set by the window: called before a change it should animate. */
+    beforeChange: { current: (() => void) | null };
   };
 }
 
@@ -126,8 +128,22 @@ export function useFloatingDetail(storageKey: string): FloatingDetail {
 
   const stateRef = useRef(state);
   stateRef.current = state;
+  const beforeChange = useRef<(() => void) | null>(null);
   const reveal = useCallback(() => {
-    if (stateRef.current.tucked) update({ ...stateRef.current, tucked: false });
+    const s = stateRef.current;
+    if (!s.tucked) return;
+    // Back as the small window, on the half of the screen the reader is not
+    // looking at: what they pressed is where their eyes are.
+    const pressed = document.activeElement;
+    const rect =
+      pressed && pressed !== document.body ? pressed.getBoundingClientRect() : null;
+    const edge: FloatEdge = rect
+      ? rect.top + rect.height / 2 < window.innerHeight / 2
+        ? "bottom"
+        : "top"
+      : s.edge;
+    beforeChange.current?.();
+    update({ ...s, tucked: false, size: "small", edge });
   }, [update]);
 
   // Out of the keyboard's way. Only where a keyboard takes screen: with a
@@ -159,15 +175,21 @@ export function useFloatingDetail(storageKey: string): FloatingDetail {
       : state.size;
 
   return useMemo(
-    () => ({ mode, reveal, internal: { state, active, typing, setActive, update } }),
+    () => ({
+      mode,
+      reveal,
+      internal: { state, active, typing, setActive, update, beforeChange },
+    }),
     [mode, reveal, state, active, typing, update]
   );
 }
 
 // Whole class strings: Tailwind reads the source, not the running program.
-/** Under the page bar (3.75rem), which is static on a short screen. */
+/** Under the page bar (3.75rem). On a short screen the bar is static and
+ * scrolls away, but at the top of the page it is there, so the window keeps
+ * clear of it at every height rather than sit on the bar's buttons. */
 const EDGE: Record<FloatEdge, string> = {
-  top: "top-[calc(4.25rem+env(safe-area-inset-top,0px))] [@media(max-height:500px)]:top-2",
+  top: "top-[calc(4.25rem+env(safe-area-inset-top,0px))]",
   bottom: "bottom-safe-3",
 };
 const SIDE: Record<FloatSide, string> = {
@@ -178,7 +200,7 @@ const SIZE = {
   small: "size-[min(11rem,46vw)]",
   large: cn(
     "w-[calc(100vw-1.5rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px))] max-w-[32rem]",
-    "h-[min(24rem,55dvh)] [@media(max-height:500px)]:h-[calc(100dvh-1rem)] [@media(max-height:500px)]:max-w-[24rem]"
+    "h-[min(24rem,55dvh)] [@media(max-height:500px)]:h-[calc(100dvh-5.5rem)] [@media(max-height:500px)]:max-w-[24rem]"
   ),
 } as const;
 /** Past its own side, and out of the accessibility tree with it. */
@@ -188,7 +210,7 @@ const TUCKED: Record<FloatSide, string> = {
 };
 /** z-30: over the page, under the page bar (z-40) and every popover (z-50). */
 const WINDOW =
-  "fixed z-30 flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl print:hidden";
+  "fixed z-30 flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl print:visible print:static print:mt-4 print:h-80 print:w-full print:max-w-none print:translate-x-0 print:shadow-none";
 
 const MOVE_MS = 320;
 const MOVE_EASING = "cubic-bezier(0.22, 0.9, 0.3, 1)";
@@ -218,7 +240,7 @@ export function FloatingWindow({
   ariaLabel: string;
   children: ReactNode;
 }) {
-  const { state, active, typing, update } = float.internal;
+  const { state, active, typing, update, beforeChange } = float.internal;
   const { mode } = float;
   const hidden = mode === "tucked";
 
@@ -248,22 +270,40 @@ export function FloatingWindow({
     if (el && active) flipFrom.current = el.getBoundingClientRect();
   }, [el, active]);
 
+  useEffect(() => {
+    beforeChange.current = captureFlip;
+    return () => {
+      beforeChange.current = null;
+    };
+  }, [beforeChange, captureFlip]);
+
   /** A change the reader made by a control: animate it, and follow it. */
   const act = useCallback(
     (next: FloatState, focus: "window" | "tab" | null = "window") => {
       captureFlip();
       focusNext.current = focus;
+      if (next.size !== state.size) suppressClickUntil.current = performance.now() + 350;
       update(next);
     },
-    [captureFlip, update]
+    [captureFlip, update, state.size]
   );
 
   // Place, dress and animate the element. One effect, because the order is
   // the point: it must be in its new place before that place is measured.
   useLayoutEffect(() => {
     if (!el) return;
-    const parent = active ? document.body : slotRef.current;
-    if (parent && el.parentElement !== parent) parent.appendChild(el);
+    if (!active) {
+      if (slotRef.current && el.parentElement !== slotRef.current) {
+        slotRef.current.appendChild(el);
+      }
+    } else if (!el.hasAttribute("data-floating")) {
+      // Straight after the page bar: where the pinned pane was read, and the
+      // first stop after the bar for a keyboard. At the end of the body it
+      // was read after the footer, forty Tab presses away.
+      const bar = document.querySelector("main > header");
+      if (bar) bar.insertAdjacentElement("afterend", el);
+      else document.body.appendChild(el);
+    }
     el.className = active
       ? cn(
           WINDOW,
@@ -320,16 +360,47 @@ export function FloatingWindow({
     }
   }, [el, active, hidden, mode, state.edge, state.side, state.size, ariaLabel, settleTick]);
 
+  // Resting at the bottom, the window would cover the page's last lines for
+  // good: the page cannot scroll further to bring them out. So the page is
+  // made that much longer while it rests there.
+  useEffect(() => {
+    if (!el || !active || hidden || state.edge !== "bottom") return;
+    const body = document.body;
+    const before = body.style.paddingBottom;
+    body.style.paddingBottom = `${el.offsetHeight + 24}px`;
+    return () => {
+      body.style.paddingBottom = before;
+    };
+  }, [el, active, hidden, state.edge, state.size]);
+
   // -- Dragging ------------------------------------------------------------
 
   const drag = useRef<Drag | null>(null);
-  /** A drag ends in a click on the element that held the pointer. */
-  const suppressClick = useRef(false);
+  /**
+   * A drag ends in a click on the element that held the pointer, in most
+   * browsers. Not in all (Safari sends none after a touch drag), so this is
+   * a time and not a flag: a flag nothing clears would swallow the reader's
+   * next real press.
+   */
+  const suppressClickUntil = useRef(0);
+  const clickIsDragEnd = (e: { timeStamp: number }) => e.timeStamp < suppressClickUntil.current;
+
+  // A drag whose handle went away (the window changed under the finger: the
+  // keyboard came up, a step brought it back) is over.
+  useEffect(() => {
+    drag.current = null;
+    if (el) {
+      delete el.dataset.dragging;
+      el.style.transform = "";
+    }
+  }, [el, mode, active]);
   const [menuOpen, setMenuOpen] = useState(false);
   const grabberRef = useRef<HTMLButtonElement>(null);
 
   const onPointerDown = (e: ReactPointerEvent<HTMLElement>) => {
-    if (!el || e.button !== 0 || drag.current) return;
+    if (!el || e.button !== 0) return;
+    // A second finger does not take over a drag that is under way.
+    if (drag.current?.moved) return;
     // Inside the detail, only what the page marked as a place to hold the
     // window by, and never a control that has a use for the touch itself.
     if (e.currentTarget.hasAttribute("data-float-detail")) {
@@ -337,7 +408,6 @@ export function FloatingWindow({
       if (!t?.closest("[data-float-drag]") || t.closest("input, button, a, select")) return;
     }
     // The bar's own buttons are buttons, not a handle.
-    suppressClick.current = false;
     drag.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
@@ -371,7 +441,7 @@ export function FloatingWindow({
     drag.current = null;
     delete el.dataset.dragging;
     if (!d.moved) return "tap" as const;
-    suppressClick.current = true;
+    suppressClickUntil.current = e.timeStamp + 400;
     const rect = el.getBoundingClientRect();
     flipFrom.current = rect;
     const next = cancelled
@@ -394,6 +464,8 @@ export function FloatingWindow({
     onPointerDown,
     onPointerMove,
     onPointerCancel: (e: ReactPointerEvent<HTMLElement>) => void endDrag(e, true),
+    // Capture can be taken away without a cancel. Whatever is left is over.
+    onLostPointerCapture: (e: ReactPointerEvent<HTMLElement>) => void endDrag(e, true),
   };
 
   // The tab: a tap brings the window back, and so does pulling it inward.
@@ -412,10 +484,9 @@ export function FloatingWindow({
           type="button"
           {...handle}
           onPointerUp={(e) => void endDrag(e, false)}
-          onClick={() => {
+          onClick={(e) => {
             // The click that ends a drag is not a tap.
-            if (suppressClick.current) suppressClick.current = false;
-            else setMenuOpen(true);
+            if (!clickIsDragEnd(e)) setMenuOpen(true);
           }}
           aria-label={`Move or hide ${label}`}
           aria-haspopup="menu"
@@ -426,7 +497,7 @@ export function FloatingWindow({
         >
           <span
             aria-hidden
-            className="h-1.5 w-12 rounded-full border border-black/30 bg-white shadow-md"
+            className="h-1.5 w-12 rounded-full bg-white shadow-md ring-1 ring-black/60"
           />
         </button>
         <Menu
@@ -451,7 +522,7 @@ export function FloatingWindow({
             {state.edge === "top" ? "Move to the bottom" : "Move to the top"}
           </MenuItem>
           <MenuItem id="side">
-            {state.side === "left" ? "Keep on the right" : "Keep on the left"}
+            {state.side === "left" ? "When small, keep on the right" : "When small, keep on the left"}
           </MenuItem>
         </Menu>
         <Button
@@ -461,7 +532,7 @@ export function FloatingWindow({
           onPress={() => act({ ...state, size: "small" })}
           className="absolute right-0 bottom-0 z-30 size-11"
         >
-          <Minimize2Icon className="size-5" />
+          <PictureInPicture2Icon className="size-5" />
         </Button>
       </>
     ) : null;
@@ -489,11 +560,8 @@ export function FloatingWindow({
           type="button"
           {...handle}
           onPointerUp={(e) => void endDrag(e, false)}
-          onClick={() => {
-            if (suppressClick.current) {
-              suppressClick.current = false;
-              return;
-            }
+          onClick={(e) => {
+            if (clickIsDragEnd(e)) return;
             act({ ...state, size: "large" });
           }}
           onKeyDown={(e) => {
@@ -546,13 +614,13 @@ export function FloatingWindow({
               tabDrag.current = null;
             }}
             className={cn(
-              "fixed z-30 flex h-16 w-11 touch-none flex-col items-center justify-center gap-0.5 border border-border bg-card text-foreground shadow-lg outline-none print:hidden",
+              "fixed z-30 flex h-16 touch-pan-y flex-col items-center justify-center gap-0.5 border border-border bg-card text-foreground shadow-lg outline-none print:hidden",
               "transition-opacity duration-300 starting:opacity-0",
               "focus-visible:ring-3 focus-visible:ring-ring",
               EDGE[state.edge],
               state.side === "right"
-                ? "right-0 rounded-l-xl border-r-0 pr-[env(safe-area-inset-right,0px)]"
-                : "left-0 rounded-r-xl border-l-0 pl-[env(safe-area-inset-left,0px)]",
+                ? "right-0 w-[calc(2.75rem+env(safe-area-inset-right,0px))] rounded-l-xl border-r-0 pr-[env(safe-area-inset-right,0px)]"
+                : "left-0 w-[calc(2.75rem+env(safe-area-inset-left,0px))] rounded-r-xl border-l-0 pl-[env(safe-area-inset-left,0px)]",
               // Stepped aside for the keyboard as well: nothing to offer yet.
               typing && "hidden"
             )}
