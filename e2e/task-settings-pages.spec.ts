@@ -42,6 +42,7 @@
  */
 import { test, expect, PHONE_ONLY, type Locator, type Page } from "./fixtures/test";
 import { expectNoSidewaysScroll } from "./fixtures/layout";
+import { installMapbox } from "./fixtures/mapbox";
 import { e2eCompName } from "./fixtures/stack";
 import { coordsFields, fillCoords, pasteInto } from "./fixtures/coords";
 
@@ -921,7 +922,12 @@ test("Load from XContest is a page, and refuses a code under its field", async (
  */
 test("on a phone the route's map floats, and placing a waypoint brings it up large", { tag: PHONE_ONLY }, async ({
   page,
+  context,
 }) => {
+  // The place search is disabled until the map is ready, and a map is ready
+  // only when its style has loaded: on a runner with no route to Mapbox it
+  // never is. So this test gives the map its recorded answers.
+  await installMapbox(context);
   await devLogin(page, ADMIN_USER);
   await seedRoute(page);
   await page.goto(`/comp/${compId}/task/${taskId}/route`);

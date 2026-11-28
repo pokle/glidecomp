@@ -44,6 +44,7 @@
  */
 import { test, expect, DESKTOP_ONLY, PHONE_ONLY, type Page, type Locator } from "./fixtures/test";
 import { expectNoSidewaysScroll } from "./fixtures/layout";
+import { installMapbox } from "./fixtures/mapbox";
 import { FRONTEND_URL } from "./fixtures/stack";
 import { coordsFields, fillCoords } from "./fixtures/coords";
 import {
@@ -479,7 +480,14 @@ test("device export: the QR section carries the swap toggle", async ({ page }) =
  */
 test("on a phone the map floats; Add from map brings it up large, and a row's pin brings it back", { tag: PHONE_ONLY }, async ({
   page,
+  context,
 }) => {
+  // The place search is disabled until the map is ready, and a map is ready
+  // only when its style has loaded: on a runner with no route to Mapbox it
+  // never is. So this test gives the map its recorded answers, and loads the
+  // page again so the map asks for them.
+  await installMapbox(context);
+  await page.reload();
   const mutated = trackMutations(page);
   await editWaypoint(page, await firstWaypointRow(page), waypoints[0].code, "Name", "E2E Window");
   await expect(page.getByText("Unsaved changes")).toBeVisible();
