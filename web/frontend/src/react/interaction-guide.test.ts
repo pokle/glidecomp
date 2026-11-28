@@ -159,7 +159,7 @@ Object.assign(ICON_MEANINGS, {
   ShareIcon: { means: "Sharing", labels: ["Share task"] },
   QrCodeIcon: { means: "Sharing, as a QR code", labels: ["QR code", 'showQR ? "Hide QR" : "QR code"'] },
   CloudUploadIcon: { means: "Submit your track", labels: ["Submit your track"] },
-  PlusIcon: { means: "Make a new one", labels: ["New task", "Add waypoint"] },
+  PlusIcon: { means: "Make a new one", labels: ["New task"] },
   CopyIcon: {
     means: "Copy between competitions",
     labels: ["Copy from another competition…", "Copy to a new competition…"],
